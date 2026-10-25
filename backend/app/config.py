@@ -1,4 +1,11 @@
 import os
+
+# Enforce minimal memory footprint for PyTorch/OpenMP/CUDA runtimes on restricted containers (e.g. Render 512MB)
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+os.environ.setdefault("PYTORCH_NO_CUDA_MEMORY_CACHING", "1")
+
 from pydantic_settings import BaseSettings
 from typing import Optional
 

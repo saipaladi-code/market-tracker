@@ -11,6 +11,11 @@ __pycache__/
 *.egg-info/
 data/local_db.json
 **/data/local_db.json
+data/finbert_bfloat16/
+**/data/finbert_bfloat16/
+*.safetensors
+*.pt
+profile_backend_memory.py
 
 # Node & Frontend
 node_modules/

@@ -53,19 +53,17 @@ async def _warmup_background():
     """
     Background worker that runs asynchronously AFTER the server binds to $PORT.
     This prevents Render from reporting 'No open ports detected' and ensures the web
-    process is immediately live while the quantized model loads in the background.
+    process is immediately live while the memory-optimized model loads in the background.
     """
-    await asyncio.sleep(0.5)
-    logger.info("Starting background FinBERT model warmup and news data initialization...")
+    await asyncio.sleep(1.0)
+    logger.info("Starting background FinBERT model warmup...")
     try:
-        # Load the INT8 quantized FinBERT model instance safely
+        # Load the bfloat16 FinBERT model instance safely
         finbert_service.load_model()
-        # Fetch initial articles and generate alerts
-        articles = news_service.fetch_articles()
-        alert_service.evaluate_and_generate_alerts(articles)
-        logger.info(f"Background initialization complete: Database ready with {len(articles)} processed articles.")
+        gc.collect()
+        logger.info("Background FinBERT warmup complete. Model is ready for live inference.")
     except Exception as e:
-        logger.error(f"Error during background data initialization: {e}")
+        logger.error(f"Error during background model warmup: {e}")
 
 @app.on_event("startup")
 async def startup_event():

@@ -379,26 +379,27 @@ class NewsService:
         # Deduplication pipeline
         processed, _ = deduplication_service.process_articles(articles_to_add)
 
-        # Real FinBERT batch sentiment classification
-        headlines = [a["title"] for a in processed]
-        sentiment_results = []
-        try:
-            sentiment_results = finbert_service.predict_batch(headlines)
-        except Exception as e:
-            logger.error(f"FinBERT batch analysis error during seeding: {e}")
+        # Only classify articles that do not already have pre-computed sentiment
+        unclassified = [a for a in processed if not a.get("sentiment")]
+        if unclassified:
+            try:
+                unclassified_headlines = [a["title"] for a in unclassified]
+                sentiment_results = finbert_service.predict_batch(unclassified_headlines)
+                for idx, article in enumerate(unclassified):
+                    if idx < len(sentiment_results):
+                        res = sentiment_results[idx]
+                        article["sentiment"] = res["sentiment"]
+                        article["confidence"] = res["confidence"]
+                        article["scores"] = res["scores"]
+            except Exception as e:
+                logger.error(f"FinBERT batch analysis error during seeding: {e}")
 
-        # Attach real FinBERT results and persist to database
-        for idx, article in enumerate(processed):
-            if idx < len(sentiment_results):
-                res = sentiment_results[idx]
-                article["sentiment"] = res["sentiment"]
-                article["confidence"] = res["confidence"]
-                article["scores"] = res["scores"]
-            else:
+        # Persist articles to database
+        for article in processed:
+            if not article.get("sentiment"):
                 article["sentiment"] = "neutral"
                 article["confidence"] = 0.5
                 article["scores"] = {"positive": 0.25, "negative": 0.25, "neutral": 0.5}
-
             db.insert_one("news_articles", article)
 
         # Re-fetch combined articles

@@ -1,4 +1,5 @@
 import re
+import os
 import gc
 import threading
 import logging
@@ -34,50 +35,66 @@ class FinBERTService:
             cls._instance.status = "uninitialized"
             cls._instance.error_message = None
             cls._instance.cache = {}
-            cls._instance.is_quantized = False
+            cls._instance.precision = "bfloat16"
         return cls._instance
 
     def load_model(self):
-        """Loads ProsusAI/finbert model weights and tokenizer into memory with memory-conscious settings."""
+        """
+        Loads ProsusAI/finbert model weights and tokenizer with strict memory safeguards.
+        Prioritizes pre-serialized bfloat16 safetensors (created during build phase),
+        preventing intermediate FP32 allocation spikes and keeping resident memory strictly ~389 MB.
+        """
         with self._load_lock:
             if self.status == "ready" and self.model is not None:
                 return True
 
             try:
-                # Limit PyTorch CPU thread pools to reduce memory overhead and thread-local buffers
+                # Limit PyTorch CPU thread pools and disable autograd globally
                 try:
                     torch.set_num_threads(1)
                     torch.set_num_interop_threads(1)
+                    torch.set_grad_enabled(False)
                 except Exception:
                     pass
 
-                logger.info(f"Loading {settings.MODEL_NAME} on {self.device}...")
                 self.status = "loading"
-                self.tokenizer = AutoTokenizer.from_pretrained(settings.MODEL_NAME)
 
-                # bfloat16 directly streams model weights into half-precision (~210MB instead of ~440MB).
-                # This prevents exceeding Render's 512 MiB container limit without the duplicate allocation spike
-                # of in-memory dynamic quantization.
+                # Check for pre-serialized bfloat16 safetensors directory from build phase
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                local_bfloat16_dir = os.path.join(base_dir, "data", "finbert_bfloat16")
+                safetensors_file = os.path.join(local_bfloat16_dir, "model.safetensors")
+
+                use_local = os.path.exists(safetensors_file) and os.path.getsize(safetensors_file) > 100 * 1024 * 1024
+                load_source = local_bfloat16_dir if use_local else settings.MODEL_NAME
+
+                logger.info(f"Loading FinBERT model from '{load_source}' on {self.device}...")
+
+                self.tokenizer = AutoTokenizer.from_pretrained(load_source)
+
+                # Set default dtype to bfloat16 so intermediate parameter tensors instantiate directly in 16-bit
+                torch.set_default_dtype(torch.bfloat16)
+
                 try:
-                    logger.info("Loading FinBERT with torch_dtype=torch.bfloat16 for low-memory CPU inference...")
                     self.model = AutoModelForSequenceClassification.from_pretrained(
-                        settings.MODEL_NAME,
+                        load_source,
                         torch_dtype=torch.bfloat16
                     )
-                    self.model.to(self.device)
-                    self.model.eval()
                     self.precision = "bfloat16"
-                    logger.info("FinBERT model loaded with bfloat16 precision (~210MB weights).")
                 except Exception as bf_err:
-                    logger.warning(f"bfloat16 direct loading failed ({bf_err}), attempting standard load...")
-                    self.model = AutoModelForSequenceClassification.from_pretrained(settings.MODEL_NAME)
-                    self.model.to(self.device)
-                    self.model.eval()
+                    logger.warning(f"bfloat16 direct loading failed ({bf_err}), attempting float32 fallback...")
+                    torch.set_default_dtype(torch.float32)
+                    self.model = AutoModelForSequenceClassification.from_pretrained(load_source)
                     self.precision = "fp32"
+
+                self.model.to(self.device)
+                self.model.eval()
+
+                # Clean up any leftover loader caches
+                gc.collect()
 
                 self.status = "ready"
                 self.error_message = None
-                logger.info("FinBERT model loaded and ready.")
+                logger.info(f"FinBERT model loaded successfully with {self.precision} precision.")
                 return True
             except Exception as e:
                 self.status = "error"
@@ -117,7 +134,7 @@ class FinBERTService:
         with torch.inference_mode():
             outputs = self.model(**inputs)
             logits = outputs.logits
-            probabilities = torch.softmax(logits, dim=1).squeeze().tolist()
+            probabilities = torch.softmax(logits.float(), dim=1).squeeze().tolist()
 
         scores = {
             "positive": round(float(probabilities[0]), 4),
@@ -183,7 +200,7 @@ class FinBERTService:
 
             with torch.inference_mode():
                 outputs = self.model(**inputs)
-                probabilities = torch.softmax(outputs.logits, dim=1).tolist()
+                probabilities = torch.softmax(outputs.logits.float(), dim=1).tolist()
 
             for j, text in enumerate(chunk):
                 prob = probabilities[j]
@@ -221,11 +238,11 @@ class FinBERTService:
             return []
 
         salient_tokens = []
-        # Test up to 6 candidate non-trivial words to limit intermediate tensors
-        candidates = [w for w in words if w.lower() not in FINANCIAL_STOPWORDS and len(w) > 2][:6]
+        # Test up to 4 candidate non-trivial words to strictly bound intermediate inference activations
+        candidates = [w for w in words if w.lower() not in FINANCIAL_STOPWORDS and len(w) > 2][:4]
 
         if not candidates:
-            candidates = words[:4]
+            candidates = words[:3]
 
         # Generate perturbed texts
         perturbed_texts = []
