@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     FRONTEND_ORIGIN: str = "http://localhost:5173"
     USE_DEMO_DATA: bool = False
+    USE_LOCAL_FINBERT: bool = False
+    FINBERT_INFERENCE_URL: Optional[str] = None
+    HUGGINGFACE_API_KEY: Optional[str] = None
     MODEL_NAME: str = "ProsusAI/finbert"
     HOST: str = "127.0.0.1"
     PORT: int = 8000

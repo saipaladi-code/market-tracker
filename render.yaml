@@ -3,7 +3,7 @@ services:
     name: fin-sentiment-backend
     env: python
     rootDir: backend
-    buildCommand: pip install -r requirements.txt && python -m app.services.prepare_model
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /health
     autoDeploy: true
@@ -13,6 +13,8 @@ services:
       - key: MODEL_NAME
         value: ProsusAI/finbert
       - key: USE_DEMO_DATA
+        value: "false"
+      - key: USE_LOCAL_FINBERT
         value: "false"
       - key: OMP_NUM_THREADS
         value: "1"

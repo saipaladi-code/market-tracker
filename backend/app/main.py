@@ -53,17 +53,20 @@ async def _warmup_background():
     """
     Background worker that runs asynchronously AFTER the server binds to $PORT.
     This prevents Render from reporting 'No open ports detected' and ensures the web
-    process is immediately live while the memory-optimized model loads in the background.
+    process is immediately live while the sentiment engine initializes safely.
     """
-    await asyncio.sleep(1.0)
-    logger.info("Starting background FinBERT model warmup...")
+    await asyncio.sleep(0.5)
+    logger.info("Initializing Financial Sentiment Engine...")
     try:
-        # Load the bfloat16 FinBERT model instance safely
         finbert_service.load_model()
-        gc.collect()
-        logger.info("Background FinBERT warmup complete. Model is ready for live inference.")
+        diag = finbert_service.get_memory_diagnostics()
+        logger.info(
+            f"Sentiment Engine ready (Mode: {diag['engine_mode']}, "
+            f"RSS: {diag['process_rss_mb']} MB / {diag['memory_limit_mb']} MB, "
+            f"Utilization: {diag['percent_of_limit']}%)."
+        )
     except Exception as e:
-        logger.error(f"Error during background model warmup: {e}")
+        logger.error(f"Error during background sentiment engine initialization: {e}")
 
 @app.on_event("startup")
 async def startup_event():
@@ -74,11 +77,13 @@ async def startup_event():
 @app.get("/")
 def get_root():
     """Root endpoint for instant ping and status."""
+    diag = finbert_service.get_memory_diagnostics()
     return {
         "name": "Financial Market Sentiment Tracker API",
         "status": "online",
         "version": "1.0.0",
-        "model": "ProsusAI/finbert (bfloat16 memory-optimized)",
+        "engine_mode": diag["engine_mode"],
+        "memory": f"{diag['process_rss_mb']} MB / {diag['memory_limit_mb']} MB ({diag['percent_of_limit']}%)",
         "endpoints": {
             "health": "/health",
             "api_health": "/api/health",
@@ -95,19 +100,25 @@ def get_lightweight_health():
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat() + "Z",
+        "engine_mode": finbert_service.engine_mode,
         "model_ready": finbert_service.is_ready()
     }
 
 @app.get("/api/health")
 def get_health():
     db_status = db.get_status()
-    model_loaded = finbert_service.is_ready()
+    mem_diag = finbert_service.get_memory_diagnostics()
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "model": {
             "name": settings.MODEL_NAME,
-            "status": "ready" if model_loaded else finbert_service.status,
+            "status": "ready" if finbert_service.is_ready() else finbert_service.status,
+            "engine_mode": finbert_service.engine_mode,
+            "memory_usage_mb": mem_diag["process_rss_mb"],
+            "memory_limit_mb": mem_diag["memory_limit_mb"],
+            "memory_percent": mem_diag["percent_of_limit"],
+            "is_within_limit": mem_diag["is_within_limit"],
             "error": finbert_service.error_message
         },
         "database": db_status,
