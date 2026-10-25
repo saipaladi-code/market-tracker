@@ -1,4 +1,6 @@
 import re
+import gc
+import threading
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -18,8 +20,10 @@ FINANCIAL_STOPWORDS = {
     "its", "their", "this", "that", "these", "those", "has", "have", "had"
 }
 
+
 class FinBERTService:
     _instance = None
+    _load_lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
@@ -30,35 +34,62 @@ class FinBERTService:
             cls._instance.status = "uninitialized"
             cls._instance.error_message = None
             cls._instance.cache = {}
+            cls._instance.is_quantized = False
         return cls._instance
 
     def load_model(self):
-        """Loads ProsusAI/finbert model weights and tokenizer into memory."""
-        if self.status == "ready" and self.model is not None:
-            return True
+        """Loads ProsusAI/finbert model weights and tokenizer into memory with memory-conscious settings."""
+        with self._load_lock:
+            if self.status == "ready" and self.model is not None:
+                return True
 
-        try:
-            logger.info(f"Loading {settings.MODEL_NAME} on {self.device}...")
-            self.status = "loading"
-            self.tokenizer = AutoTokenizer.from_pretrained(settings.MODEL_NAME)
-            self.model = AutoModelForSequenceClassification.from_pretrained(settings.MODEL_NAME)
-            self.model.to(self.device)
-            self.model.eval()
-            self.status = "ready"
-            self.error_message = None
-            logger.info("FinBERT model loaded successfully.")
-            return True
-        except Exception as e:
-            self.status = "error"
-            self.error_message = str(e)
-            logger.error(f"Failed to load FinBERT model: {e}")
-            return False
+            try:
+                # Limit PyTorch CPU thread pools to reduce memory overhead and thread-local buffers
+                try:
+                    torch.set_num_threads(1)
+                    torch.set_num_interop_threads(1)
+                except Exception:
+                    pass
+
+                logger.info(f"Loading {settings.MODEL_NAME} on {self.device}...")
+                self.status = "loading"
+                self.tokenizer = AutoTokenizer.from_pretrained(settings.MODEL_NAME)
+
+                # bfloat16 directly streams model weights into half-precision (~210MB instead of ~440MB).
+                # This prevents exceeding Render's 512 MiB container limit without the duplicate allocation spike
+                # of in-memory dynamic quantization.
+                try:
+                    logger.info("Loading FinBERT with torch_dtype=torch.bfloat16 for low-memory CPU inference...")
+                    self.model = AutoModelForSequenceClassification.from_pretrained(
+                        settings.MODEL_NAME,
+                        torch_dtype=torch.bfloat16
+                    )
+                    self.model.to(self.device)
+                    self.model.eval()
+                    self.precision = "bfloat16"
+                    logger.info("FinBERT model loaded with bfloat16 precision (~210MB weights).")
+                except Exception as bf_err:
+                    logger.warning(f"bfloat16 direct loading failed ({bf_err}), attempting standard load...")
+                    self.model = AutoModelForSequenceClassification.from_pretrained(settings.MODEL_NAME)
+                    self.model.to(self.device)
+                    self.model.eval()
+                    self.precision = "fp32"
+
+                self.status = "ready"
+                self.error_message = None
+                logger.info("FinBERT model loaded and ready.")
+                return True
+            except Exception as e:
+                self.status = "error"
+                self.error_message = str(e)
+                logger.error(f"Failed to load FinBERT model: {e}")
+                return False
 
     def is_ready(self) -> bool:
         return self.status == "ready" and self.model is not None
 
     def predict_one(self, text: str, include_explanation: bool = True) -> Dict[str, Any]:
-        """Predicts sentiment for a single financial text."""
+        """Predicts sentiment for a single financial text using torch.inference_mode()."""
         cleaned_text = (text or "").strip()
         if not cleaned_text:
             raise ValueError("Input text cannot be empty or whitespace.")
@@ -74,16 +105,16 @@ class FinBERTService:
             if not success:
                 raise RuntimeError(f"FinBERT model is not available: {self.error_message}")
 
-        # Tokenize and run forward pass
+        # Tokenize with max_length=64 (financial headlines average 15-20 tokens; 64 prevents quadratic attention bloat)
         inputs = self.tokenizer(
             cleaned_text,
             return_tensors="pt",
             padding=True,
             truncation=True,
-            max_length=512
+            max_length=64
         ).to(self.device)
 
-        with torch.no_grad():
+        with torch.inference_mode():
             outputs = self.model(**inputs)
             logits = outputs.logits
             probabilities = torch.softmax(logits, dim=1).squeeze().tolist()
@@ -98,6 +129,8 @@ class FinBERTService:
         winning_idx = int(torch.argmax(logits, dim=1).item())
         sentiment = LABEL_MAPPING.get(winning_idx, "neutral")
         confidence = scores[sentiment]
+
+        del inputs, outputs, logits
 
         tokens_attribution = []
         if include_explanation:
@@ -120,8 +153,11 @@ class FinBERTService:
         self.cache[cache_key] = result
         return result
 
-    def predict_batch(self, texts: List[str]) -> List[Dict[str, Any]]:
-        """Efficient batch inference on a list of texts."""
+    def predict_batch(self, texts: List[str], chunk_size: int = 4) -> List[Dict[str, Any]]:
+        """
+        Memory-conscious batch inference on a list of texts.
+        Processes in micro-batches (chunk_size=4) to prevent intermediate tensor memory spikes.
+        """
         if not texts:
             return []
 
@@ -134,63 +170,66 @@ class FinBERTService:
             if not success:
                 raise RuntimeError(f"FinBERT model is not available: {self.error_message}")
 
-        inputs = self.tokenizer(
-            cleaned_texts,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=512
-        ).to(self.device)
-
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            probabilities = torch.softmax(outputs.logits, dim=1).tolist()
-
         results = []
-        for i, text in enumerate(cleaned_texts):
-            prob = probabilities[i]
-            scores = {
-                "positive": round(float(prob[0]), 4),
-                "negative": round(float(prob[1]), 4),
-                "neutral": round(float(prob[2]), 4)
-            }
-            winning_idx = max(range(3), key=lambda idx: prob[idx])
-            sentiment = LABEL_MAPPING[winning_idx]
-            results.append({
-                "text": text,
-                "sentiment": sentiment,
-                "confidence": scores[sentiment],
-                "scores": scores,
-                "model_name": settings.MODEL_NAME,
-                "analyzed_at": datetime.utcnow().isoformat() + "Z",
-                "tokens": [],
-                "explanation_note": "FinBERT tone analysis (Batch mode)."
-            })
+        for i in range(0, len(cleaned_texts), chunk_size):
+            chunk = cleaned_texts[i:i + chunk_size]
+            inputs = self.tokenizer(
+                chunk,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=64
+            ).to(self.device)
+
+            with torch.inference_mode():
+                outputs = self.model(**inputs)
+                probabilities = torch.softmax(outputs.logits, dim=1).tolist()
+
+            for j, text in enumerate(chunk):
+                prob = probabilities[j]
+                scores = {
+                    "positive": round(float(prob[0]), 4),
+                    "negative": round(float(prob[1]), 4),
+                    "neutral": round(float(prob[2]), 4)
+                }
+                winning_idx = max(range(3), key=lambda idx: prob[idx])
+                sentiment = LABEL_MAPPING[winning_idx]
+                results.append({
+                    "text": text,
+                    "sentiment": sentiment,
+                    "confidence": scores[sentiment],
+                    "scores": scores,
+                    "model_name": settings.MODEL_NAME,
+                    "analyzed_at": datetime.utcnow().isoformat() + "Z",
+                    "tokens": [],
+                    "explanation_note": "FinBERT tone analysis (Batch mode)."
+                })
+
+            del inputs, outputs, probabilities
+
+        gc.collect()
         return results
 
     def _explain_prediction(self, text: str, winning_sentiment: str, baseline_conf: float) -> List[Dict[str, Any]]:
         """
         Perturbation-based word salience:
-        For candidate words in the headline, removes each word one by one and computes
-        the delta in confidence for the winning class:
-        delta = baseline_confidence - perturbed_confidence.
-        A positive delta implies the word supported the sentiment.
+        Masks candidate words one by one and computes delta in confidence for the winning class.
+        Uses max_length=64 and torch.inference_mode() for minimal memory.
         """
         words = re.findall(r"\b[\w'-]+\b", text)
         if len(words) <= 1:
             return []
 
         salient_tokens = []
-        # Test up to 10 most candidate non-trivial words
-        candidates = [w for w in words if w.lower() not in FINANCIAL_STOPWORDS and len(w) > 2][:10]
+        # Test up to 6 candidate non-trivial words to limit intermediate tensors
+        candidates = [w for w in words if w.lower() not in FINANCIAL_STOPWORDS and len(w) > 2][:6]
 
         if not candidates:
-            candidates = words[:6]
+            candidates = words[:4]
 
         # Generate perturbed texts
         perturbed_texts = []
         for word in candidates:
-            # Mask or remove word
             perturbed = re.sub(r'\b' + re.escape(word) + r'\b', '', text, count=1, flags=re.IGNORECASE)
             perturbed = re.sub(r'\s+', ' ', perturbed).strip()
             perturbed_texts.append((word, perturbed))
@@ -198,17 +237,16 @@ class FinBERTService:
         if not perturbed_texts:
             return []
 
-        # Run batch inference for perturbed sentences
         try:
             inputs = self.tokenizer(
                 [pt[1] for pt in perturbed_texts],
                 return_tensors="pt",
                 padding=True,
                 truncation=True,
-                max_length=512
+                max_length=64
             ).to(self.device)
 
-            with torch.no_grad():
+            with torch.inference_mode():
                 outputs = self.model(**inputs)
                 probs = torch.softmax(outputs.logits, dim=1).tolist()
 
@@ -217,8 +255,6 @@ class FinBERTService:
             for idx, (word, _) in enumerate(perturbed_texts):
                 perturbed_conf = probs[idx][target_idx]
                 delta = round(baseline_conf - perturbed_conf, 4)
-                
-                # If delta > 0.02, word strongly contributes to winning sentiment
                 direction = winning_sentiment if delta > 0 else "counter-evidence"
                 salient_tokens.append({
                     "token": word,
@@ -227,7 +263,9 @@ class FinBERTService:
                     "method": "perturbation"
                 })
 
-            # Sort by absolute impact descending
+            del inputs, outputs, probs
+            gc.collect()
+
             salient_tokens.sort(key=lambda x: abs(x["impact"]), reverse=True)
             return salient_tokens[:6]
         except Exception as e:
@@ -235,3 +273,4 @@ class FinBERTService:
             return []
 
 finbert_service = FinBERTService()
+

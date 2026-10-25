@@ -1,3 +1,5 @@
+import os
+import asyncio
 import logging
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -29,7 +31,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS Configuration
+# CORS Configuration - support local dev, Vercel deployments, and custom domains
 origins = [
     settings.FRONTEND_ORIGIN,
     "http://localhost:5173",
@@ -46,16 +48,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Initializing Financial Market Sentiment Tracker API...")
-    # Fetch initial articles and warm up FinBERT
+async def _warmup_background():
+    """
+    Background worker that runs asynchronously AFTER the server binds to $PORT.
+    This prevents Render from reporting 'No open ports detected' and ensures the web
+    process is immediately live while the quantized model loads in the background.
+    """
+    await asyncio.sleep(0.5)
+    logger.info("Starting background FinBERT model warmup and news data initialization...")
     try:
+        # Load the INT8 quantized FinBERT model instance safely
+        finbert_service.load_model()
+        # Fetch initial articles and generate alerts
         articles = news_service.fetch_articles()
         alert_service.evaluate_and_generate_alerts(articles)
-        logger.info(f"Database initialized with {len(articles)} processed articles.")
+        logger.info(f"Background initialization complete: Database ready with {len(articles)} processed articles.")
     except Exception as e:
-        logger.error(f"Error during startup data initialization: {e}")
+        logger.error(f"Error during background data initialization: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Initializing Financial Market Sentiment Tracker API (non-blocking)...")
+    # Launch background warmup so Uvicorn binds to $PORT immediately
+    asyncio.create_task(_warmup_background())
+
+@app.get("/")
+def get_root():
+    """Root endpoint for instant ping and status."""
+    return {
+        "name": "Financial Market Sentiment Tracker API",
+        "status": "online",
+        "version": "1.0.0",
+        "model": "ProsusAI/finbert (bfloat16 memory-optimized)",
+        "endpoints": {
+            "health": "/health",
+            "api_health": "/api/health",
+            "docs": "/docs"
+        }
+    }
+
+@app.get("/health")
+def get_lightweight_health():
+    """
+    Ultra-lightweight health check endpoint for Render / load balancers.
+    Returns 200 OK immediately without triggering model inference or DB queries.
+    """
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "model_ready": finbert_service.is_ready()
+    }
 
 @app.get("/api/health")
 def get_health():
@@ -382,3 +424,10 @@ def assistant_chat(req: AssistantChatRequest):
     """Conversational Financial News Assistant grounded in stored sentiment data."""
     result = gemini_assistant_service.answer_query(req.message, req.company_focus)
     return AssistantChatResponse(**result)
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", getattr(settings, "PORT", 8000)))
+    logger.info(f"Starting server on 0.0.0.0:{port} (workers=1)...")
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, workers=1)
+

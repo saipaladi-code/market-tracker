@@ -62,3 +62,24 @@ def test_database_fallback_behavior():
     assert "persistence_mode" in status
     assert "connected" in status
     assert status["connected"] is True
+
+def test_finbert_singleton_pattern():
+    from app.services.finbert_service import FinBERTService
+    instance1 = FinBERTService()
+    instance2 = FinBERTService()
+    assert instance1 is instance2
+    assert instance1 is finbert_service
+
+def test_real_finbert_inference():
+    # Test real FinBERT prediction on a clear financial headline
+    text = "Nvidia reports record quarterly revenue and net income surges 120% YoY"
+    res = finbert_service.predict_one(text, include_explanation=True)
+    assert res["sentiment"] == "positive"
+    assert res["confidence"] > 0.6
+    assert "positive" in res["scores"]
+    assert "negative" in res["scores"]
+    assert "neutral" in res["scores"]
+    total_prob = sum(res["scores"].values())
+    assert 0.99 <= total_prob <= 1.01
+    assert isinstance(res["tokens"], list)
+
