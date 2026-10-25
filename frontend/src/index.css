@@ -3,23 +3,90 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply bg-[#0b1120] text-slate-100 antialiased font-sans min-h-screen selection:bg-blue-500 selection:text-white;
+  * {
+    border-color: #1c2b4a;
   }
+  body {
+    @apply bg-navy-950 text-slate-100 antialiased font-sans min-h-screen selection:bg-blue-600 selection:text-white;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Institutional Financial Analytics Terminal Utilities */
+@layer components {
+  .terminal-card {
+    @apply bg-navy-850/90 border border-navy-750/80 rounded-xl backdrop-blur-md transition-all duration-200 hover:border-navy-700;
+  }
+  
+  .terminal-card-elevated {
+    @apply bg-navy-800/90 border border-navy-700/80 rounded-xl backdrop-blur-md shadow-card;
+  }
+
+  .terminal-header-kicker {
+    @apply text-[10px] font-mono font-semibold tracking-wider uppercase text-blue-400 flex items-center gap-1.5;
+  }
+
+  .stat-pill {
+    @apply px-2.5 py-0.5 rounded-full text-xs font-mono font-medium border;
+  }
+}
+
+/* Shimmer Skeleton Loader Animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, #0f172a 25%, #1e293b 50%, #0f172a 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite linear;
 }
 
 /* Custom Financial Terminal Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #070b14;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
+  background: #1c2b4a;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #253861;
+}
+
+/* Subtle Glowing Rings & Animations */
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+.pulse-dot {
+  animation: pulse-subtle 2s infinite ease-in-out;
+}
+
+/* Reduced Motion Preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

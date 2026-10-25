@@ -21,9 +21,24 @@ class GeminiAssistantService:
         try:
             import google.generativeai as genai
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel("gemini-1.5-flash")
-            self.is_active = True
-            logger.info("Gemini 1.5 Flash initialized for AI Financial Assistant.")
+            # Try available model names in order of preference
+            candidate_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-1.5-flash", "gemini-pro"]
+            selected_model = None
+            for name in candidate_models:
+                try:
+                    m = genai.GenerativeModel(name)
+                    selected_model = m
+                    logger.info(f"Initialized Gemini model: {name}")
+                    break
+                except Exception:
+                    continue
+
+            if selected_model:
+                self.model = selected_model
+                self.is_active = True
+            else:
+                self.model = genai.GenerativeModel("gemini-2.5-flash")
+                self.is_active = True
         except Exception as e:
             logger.warning(f"Could not initialize Google Generative AI: {e}")
             self.is_active = False
@@ -113,8 +128,16 @@ class GeminiAssistantService:
             response = self.model.generate_content(context_prompt)
             answer_text = response.text
         except Exception as e:
-            logger.error(f"Gemini API generation error: {e}")
-            answer_text = f"An error occurred while contacting Gemini API: {str(e)}. Please check your API quota."
+            logger.warning(f"Gemini API generation error: {e}. Falling back to structured grounded synthesis.")
+            lines = [
+                f"• {c['company']} ({c['sentiment'].upper()} - {int(c['confidence']*100)}% conf): \"{c['title']}\" [{c['source']}]"
+                for c in citations
+            ]
+            answer_text = (
+                "Here is the verified sentiment intelligence grounded in currently indexed financial news:\n\n"
+                + "\n".join(lines)
+                + "\n\n(Conversational synthesis service temporarily unavailable; raw news context shown above.)"
+            )
 
         return {
             "response": answer_text,

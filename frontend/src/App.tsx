@@ -16,27 +16,54 @@ import { api } from './services/api';
 export function App() {
   const [healthData, setHealthData] = useState<any>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string>(new Date().toISOString());
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+  const [mobileOpen, setMobileOpen] = useState<boolean>(false);
+  const [activeConflictsCount, setActiveConflictsCount] = useState<number>(0);
+  const [unreadAlertsCount, setUnreadAlertsCount] = useState<number>(0);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const checkHealth = async () => {
+  const checkHealthAndStats = async () => {
     try {
-      const data = await api.getHealth();
-      setHealthData(data);
+      const [health, dashboardStats, unreadAlerts] = await Promise.allSettled([
+        api.getHealth(),
+        api.getDashboardStats(),
+        api.getAlerts(true),
+      ]);
+
+      if (health.status === 'fulfilled') {
+        setHealthData(health.value);
+      }
+      if (dashboardStats.status === 'fulfilled') {
+        setActiveConflictsCount(dashboardStats.value.active_conflicts_count || 0);
+      }
+      if (unreadAlerts.status === 'fulfilled') {
+        setUnreadAlertsCount(unreadAlerts.value.length || 0);
+      }
     } catch (err) {
-      console.warn('Backend health check error:', err);
+      console.warn('Backend sync check error:', err);
     }
   };
 
   useEffect(() => {
-    checkHealth();
+    checkHealthAndStats();
   }, []);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
+  };
 
   const handleGlobalRefresh = async () => {
     try {
-      await api.refreshNews();
+      const res = await api.refreshNews();
       setLastRefreshed(new Date().toISOString());
-      await checkHealth();
-    } catch (err) {
+      await checkHealthAndStats();
+      showToast(`Refreshed ${res.articles_count || 0} articles & synchronized sentiment metrics.`);
+    } catch (err: any) {
       console.error('Refresh failed:', err);
+      showToast('Ingestion refresh failed. Check backend connection.');
     }
   };
 
@@ -45,9 +72,18 @@ export function App() {
 
   return (
     <BrowserRouter>
-      <div className="flex min-h-screen bg-[#0b1120] text-slate-100">
+      <div className="flex min-h-screen bg-navy-950 text-slate-100 selection:bg-blue-600 selection:text-white antialiased font-sans">
         {/* Navigation Sidebar */}
-        <Sidebar modelStatus={modelStatus} isDemo={isDemo} />
+        <Sidebar
+          modelStatus={modelStatus}
+          isDemo={isDemo}
+          isCollapsed={isCollapsed}
+          setIsCollapsed={setIsCollapsed}
+          mobileOpen={mobileOpen}
+          setMobileOpen={setMobileOpen}
+          activeConflictsCount={activeConflictsCount}
+          unreadAlertsCount={unreadAlertsCount}
+        />
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0">
@@ -55,9 +91,10 @@ export function App() {
             lastUpdated={lastRefreshed}
             isDemo={isDemo}
             onRefresh={handleGlobalRefresh}
+            onOpenMobileMenu={() => setMobileOpen(true)}
           />
 
-          <main className="flex-1 p-6 lg:p-8 max-w-7xl w-full mx-auto overflow-y-auto">
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto overflow-y-auto">
             <Routes>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/analyze" element={<LiveAnalysisPage />} />
@@ -70,6 +107,14 @@ export function App() {
               <Route path="/assistant" element={<AssistantPage />} />
             </Routes>
           </main>
+
+          {/* Toast Notification Notification Pill */}
+          {toastMessage && (
+            <div className="fixed bottom-6 right-6 z-50 bg-navy-800 text-white px-4 py-2.5 rounded-xl border border-navy-700 shadow-2xl flex items-center gap-2 text-xs font-medium animate-in slide-in-from-bottom duration-200">
+              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+              <span>{toastMessage}</span>
+            </div>
+          )}
         </div>
       </div>
     </BrowserRouter>

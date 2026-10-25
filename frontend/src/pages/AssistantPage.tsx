@@ -7,7 +7,13 @@ import {
   AlertTriangle,
   RefreshCw,
   HelpCircle,
-  FileText
+  FileText,
+  User,
+  Clock,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  CheckCircle2
 } from 'lucide-react';
 import { api } from '../services/api';
 import { AssistantChatResponse } from '../types';
@@ -34,7 +40,7 @@ export const AssistantPage: React.FC = () => {
     {
       role: 'assistant',
       content:
-        'Hello! I am your AI Financial News Assistant. I answer questions grounded strictly in currently verified news articles and local FinBERT sentiment classifications. Ask me about sentiment trends for Nvidia, Apple, Tesla, or any tracked company.',
+        'Welcome to FIN-SENTIMENT Assistant. I answer research queries strictly grounded in currently indexed news articles and local FinBERT tone classifications. How can I assist your market analysis today?',
       timestamp: new Date().toLocaleTimeString(),
     },
   ]);
@@ -69,7 +75,7 @@ export const AssistantPage: React.FC = () => {
         ...prev,
         {
           role: 'assistant',
-          content: 'An error occurred while contacting the financial intelligence service. Please try again.',
+          content: 'An error occurred while contacting the financial intelligence service. Please verify your backend server connection.',
           timestamp: new Date().toLocaleTimeString(),
         },
       ]);
@@ -79,140 +85,188 @@ export const AssistantPage: React.FC = () => {
   };
 
   const sampleQueries = [
-    'What is the current news sentiment on Nvidia?',
-    'Why is Tesla experiencing sentiment conflict?',
-    'Compare sentiment between Apple and Microsoft',
+    'What is the overall sentiment of the available financial news?',
+    'Which companies face the strongest negative news headlines?',
+    'Compare news sentiment between Nvidia and Tesla',
+    'Explain the current conflicting news signals',
   ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2">
-          <BotMessageSquare className="w-5 h-5 text-blue-400" />
-          <h2 className="text-base font-bold text-white">AI Financial News Assistant</h2>
-          <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono text-[10px] border border-blue-500/20">
-            Grounded Retrieval RAG
-          </span>
+    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+      {/* Header Banner */}
+      <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-6 backdrop-blur-md shadow-sm">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+            <BotMessageSquare className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-mono font-bold uppercase tracking-wider">
+                GROUNDED RAG INTELLIGENCE
+              </span>
+            </div>
+            <h2 className="text-xl font-extrabold text-white tracking-tight">
+              AI Financial News Research Assistant
+            </h2>
+          </div>
         </div>
-        <p className="text-xs text-slate-400">
-          Inquires are synthesized using strictly verified news articles and stored FinBERT tone classifications.
+        <p className="text-xs text-slate-300 leading-relaxed max-w-2xl mt-1">
+          Inquiries are synthesized using strictly verified news articles and FinBERT tone classifications.
+          The assistant explains narrative divergence, cites exact article sources, and does not fabricate market prices.
         </p>
       </div>
 
-      {/* Chat Messages Container */}
-      <div className="bg-navy-900 border border-navy-750 rounded-xl p-5 min-h-[460px] flex flex-col justify-between space-y-4">
-        <div className="space-y-4 overflow-y-auto max-h-[500px] pr-1">
-          {messages.map((m, idx) => (
-            <div
+      {/* Suggested Questions Carousel */}
+      <div className="space-y-2">
+        <span className="text-[11px] font-semibold text-slate-400 font-mono uppercase tracking-wider block">
+          Suggested Research Questions:
+        </span>
+        <div className="flex flex-wrap gap-2">
+          {sampleQueries.map((q, idx) => (
+            <button
               key={idx}
-              className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} space-y-2`}
+              onClick={() => handleSend(q)}
+              disabled={loading}
+              className="px-3.5 py-1.5 rounded-xl bg-navy-900/90 hover:bg-navy-850 text-slate-300 hover:text-white border border-navy-750 text-xs font-medium transition-all text-left flex items-center gap-2 cursor-pointer shadow-sm"
             >
-              <div
-                className={`max-w-[85%] rounded-xl p-4 text-xs leading-relaxed space-y-3 ${
-                  m.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-navy-950 border border-navy-850 text-slate-200'
-                }`}
-              >
-                <div className="whitespace-pre-line">{m.content}</div>
+              <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+              <span>{q}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
-                {/* Grounded Article Citations */}
-                {m.citations && m.citations.length > 0 && (
-                  <div className="pt-2 border-t border-navy-800 space-y-2">
-                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">
-                      Grounded Article References:
-                    </span>
-                    <div className="space-y-1.5">
-                      {m.citations.map((c, i) => (
-                        <div
-                          key={i}
-                          className="p-2 bg-navy-900/80 rounded border border-navy-800 flex items-center justify-between text-[11px]"
-                        >
-                          <div className="truncate pr-2">
-                            <span className="text-blue-300 font-semibold mr-1.5">[{c.company}]</span>
-                            <span className="text-slate-300">"{c.title}"</span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <SentimentBadge sentiment={c.sentiment} confidence={c.confidence} />
-                            <a
-                              href={c.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-slate-400 hover:text-white"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+      {/* Chat Messages Feed */}
+      <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-5 min-h-[460px] flex flex-col justify-between space-y-4 shadow-sm">
+        <div className="space-y-5 overflow-y-auto max-h-[550px] pr-2">
+          {messages.map((m, idx) => {
+            const isUser = m.role === 'user';
+            return (
+              <div
+                key={idx}
+                className={`flex gap-3.5 ${isUser ? 'justify-end' : 'justify-start'}`}
+              >
+                {!isUser && (
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-white shrink-0 mt-1 shadow-sm">
+                    <BotMessageSquare className="w-4 h-4" />
                   </div>
                 )}
 
-                {/* Disclaimer */}
-                {m.disclaimer && (
-                  <p className="text-[10px] text-amber-300/80 italic pt-1 border-t border-navy-800/60">
-                    {m.disclaimer}
-                  </p>
+                <div className={`space-y-3 max-w-2xl ${isUser ? 'items-end' : 'items-start'}`}>
+                  {/* Message Bubble */}
+                  <div
+                    className={`p-4 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap ${
+                      isUser
+                        ? 'bg-blue-600 text-white font-medium shadow-md shadow-blue-600/20'
+                        : 'bg-navy-950/90 text-slate-200 border border-navy-800'
+                    }`}
+                  >
+                    {m.content}
+                  </div>
+
+                  {/* Supporting News Citations */}
+                  {m.citations && m.citations.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 font-semibold block">
+                        Referenced News Citations ({m.citations.length} Verified Sources)
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {m.citations.map((c, i) => (
+                          <div
+                            key={i}
+                            className="p-3 bg-navy-950 border border-navy-800 rounded-xl space-y-2 text-xs"
+                          >
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-bold text-white font-mono">{c.company}</span>
+                              <SentimentBadge sentiment={c.sentiment} confidence={c.confidence} size="xs" />
+                            </div>
+                            <h5 className="text-[11px] font-medium text-slate-200 line-clamp-2 leading-snug">
+                              "{c.title}"
+                            </h5>
+                            <div className="pt-1.5 border-t border-navy-850 flex items-center justify-between text-[10px] text-slate-500">
+                              <span>{c.source}</span>
+                              {c.url && (
+                                <a
+                                  href={c.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-blue-400 hover:text-blue-300 flex items-center gap-1 font-medium"
+                                >
+                                  <span>View Source</span>
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Timestamp */}
+                  <div className={`text-[10px] text-slate-500 font-mono ${isUser ? 'text-right' : 'text-left'}`}>
+                    {m.timestamp}
+                  </div>
+                </div>
+
+                {isUser && (
+                  <div className="w-8 h-8 rounded-xl bg-navy-800 border border-navy-700 flex items-center justify-center text-slate-300 shrink-0 mt-1">
+                    <User className="w-4 h-4" />
+                  </div>
                 )}
               </div>
+            );
+          })}
 
-              <span className="text-[10px] text-slate-500 font-mono px-1">
-                {m.timestamp}
-              </span>
-            </div>
-          ))}
-
+          {/* Loading Indicator */}
           {loading && (
-            <div className="flex items-center gap-2 p-3 text-xs text-slate-400">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400" />
-              <span>Grounded intelligence lookup in progress...</span>
+            <div className="flex gap-3.5">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-white shrink-0 mt-1 animate-pulse">
+                <BotMessageSquare className="w-4 h-4" />
+              </div>
+              <div className="p-4 rounded-2xl bg-navy-950/90 border border-navy-800 text-xs text-slate-400 flex items-center gap-3">
+                <RefreshCw className="w-4 h-4 text-blue-400 animate-spin" />
+                <span>Synthesizing intelligence across indexed articles & FinBERT scores...</span>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Suggested Queries */}
-        <div className="pt-2 border-t border-navy-800 space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <span className="text-[10px] text-slate-500 self-center">Try:</span>
-            {sampleQueries.map((q, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => handleSend(q)}
-                className="px-2.5 py-1 rounded bg-navy-950 hover:bg-navy-800 text-[11px] text-slate-300 border border-navy-800 transition-colors"
-              >
-                {q}
-              </button>
-            ))}
-          </div>
+        {/* Input Bar */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSend();
+          }}
+          className="pt-3 border-t border-navy-800 flex items-center gap-3"
+        >
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={loading}
+            placeholder="Ask a question about financial headlines, tone, or narrative divergence..."
+            className="flex-1 bg-navy-950 border border-navy-700/80 rounded-xl px-4 py-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+          />
 
-          {/* Input field */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-            className="flex items-center gap-2"
+          <button
+            type="submit"
+            disabled={loading || !input.trim()}
+            className="px-5 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-600/20 transition-all cursor-pointer shrink-0"
           >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about company sentiment, conflicts, or news tone..."
-              className="flex-1 bg-navy-950 border border-navy-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-            />
-            <button
-              type="submit"
-              disabled={loading || !input.trim()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Send</span>
-            </button>
-          </form>
-        </div>
+            <Send className="w-3.5 h-3.5" />
+            <span>Send</span>
+          </button>
+        </form>
+      </div>
+
+      {/* Financial Disclaimer */}
+      <div className="p-4 bg-navy-900/60 border border-navy-800 rounded-xl text-xs text-slate-400 flex items-center gap-3">
+        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+        <p className="text-[11px] leading-relaxed">
+          Assistant responses are grounded strictly in semantic tone analysis of retrieved financial news and FinBERT classifications.
+          This does not constitute investment advice, financial forecasting, or portfolio recommendations.
+        </p>
       </div>
     </div>
   );

@@ -1,25 +1,51 @@
 import React, { useState, useRef } from 'react';
-import { Sparkles, Send, HelpCircle, AlertTriangle, CheckCircle, RefreshCw, X, Zap } from 'lucide-react';
+import {
+  Sparkles,
+  Send,
+  HelpCircle,
+  AlertTriangle,
+  CheckCircle,
+  RefreshCw,
+  X,
+  Zap,
+  Cpu,
+  Layers,
+  Info,
+  Clock,
+  ArrowRight,
+  TrendingUp,
+  TrendingDown,
+  Minus
+} from 'lucide-react';
 import { api } from '../services/api';
 import { SentimentAnalysisResult } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
 
 const SAMPLE_HEADLINES = [
   {
-    title: 'Bullish Earnings',
-    text: 'Nvidia reports record quarterly data center revenue of $26 billion as hyperscalers expand AI computing clusters.',
+    category: 'Bullish Earnings Beat',
+    title: 'NVDA Record Revenue',
+    text: 'Nvidia reports record quarterly data center revenue of $26 billion as global hyperscalers aggressively expand AI compute clusters.',
   },
   {
-    title: 'Bearish Margin Squeeze',
-    text: 'Tesla operating profit sinks 40% year-over-year as aggressive EV price wars severely erode automotive gross margins.',
+    category: 'Bearish Margin Squeeze',
+    title: 'TSLA Margin Pressure',
+    text: 'Tesla operating margin falls to 6.3% as aggressive international EV price cuts and rising production costs severely erode automotive profits.',
   },
   {
-    title: 'Neutral Policy',
-    text: 'Federal Open Market Committee holds benchmark interest rate steady between 5.25% and 5.50% awaiting inflation data.',
+    category: 'Neutral Central Bank Policy',
+    title: 'Fed Rate Decision',
+    text: 'Federal Open Market Committee holds benchmark interest rate unchanged at 5.25%-5.50% awaiting sustained progress on core PCE inflation metrics.',
   },
   {
-    title: 'Mixed Signals',
-    text: 'Apple beats consensus revenue estimates driven by services growth despite European Union regulatory compliance fines.',
+    category: 'Regulatory Headwinds',
+    title: 'Antitrust Scrutiny',
+    text: 'Department of Justice files comprehensive civil antitrust lawsuit against tech conglomerate alleging monopolization of digital ad exchange infrastructure.',
+  },
+  {
+    category: 'Mixed Signals / Divergence',
+    title: 'Cloud vs Hardware Divergence',
+    text: 'Microsoft cloud enterprise revenue beats consensus expectations by 18% despite softening personal computing hardware demand and exchange rate volatility.',
   },
 ];
 
@@ -43,7 +69,7 @@ export const LiveAnalysisPage: React.FC = () => {
       setLoading(true);
       setError(null);
       setHeadline(text);
-      
+
       const startTime = performance.now();
       const data = await api.analyzeHeadline(text);
       const elapsed = Math.round(performance.now() - startTime);
@@ -52,7 +78,6 @@ export const LiveAnalysisPage: React.FC = () => {
       setLatencyMs(elapsed);
       setFlashCard(true);
 
-      // Smooth scroll down to result card so the user immediately sees it
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }, 50);
@@ -61,7 +86,7 @@ export const LiveAnalysisPage: React.FC = () => {
         setFlashCard(false);
       }, 1200);
     } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || 'Sentiment analysis failed.');
+      setError(err?.response?.data?.detail || err?.message || 'Sentiment analysis failed on backend.');
     } finally {
       setLoading(false);
     }
@@ -75,93 +100,112 @@ export const LiveAnalysisPage: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <Sparkles className="w-5 h-5 text-blue-400" />
-          <h2 className="text-lg font-bold text-white">FinBERT Interactive Sentiment Lab</h2>
-          <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[10px] font-mono border border-blue-500/20">
-            Hugging Face ProsusAI/finbert
-          </span>
+      {/* Page Header */}
+      <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-6 backdrop-blur-md">
+        <div className="flex items-center gap-2.5 mb-2">
+          <div className="w-8 h-8 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="text-lg font-extrabold text-white tracking-tight">FinBERT Interactive Sentiment Lab</h2>
+            <p className="text-xs text-slate-400 font-mono">
+              Live PyTorch CPU forward pass via <code className="text-blue-300">ProsusAI/finbert</code>
+            </p>
+          </div>
         </div>
-        <p className="text-xs text-slate-400">
-          Direct real-time inference on the PyTorch FinBERT model running locally on your laptop CPU.
+        <p className="text-xs text-slate-300 leading-relaxed mt-2 max-w-2xl">
+          Enter any financial headline, earnings report excerpt, or analyst statement. The model executes on-device CPU inference,
+          returning softmax probability distributions and perturbation-based token attribution deltas.
         </p>
       </div>
 
-      {/* Input Box */}
-      <div className="bg-navy-900 border border-navy-750 rounded-xl p-5 space-y-4">
+      {/* Input Workbench Card */}
+      <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-6 space-y-4 shadow-sm">
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              Enter Financial Headline / Financial Statement
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+              <span>Financial Headline / Statement Input</span>
+              <span className="text-[10px] text-slate-500 font-mono font-normal">
+                ({headline.length} characters)
+              </span>
             </label>
             {headline && (
               <button
                 type="button"
                 onClick={handleClear}
-                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200"
+                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
               >
                 <X className="w-3 h-3" />
-                <span>Clear text</span>
+                <span>Clear</span>
               </button>
             )}
           </div>
+
           <div className="relative">
             <textarea
               rows={3}
               value={headline}
               onChange={(e) => setHeadline(e.target.value)}
-              placeholder="e.g., Alphabet surges 8% after cloud profit exceeds Wall Street forecasts..."
-              className="w-full bg-navy-950 border border-navy-700 rounded-lg p-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              placeholder="e.g. Alphabet surges 7% after cloud revenue accelerates past Wall Street targets..."
+              className="w-full bg-navy-950 border border-navy-700/80 rounded-xl p-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-sans leading-relaxed"
             />
           </div>
         </div>
 
         {error && (
-          <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-400 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
             <span>{error}</span>
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
-          {/* Quick presets */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] text-slate-400">Try sample:</span>
-            {SAMPLE_HEADLINES.map((sample, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleAnalyze(sample.text)}
-                className={`px-2.5 py-1 rounded text-[11px] border transition-colors ${
-                  headline === sample.text
-                    ? 'bg-blue-600/30 border-blue-500 text-blue-300 font-semibold'
-                    : 'bg-navy-800 hover:bg-navy-700 text-slate-300 border-navy-700'
-                }`}
-              >
-                {sample.title}
-              </button>
-            ))}
+        {/* Presets and Submit */}
+        <div className="space-y-3 pt-1">
+          <div>
+            <span className="text-[11px] text-slate-400 font-medium block mb-2">Select Curated Financial Example:</span>
+            <div className="flex flex-wrap gap-2">
+              {SAMPLE_HEADLINES.map((sample, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleAnalyze(sample.text)}
+                  className={`px-3 py-1.5 rounded-lg text-xs border transition-all text-left flex items-center gap-1.5 cursor-pointer ${
+                    headline === sample.text
+                      ? 'bg-blue-600/25 border-blue-500 text-blue-300 font-semibold'
+                      : 'bg-navy-950 hover:bg-navy-800 text-slate-300 border-navy-800'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                  <span>{sample.category}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
-          <button
-            onClick={() => handleAnalyze()}
-            disabled={loading || !headline.trim()}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
-          >
-            {loading ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                <span>Analyzing on CPU...</span>
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4" />
-                <span>Classify Sentiment</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center justify-between pt-2 border-t border-navy-800/80">
+            <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
+              <Cpu className="w-3.5 h-3.5 text-blue-400" />
+              <span>Inference Engine: Local CPU (No Cloud Token Required)</span>
+            </div>
+
+            <button
+              onClick={() => handleAnalyze()}
+              disabled={loading || !headline.trim()}
+              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Computing Softmax...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span>Run FinBERT Inference</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -169,83 +213,96 @@ export const LiveAnalysisPage: React.FC = () => {
       {result && (
         <div
           ref={resultRef}
-          className={`bg-navy-900 border rounded-xl p-6 space-y-6 transition-all duration-300 ${
-            flashCard ? 'border-blue-500 ring-2 ring-blue-500/50 shadow-xl shadow-blue-500/10' : 'border-navy-750'
+          className={`bg-navy-900/90 border rounded-2xl p-6 space-y-6 transition-all duration-300 shadow-xl ${
+            flashCard ? 'border-blue-500 ring-2 ring-blue-500/40' : 'border-navy-750/90'
           }`}
         >
           {/* Result Card Header */}
-          <div className="flex items-center justify-between pb-4 border-b border-navy-700/60 flex-wrap gap-2">
+          <div className="flex items-center justify-between pb-4 border-b border-navy-750/80 flex-wrap gap-3">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider block">
-                  Model Classification Outcome
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider font-semibold">
+                  FinBERT Classification Verdict
                 </span>
                 {latencyMs !== null && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono border border-emerald-500/20">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px] font-mono border border-emerald-500/20">
                     <Zap className="w-2.5 h-2.5" />
-                    <span>{latencyMs}ms inference</span>
+                    <span>{latencyMs}ms Latency</span>
                   </span>
                 )}
               </div>
               <div className="flex items-center gap-3">
-                <SentimentBadge sentiment={result.sentiment} confidence={result.confidence} />
-                <span className="text-xs text-slate-400 font-mono">
-                  Confidence: <strong className="text-white">{(result.confidence * 100).toFixed(1)}%</strong>
+                <SentimentBadge sentiment={result.sentiment} confidence={result.confidence} size="md" />
+                <span className="text-xs text-slate-300 font-mono">
+                  Confidence Score: <strong className="text-white">{(result.confidence * 100).toFixed(1)}%</strong>
                 </span>
               </div>
             </div>
-            <div className="text-right text-[11px] text-slate-500 font-mono">
-              <span className="text-slate-400 font-medium">{result.model_name}</span>
-              <span className="block text-[10px]">{new Date(result.analyzed_at).toLocaleTimeString()}</span>
+
+            <div className="text-right text-[11px] text-slate-400 font-mono">
+              <span className="text-slate-300 font-semibold">{result.model_name}</span>
+              <span className="block text-[10px] text-slate-500">{new Date(result.analyzed_at).toLocaleTimeString()} UTC</span>
             </div>
           </div>
 
-          {/* Probability Bars */}
+          {/* Three Probability Distribution Meters */}
           <div className="space-y-3">
-            <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              FinBERT Class Distribution
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              Softmax Probability Distribution
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="bg-navy-950 p-3 rounded-lg border border-navy-800">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-400">Bullish / Positive</span>
+              {/* Bullish */}
+              <div className="bg-navy-950/80 p-4 rounded-xl border border-navy-800">
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Bullish (Positive)</span>
+                  </span>
                   <span className="text-emerald-400 font-mono font-bold">
                     {(result.scores.positive * 100).toFixed(1)}%
                   </span>
                 </div>
-                <div className="w-full bg-navy-800 rounded-full h-1.5 overflow-hidden">
+                <div className="w-full bg-navy-800 rounded-full h-2 overflow-hidden">
                   <div
-                    className="bg-emerald-500 h-1.5 rounded-full"
+                    className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
                     style={{ width: `${result.scores.positive * 100}%` }}
                   />
                 </div>
               </div>
 
-              <div className="bg-navy-950 p-3 rounded-lg border border-navy-800">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-400">Neutral</span>
+              {/* Neutral */}
+              <div className="bg-navy-950/80 p-4 rounded-xl border border-navy-800">
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <Minus className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Neutral Tone</span>
+                  </span>
                   <span className="text-amber-400 font-mono font-bold">
                     {(result.scores.neutral * 100).toFixed(1)}%
                   </span>
                 </div>
-                <div className="w-full bg-navy-800 rounded-full h-1.5 overflow-hidden">
+                <div className="w-full bg-navy-800 rounded-full h-2 overflow-hidden">
                   <div
-                    className="bg-amber-500 h-1.5 rounded-full"
+                    className="bg-amber-500 h-2 rounded-full transition-all duration-500"
                     style={{ width: `${result.scores.neutral * 100}%` }}
                   />
                 </div>
               </div>
 
-              <div className="bg-navy-950 p-3 rounded-lg border border-navy-800">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-400">Bearish / Negative</span>
+              {/* Bearish */}
+              <div className="bg-navy-950/80 p-4 rounded-xl border border-navy-800">
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Bearish (Negative)</span>
+                  </span>
                   <span className="text-rose-400 font-mono font-bold">
                     {(result.scores.negative * 100).toFixed(1)}%
                   </span>
                 </div>
-                <div className="w-full bg-navy-800 rounded-full h-1.5 overflow-hidden">
+                <div className="w-full bg-navy-800 rounded-full h-2 overflow-hidden">
                   <div
-                    className="bg-rose-500 h-1.5 rounded-full"
+                    className="bg-rose-500 h-2 rounded-full transition-all duration-500"
                     style={{ width: `${result.scores.negative * 100}%` }}
                   />
                 </div>
@@ -255,34 +312,36 @@ export const LiveAnalysisPage: React.FC = () => {
 
           {/* Explainable AI: Token Perturbation Breakdown */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
                 <span>Explainable AI: Perturbation Word Salience</span>
-                <HelpCircle className="w-3.5 h-3.5 text-slate-500" />
+                <span title="Measures drop in model confidence when each token is masked individually.">
+                  <HelpCircle className="w-3.5 h-3.5 text-slate-500" />
+                </span>
               </h4>
-              <span className="text-[10px] text-blue-400 font-mono">
-                Method: Single-token masking Δ
+              <span className="text-[10px] text-blue-400 font-mono bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                Method: Token Masking Delta ΔP
               </span>
             </div>
 
             {result.tokens && result.tokens.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {result.tokens.map((token, i) => {
                   const isPositiveDelta = token.impact > 0;
                   return (
                     <div
                       key={i}
-                      className="flex items-center justify-between p-2.5 bg-navy-950 border border-navy-800 rounded-md text-xs"
+                      className="flex items-center justify-between p-3 bg-navy-950/80 border border-navy-800 rounded-xl text-xs"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-blue-300 font-semibold bg-blue-900/30 px-2 py-0.5 rounded border border-blue-800/40">
+                        <span className="font-mono text-blue-300 font-bold bg-blue-900/30 px-2 py-0.5 rounded-md border border-blue-800/40">
                           {token.token}
                         </span>
                         <span className="text-[11px] text-slate-400 capitalize">
-                          {token.direction}
+                          {token.direction} influence
                         </span>
                       </div>
-                      <span className={`font-mono font-medium ${isPositiveDelta ? 'text-emerald-400' : 'text-slate-400'}`}>
+                      <span className={`font-mono font-bold ${isPositiveDelta ? 'text-emerald-400' : 'text-slate-400'}`}>
                         {isPositiveDelta ? `+${(token.impact * 100).toFixed(1)}%` : `${(token.impact * 100).toFixed(1)}%`}
                       </span>
                     </div>
@@ -290,19 +349,21 @@ export const LiveAnalysisPage: React.FC = () => {
                 })}
               </div>
             ) : (
-              <p className="text-xs text-slate-500 italic">Uniform impact or single-word token.</p>
+              <p className="text-xs text-slate-500 italic p-3 bg-navy-950 rounded-xl border border-navy-800">
+                Single-token text or uniform attention distribution.
+              </p>
             )}
           </div>
 
-          {/* Limitations Disclaimer */}
-          <div className="p-3.5 bg-navy-950 border border-navy-800 rounded-lg text-xs space-y-1 text-slate-400">
-            <div className="flex items-center gap-2 font-semibold text-slate-300">
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
-              <span>Scientific Note & Limitations</span>
+          {/* Transparent Scientific Disclaimer */}
+          <div className="p-4 bg-navy-950/90 border border-navy-800 rounded-xl text-xs space-y-1.5 text-slate-400">
+            <div className="flex items-center gap-2 font-bold text-slate-300">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Scientific Note & Platform Transparency</span>
             </div>
-            <p className="text-[11px] leading-relaxed">
+            <p className="text-[11px] leading-relaxed text-slate-400">
               {result.explanation_note} Word impact scores represent local confidence shifts when individual words are masked.
-              FinBERT is an NLP sentiment classifier and must not be used as an automated trading algorithm.
+              FinBERT is an NLP sentiment classifier analyzing semantic tone; it does not evaluate corporate fundamentals or forecast stock price movements.
             </p>
           </div>
         </div>
