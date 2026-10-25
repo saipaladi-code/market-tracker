@@ -18,7 +18,9 @@ import {
   Clock,
   Filter,
   BarChart3,
-  LineChart as LineChartIcon
+  LineChart as LineChartIcon,
+  Server,
+  Zap
 } from 'lucide-react';
 import {
   PieChart,
@@ -37,6 +39,8 @@ import {
 import { api } from '../services/api';
 import { DashboardStats, Article } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
+import { BackendConfigModal } from '../components/BackendConfigModal';
+import { MOCK_DASHBOARD_STATS, MOCK_ARTICLES, MOCK_HISTORY } from '../services/mockData';
 
 const COLORS = {
   positive: '#10b981', // Emerald
@@ -51,6 +55,7 @@ export const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState<'live' | '24h' | '7d' | 'all'>('live');
+  const [showBackendModal, setShowBackendModal] = useState(false);
   const navigate = useNavigate();
 
   const loadData = async () => {
@@ -63,21 +68,29 @@ export const DashboardPage: React.FC = () => {
         api.getHistory(),
       ]);
 
-      if (statsData.status === 'fulfilled') {
+      if (statsData.status === 'fulfilled' && statsData.value) {
         setStats(statsData.value);
       } else {
-        throw new Error('Failed to retrieve analytics metrics from backend service.');
+        setStats(MOCK_DASHBOARD_STATS);
       }
 
-      if (newsData.status === 'fulfilled') {
+      if (newsData.status === 'fulfilled' && newsData.value) {
         setRecentNews(newsData.value.articles || []);
+      } else {
+        setRecentNews(MOCK_ARTICLES.slice(0, 6));
       }
 
       if (historyList.status === 'fulfilled' && Array.isArray(historyList.value)) {
         setHistoryData(historyList.value);
+      } else {
+        setHistoryData(MOCK_HISTORY);
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to load dashboard metrics.');
+      console.warn('Dashboard sync note:', err);
+      // Seamlessly fall back so user is never locked out
+      setStats(MOCK_DASHBOARD_STATS);
+      setRecentNews(MOCK_ARTICLES.slice(0, 6));
+      setHistoryData(MOCK_HISTORY);
     } finally {
       setLoading(false);
     }
@@ -86,6 +99,13 @@ export const DashboardPage: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleUseDemo = () => {
+    setError(null);
+    setStats(MOCK_DASHBOARD_STATS);
+    setRecentNews(MOCK_ARTICLES.slice(0, 6));
+    setHistoryData(MOCK_HISTORY);
+  };
 
   if (loading) {
     return (
@@ -108,14 +128,38 @@ export const DashboardPage: React.FC = () => {
         <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto mb-4 text-rose-400">
           <AlertTriangle className="w-6 h-6" />
         </div>
-        <h3 className="text-base font-bold text-white mb-1.5">Failed to Connect to Analytics Service</h3>
-        <p className="text-xs text-slate-400 mb-6 max-w-sm mx-auto leading-relaxed">{error || 'Unknown error occurred'}</p>
-        <button
-          onClick={loadData}
-          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
-        >
-          Retry Connection
-        </button>
+        <h3 className="text-base font-bold text-white mb-1.5">Backend Service Unreachable</h3>
+        <p className="text-xs text-slate-400 mb-6 max-w-sm mx-auto leading-relaxed">
+          {error || `Unable to reach API server at ${api.getBaseUrl()}.`}
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            onClick={handleUseDemo}
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-blue-600/20 transition-all cursor-pointer flex items-center gap-2"
+          >
+            <Zap className="w-4 h-4 text-amber-300" />
+            <span>Load Demo Intelligence</span>
+          </button>
+          <button
+            onClick={() => setShowBackendModal(true)}
+            className="px-4 py-2.5 bg-navy-800 hover:bg-navy-750 border border-navy-700 text-slate-200 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <Server className="w-4 h-4 text-blue-400" />
+            <span>Configure Backend URL</span>
+          </button>
+          <button
+            onClick={loadData}
+            className="px-4 py-2.5 bg-navy-850 hover:bg-navy-800 text-slate-300 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+          >
+            Retry Connection
+          </button>
+        </div>
+
+        <BackendConfigModal
+          isOpen={showBackendModal}
+          onClose={() => setShowBackendModal(false)}
+          onSave={loadData}
+        />
       </div>
     );
   }
@@ -131,8 +175,51 @@ export const DashboardPage: React.FC = () => {
     ? Math.round((totalDeduplicated / stats.total_including_duplicates) * 100)
     : 0;
 
+  const isOffline = api.isOffline();
+
   return (
     <div className="space-y-6 pb-12">
+      {/* Offline / Demo Intelligence Banner */}
+      {(isOffline || stats.is_demo_dataset) && (
+        <div className="flex flex-col sm:flex-row items-center justify-between p-3.5 px-4 bg-navy-900/90 border border-amber-500/30 rounded-2xl gap-3 text-xs shadow-md shadow-amber-500/5">
+          <div className="flex items-center gap-2.5 text-amber-300">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <Zap className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold text-white">Standalone Demo Intelligence: </span>
+              <span className="text-slate-300">
+                {isOffline
+                  ? `Backend server at ${api.getBaseUrl()} is offline or unreachable.`
+                  : 'Displaying curated institutional FinBERT analysis dataset.'}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowBackendModal(true)}
+              className="px-3 py-1.5 bg-navy-800 hover:bg-navy-750 border border-navy-700 text-slate-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <Server className="w-3.5 h-3.5 text-blue-400" />
+              <span>Configure Backend</span>
+            </button>
+            <button
+              onClick={loadData}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Sync</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Backend Config Modal */}
+      <BackendConfigModal
+        isOpen={showBackendModal}
+        onClose={() => setShowBackendModal(false)}
+        onSave={loadData}
+      />
       {/* Top Section / Header Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-navy-900/90 border border-navy-750/80 rounded-2xl p-5 backdrop-blur-md">
         <div>

@@ -11,6 +11,7 @@ import { SectorHeatmapPage } from './pages/SectorHeatmapPage';
 import { AlertsHistoryPage } from './pages/AlertsHistoryPage';
 import { DataQualityPage } from './pages/DataQualityPage';
 import { AssistantPage } from './pages/AssistantPage';
+import { BackendConfigModal } from './components/BackendConfigModal';
 import { api } from './services/api';
 
 export function App() {
@@ -21,6 +22,7 @@ export function App() {
   const [activeConflictsCount, setActiveConflictsCount] = useState<number>(0);
   const [unreadAlertsCount, setUnreadAlertsCount] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showBackendModal, setShowBackendModal] = useState<boolean>(false);
 
   const checkHealthAndStats = async () => {
     try {
@@ -83,6 +85,7 @@ export function App() {
           setMobileOpen={setMobileOpen}
           activeConflictsCount={activeConflictsCount}
           unreadAlertsCount={unreadAlertsCount}
+          onOpenBackendSettings={() => setShowBackendModal(true)}
         />
 
         {/* Main Content Area */}
@@ -92,6 +95,7 @@ export function App() {
             isDemo={isDemo}
             onRefresh={handleGlobalRefresh}
             onOpenMobileMenu={() => setMobileOpen(true)}
+            onOpenBackendSettings={() => setShowBackendModal(true)}
           />
 
           <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto overflow-y-auto">
@@ -110,11 +114,18 @@ export function App() {
 
           {/* Toast Notification Notification Pill */}
           {toastMessage && (
-            <div className="fixed bottom-6 right-6 z-50 bg-navy-800 text-white px-4 py-2.5 rounded-xl border border-navy-700 shadow-2xl flex items-center gap-2 text-xs font-medium animate-in slide-in-from-bottom duration-200">
+            <div className="fixed bottom-6 right-6 z-50 bg-navy-800 text-white px-4 py-2.5 rounded-xl border border-navy-750 shadow-2xl flex items-center gap-2 text-xs font-medium animate-in slide-in-from-bottom duration-200">
               <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
               <span>{toastMessage}</span>
             </div>
           )}
+
+          {/* Backend Configuration Modal */}
+          <BackendConfigModal
+            isOpen={showBackendModal}
+            onClose={() => setShowBackendModal(false)}
+            onSave={checkHealthAndStats}
+          />
         </div>
       </div>
     </BrowserRouter>

@@ -16,7 +16,8 @@ import {
   Cpu,
   Database,
   Globe,
-  X
+  X,
+  Server
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -28,6 +29,7 @@ interface SidebarProps {
   setMobileOpen: (open: boolean) => void;
   activeConflictsCount?: number;
   unreadAlertsCount?: number;
+  onOpenBackendSettings?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -39,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setMobileOpen,
   activeConflictsCount = 0,
   unreadAlertsCount = 0,
+  onOpenBackendSettings,
 }) => {
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, badge: null },
@@ -178,6 +181,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {isDemo ? 'DEMO DATA' : 'LIVE API'}
               </span>
             </div>
+
+            {onOpenBackendSettings && (
+              <button
+                onClick={onOpenBackendSettings}
+                className="w-full mt-2 pt-2 border-t border-navy-750 flex items-center justify-between text-[11px] text-slate-400 hover:text-blue-300 transition-colors cursor-pointer group"
+                title="Configure Backend Server Endpoint"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Server className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Backend Server</span>
+                </span>
+                <span className="font-mono text-[10px] text-blue-400 group-hover:underline">Configure →</span>
+              </button>
+            )}
           </>
         ) : (
           <div className="flex flex-col items-center gap-2" title={`FinBERT: ${modelStatus} | News: ${isDemo ? 'Demo' : 'Live'}`}>

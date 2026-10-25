@@ -9,7 +9,8 @@ import {
   Shield,
   Clock,
   Sparkles,
-  UserCheck
+  UserCheck,
+  Server
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -17,6 +18,7 @@ interface NavbarProps {
   isDemo?: boolean;
   onRefresh?: () => Promise<void>;
   onOpenMobileMenu?: () => void;
+  onOpenBackendSettings?: () => void;
 }
 
 const PAGE_METADATA: Record<string, { title: string; section: string; desc: string }> = {
@@ -48,6 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isDemo = false,
   onRefresh,
   onOpenMobileMenu,
+  onOpenBackendSettings,
 }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -183,6 +186,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           <Clock className="w-3.5 h-3.5 text-blue-400" />
           <span>Synced: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : 'Live'}</span>
         </div>
+
+        {/* Backend Settings Button */}
+        {onOpenBackendSettings && (
+          <button
+            onClick={onOpenBackendSettings}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-navy-900 hover:bg-navy-800 border border-navy-750 text-slate-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
+            title="Configure Backend Server Endpoint"
+          >
+            <Server className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline text-[11px] font-mono">Backend</span>
+          </button>
+        )}
 
         {/* Global Refresh Button */}
         <button
