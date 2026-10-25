@@ -101,8 +101,24 @@ class DatabaseManager:
             document_copy["_id"] = document_copy["id"]
         
         if self.is_cloud and self.db is not None:
-            res = self.db[collection_name].insert_one(document_copy)
-            return str(res.inserted_id)
+            try:
+                cid = document_copy.get("canonical_id")
+                doc_id = document_copy.get("_id") or document_copy.get("id")
+                query = {}
+                if cid:
+                    query = {"canonical_id": cid}
+                elif doc_id:
+                    query = {"_id": doc_id}
+
+                if query:
+                    self.db[collection_name].replace_one(query, document_copy, upsert=True)
+                    return str(doc_id or cid)
+                else:
+                    res = self.db[collection_name].insert_one(document_copy)
+                    return str(res.inserted_id)
+            except Exception as e:
+                logger.warning(f"MongoDB write handled gracefully: {e}")
+                return str(document_copy.get("_id", "unknown"))
         else:
             db_data = self._read_local_db()
             items = db_data.setdefault(collection_name, [])

@@ -13,7 +13,8 @@ import {
   HelpCircle,
   CheckCircle2,
   SlidersHorizontal,
-  Building2
+  Building2,
+  X
 } from 'lucide-react';
 import { api } from '../services/api';
 import { Article, SentimentAnalysisResult } from '../types';
@@ -21,19 +22,24 @@ import { SentimentBadge } from '../components/SentimentBadge';
 import { ExplainModal } from '../components/ExplainModal';
 
 const COMPANIES = [
-  'All Companies',
-  'Apple',
-  'Microsoft',
-  'Nvidia',
-  'Tesla',
-  'Alphabet',
-  'Amazon',
-  'JPMorgan Chase',
-  'Pfizer',
-  'ExxonMobil'
+  { label: 'All Companies', value: 'All Companies' },
+  { label: 'Apple (AAPL)', value: 'Apple' },
+  { label: 'Nvidia (NVDA)', value: 'Nvidia' },
+  { label: 'Tesla (TSLA)', value: 'Tesla' },
+  { label: 'Microsoft (MSFT)', value: 'Microsoft' },
+  { label: 'Alphabet (GOOGL)', value: 'Alphabet' },
+  { label: 'Amazon (AMZN)', value: 'Amazon' },
+  { label: 'JPMorgan Chase (JPM)', value: 'JPMorgan Chase' },
+  { label: 'Pfizer (PFE)', value: 'Pfizer' },
+  { label: 'ExxonMobil (XOM)', value: 'ExxonMobil' },
 ];
 
-const SENTIMENTS = ['All', 'Positive', 'Neutral', 'Negative'];
+const SENTIMENTS = [
+  { label: 'All Sentiments', value: 'All' },
+  { label: 'Positive Tone Only', value: 'Positive' },
+  { label: 'Neutral Tone Only', value: 'Neutral' },
+  { label: 'Negative Tone Only', value: 'Negative' },
+];
 
 export const NewsExplorerPage: React.FC = () => {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -103,6 +109,18 @@ export const NewsExplorerPage: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
+  const hasActiveFilters =
+    selectedCompany !== 'All Companies' ||
+    selectedSentiment !== 'All' ||
+    searchQuery.trim() !== '';
+
+  const handleClearAllFilters = () => {
+    setSearchQuery('');
+    setSelectedCompany('All Companies');
+    setSelectedSentiment('All');
+    setPage(1);
+  };
+
   return (
     <div className="space-y-6 pb-12">
       {/* Top Controls Banner */}
@@ -162,11 +180,11 @@ export const NewsExplorerPage: React.FC = () => {
                   setSelectedCompany(e.target.value);
                   setPage(1);
                 }}
-                className="w-full bg-navy-950 border border-navy-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                className="w-full bg-navy-950 border border-navy-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
               >
                 {COMPANIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                  <option key={c.value} value={c.value}>
+                    {c.label}
                   </option>
                 ))}
               </select>
@@ -180,18 +198,18 @@ export const NewsExplorerPage: React.FC = () => {
                   setSelectedSentiment(e.target.value);
                   setPage(1);
                 }}
-                className="w-full bg-navy-950 border border-navy-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                className="w-full bg-navy-950 border border-navy-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
               >
                 {SENTIMENTS.map((s) => (
-                  <option key={s} value={s}>
-                    {s === 'All' ? 'All Sentiments' : `${s} Tone Only`}
+                  <option key={s.value} value={s.value}>
+                    {s.label}
                   </option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Bottom Filter Toggles */}
+          {/* Bottom Filter Toggles & Actions */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <div className="flex items-center gap-4 text-xs">
               <label className="flex items-center gap-2 cursor-pointer text-slate-300">
@@ -199,7 +217,7 @@ export const NewsExplorerPage: React.FC = () => {
                   type="checkbox"
                   checked={showDuplicates}
                   onChange={(e) => setShowDuplicates(e.target.checked)}
-                  className="accent-blue-500 rounded"
+                  className="accent-blue-500 rounded cursor-pointer"
                 />
                 <span>Include filtered near-duplicates ({totalCount} total)</span>
               </label>
@@ -212,6 +230,59 @@ export const NewsExplorerPage: React.FC = () => {
               Apply Filter Query
             </button>
           </div>
+
+          {/* Active Filter Chips / Clear Controls */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-navy-800 animate-fadeIn">
+              <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider">Active Filters:</span>
+              {selectedCompany !== 'All Companies' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-medium">
+                  <span>Company: {selectedCompany}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedCompany('All Companies'); setPage(1); }}
+                    className="hover:text-white transition-colors cursor-pointer"
+                    title="Remove company filter"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              )}
+              {selectedSentiment !== 'All' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-medium">
+                  <span>Tone: {selectedSentiment}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedSentiment('All'); setPage(1); }}
+                    className="hover:text-white transition-colors cursor-pointer"
+                    title="Remove sentiment filter"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              )}
+              {searchQuery.trim() && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-700/50 border border-slate-600 text-slate-200 text-xs font-medium">
+                  <span>Search: "{searchQuery.trim()}"</span>
+                  <button
+                    type="button"
+                    onClick={() => { setSearchQuery(''); setPage(1); }}
+                    className="hover:text-white transition-colors cursor-pointer"
+                    title="Remove search filter"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleClearAllFilters}
+                className="text-xs text-rose-400 hover:text-rose-300 underline font-medium ml-1 transition-colors cursor-pointer"
+              >
+                Clear All Filters
+              </button>
+            </div>
+          )}
         </form>
       </div>
 

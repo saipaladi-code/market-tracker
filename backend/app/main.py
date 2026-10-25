@@ -14,7 +14,7 @@ from app.models.schemas import (
     AlertRecord, DataQualityReport, AssistantChatRequest, AssistantChatResponse
 )
 from app.services.finbert_service import finbert_service
-from app.services.news_service import news_service, SUPPORTED_COMPANIES
+from app.services.news_service import news_service, SUPPORTED_COMPANIES, canonicalize_company
 from app.services.deduplication_service import deduplication_service
 from app.services.conflict_service import conflict_service
 from app.services.sector_service import sector_service
@@ -306,11 +306,15 @@ def get_companies():
 def get_company_sentiment_detail(company: str = Path(...)):
     """Detailed view for an individual company including headlines, timeline, and conflict score."""
     articles = news_service.fetch_articles()
-    comp_arts = [a for a in articles if a.get("company", "").lower() == company.lower()]
+    target_comp = canonicalize_company(company) or company
+    comp_arts = [
+        a for a in articles
+        if (canonicalize_company(a.get("company")) or a.get("company", "")).lower() == target_comp.lower()
+    ]
 
     if not comp_arts:
         # Check partial match
-        comp_arts = [a for a in articles if company.lower() in a.get("company", "").lower()]
+        comp_arts = [a for a in articles if target_comp.lower() in a.get("company", "").lower()]
 
     clean_arts = [a for a in comp_arts if not a.get("is_duplicate")]
     total = len(clean_arts)
