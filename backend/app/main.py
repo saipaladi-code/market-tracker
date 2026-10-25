@@ -4,6 +4,7 @@ import logging
 from typing import List, Optional
 from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Query, Path
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import db
@@ -14,6 +15,7 @@ from app.models.schemas import (
     AlertRecord, DataQualityReport, AssistantChatRequest, AssistantChatResponse
 )
 from app.services.finbert_service import finbert_service
+from app.services.headline_validator import HeadlineValidationError, assert_valid_financial_headline
 from app.services.news_service import news_service, SUPPORTED_COMPANIES, canonicalize_company
 from app.services.deduplication_service import deduplication_service
 from app.services.conflict_service import conflict_service
@@ -30,6 +32,14 @@ app = FastAPI(
     description="AI-Powered Financial News Intelligence Platform backed by ProsusAI/finbert",
     version="1.0.0"
 )
+
+@app.exception_handler(HeadlineValidationError)
+async def headline_validation_exception_handler(request, exc: HeadlineValidationError):
+    """Returns structured HTTP 422 for invalid financial headlines."""
+    return JSONResponse(
+        status_code=422,
+        content=exc.to_dict()
+    )
 
 # CORS Configuration - support local dev, Vercel deployments, and custom domains
 origins = [
@@ -239,8 +249,9 @@ def refresh_news():
 @app.post("/api/analyze", response_model=SentimentAnalysisResult)
 def analyze_headline(req: AnalyzeRequest):
     """Analyzes a single headline using local ProsusAI/finbert with token perturbation explanation."""
+    cleaned_text = assert_valid_financial_headline(req.text)
     try:
-        result = finbert_service.predict_one(req.text, include_explanation=True)
+        result = finbert_service.predict_one(cleaned_text, include_explanation=True)
         # Persist analysis result into database
         db.insert_one("sentiment_results", {
             "text": result["text"],
@@ -251,6 +262,8 @@ def analyze_headline(req: AnalyzeRequest):
             "analyzed_at": result["analyzed_at"]
         })
         return result
+    except HeadlineValidationError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -260,9 +273,13 @@ def analyze_headline(req: AnalyzeRequest):
 @app.post("/api/analyze/batch", response_model=List[SentimentAnalysisResult])
 def analyze_headlines_batch(req: BatchAnalyzeRequest):
     """Batch sentiment classification using ProsusAI/finbert."""
+    for text in req.texts:
+        assert_valid_financial_headline(text)
     try:
         results = finbert_service.predict_batch(req.texts)
         return results
+    except HeadlineValidationError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

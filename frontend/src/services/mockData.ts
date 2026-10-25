@@ -9,6 +9,7 @@ import {
   DataQualityReport,
   AssistantChatResponse
 } from '../types';
+import { validateFinancialHeadline } from './headlineValidator';
 
 export const MOCK_ARTICLES: Article[] = [
   {
@@ -607,7 +608,24 @@ export const MOCK_HEALTH = {
  * Fast client-side lexical FinBERT simulation with token perturbation salience
  */
 export function simulateFinbertAnalysis(text: string): SentimentAnalysisResult {
-  const lower = text.toLowerCase();
+  const validation = validateFinancialHeadline(text);
+  if (!validation.isValid) {
+    const error: any = new Error(validation.message || 'Invalid financial headline');
+    error.response = {
+      status: 422,
+      data: {
+        detail: validation.message,
+        error_code: validation.errorCode,
+        message: validation.message,
+        character_count: validation.charCount,
+        min_length: 15,
+        max_length: 1000,
+      },
+    };
+    throw error;
+  }
+
+  const lower = validation.cleaned.toLowerCase();
   
   const positiveKeywords = [
     'record', 'surge', 'surging', 'soar', 'soaring', 'growth', 'beats', 'beat',

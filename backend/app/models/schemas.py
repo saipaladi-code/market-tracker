@@ -25,7 +25,7 @@ class SentimentAnalysisResult(BaseModel):
     explanation_note: str
 
 class AnalyzeRequest(BaseModel):
-    text: str = Field(..., min_length=1, description="Financial news headline or sentence")
+    text: str = Field(..., description="Financial news headline or sentence")
 
 class BatchAnalyzeRequest(BaseModel):
     texts: List[str] = Field(..., min_length=1, description="List of headlines to analyze")

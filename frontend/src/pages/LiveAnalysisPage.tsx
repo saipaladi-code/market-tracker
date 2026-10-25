@@ -20,6 +20,12 @@ import {
 import { api } from '../services/api';
 import { SentimentAnalysisResult } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
+import {
+  validateFinancialHeadline,
+  MAX_HEADLINE_LENGTH,
+  MIN_HEADLINE_LENGTH,
+  INVALID_FINANCIAL_HEADLINE_MESSAGE
+} from '../services/headlineValidator';
 
 const SAMPLE_HEADLINES = [
   {
@@ -54,21 +60,63 @@ export const LiveAnalysisPage: React.FC = () => {
   const [result, setResult] = useState<SentimentAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pasteNotification, setPasteNotification] = useState<string | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [flashCard, setFlashCard] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
+  const trimmedHeadline = headline.trim();
+  const validation = validateFinancialHeadline(trimmedHeadline);
+  const isButtonDisabled = loading || !trimmedHeadline || !validation.isValid;
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasteData = e.clipboardData.getData('text');
+    if (!pasteData) return;
+
+    const textarea = e.currentTarget;
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    const currentVal = textarea.value;
+
+    const prospective = currentVal.slice(0, start) + pasteData + currentVal.slice(end);
+
+    if (prospective.length > MAX_HEADLINE_LENGTH) {
+      e.preventDefault();
+      const truncated = prospective.slice(0, MAX_HEADLINE_LENGTH);
+      setHeadline(truncated);
+      setPasteNotification('Pasted text was truncated to the 1,000-character limit.');
+      setTimeout(() => setPasteNotification(null), 6000);
+      if (error) setError(null);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    let val = e.target.value;
+    if (val.length > MAX_HEADLINE_LENGTH) {
+      val = val.slice(0, MAX_HEADLINE_LENGTH);
+    }
+    setHeadline(val);
+    if (error) setError(null);
+  };
+
   const handleAnalyze = async (textToAnalyze?: string) => {
-    const text = (textToAnalyze !== undefined ? textToAnalyze : headline).trim();
-    if (!text) {
-      setError('Please provide a financial headline or sentence to analyze.');
+    if (loading) return; // Prevent repeated submissions while processing
+
+    const rawText = textToAnalyze !== undefined ? textToAnalyze : headline;
+    const text = rawText.trim();
+
+    // Client-side pre-validation
+    const check = validateFinancialHeadline(text);
+    if (!check.isValid) {
+      setResult(null); // Clear stale results when new input is invalid
+      setError(check.message || INVALID_FINANCIAL_HEADLINE_MESSAGE);
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
-      setHeadline(text);
+      setHeadline(rawText.length > MAX_HEADLINE_LENGTH ? rawText.slice(0, MAX_HEADLINE_LENGTH) : rawText);
 
       const startTime = performance.now();
       const data = await api.analyzeHeadline(text);
@@ -86,7 +134,10 @@ export const LiveAnalysisPage: React.FC = () => {
         setFlashCard(false);
       }, 1200);
     } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || 'Sentiment analysis failed on backend.');
+      setResult(null); // Clear stale sentiment results on rejection
+      const apiError = err?.response?.data;
+      const msg = apiError?.detail || apiError?.message || err?.message || 'Sentiment analysis failed on backend.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -96,6 +147,7 @@ export const LiveAnalysisPage: React.FC = () => {
     setHeadline('');
     setResult(null);
     setError(null);
+    setPasteNotification(null);
   };
 
   return (
@@ -123,10 +175,19 @@ export const LiveAnalysisPage: React.FC = () => {
       <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-6 space-y-4 shadow-sm">
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+            <label htmlFor="financial-headline-input" className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
               <span>Financial Headline / Statement Input</span>
-              <span className="text-[10px] text-slate-500 font-mono font-normal">
-                ({headline.length} characters)
+              <span
+                id="char-counter"
+                className={`text-[10px] font-mono font-medium transition-colors ${
+                  headline.length >= MAX_HEADLINE_LENGTH
+                    ? 'text-amber-400 font-bold'
+                    : headline.length > 900
+                    ? 'text-blue-400'
+                    : 'text-slate-500'
+                }`}
+              >
+                ({headline.length} / {MAX_HEADLINE_LENGTH} characters)
               </span>
             </label>
             {headline && (
@@ -143,19 +204,39 @@ export const LiveAnalysisPage: React.FC = () => {
 
           <div className="relative">
             <textarea
+              id="financial-headline-input"
               rows={3}
               value={headline}
-              onChange={(e) => setHeadline(e.target.value)}
+              maxLength={MAX_HEADLINE_LENGTH}
+              onChange={handleChange}
+              onPaste={handlePaste}
               placeholder="e.g. Alphabet surges 7% after cloud revenue accelerates past Wall Street targets..."
               className="w-full bg-navy-950 border border-navy-700/80 rounded-xl p-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-sans leading-relaxed"
             />
           </div>
         </div>
 
+        {/* Truncation Notification */}
+        {pasteNotification && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex items-center gap-2.5">
+            <Info className="w-4 h-4 shrink-0 text-amber-400" />
+            <span>{pasteNotification}</span>
+          </div>
+        )}
+
+        {/* Validation / Error Message */}
         {error && (
           <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-center gap-2.5">
             <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
-            <span>{error}</span>
+            <span className="flex-1 leading-relaxed">{error}</span>
+          </div>
+        )}
+
+        {/* Inline Guidance When Input Is Active But Invalid */}
+        {trimmedHeadline.length > 0 && !error && !validation.isValid && (
+          <div className="p-2.5 bg-navy-950/90 border border-slate-700/60 rounded-xl text-[11px] text-slate-400 flex items-center gap-2">
+            <Info className="w-3.5 h-3.5 shrink-0 text-blue-400" />
+            <span className="leading-snug">{validation.message}</span>
           </div>
         )}
 
@@ -189,9 +270,11 @@ export const LiveAnalysisPage: React.FC = () => {
             </div>
 
             <button
+              id="run-finbert-inference-btn"
+              type="button"
               onClick={() => handleAnalyze()}
-              disabled={loading || !headline.trim()}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+              disabled={isButtonDisabled}
+              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
             >
               {loading ? (
                 <>

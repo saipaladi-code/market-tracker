@@ -36,8 +36,9 @@ FINANCIAL_NEGATIVE_LEXICON = {
     "down", "default", "defaults", "risk", "risks", "risky", "downgrade", "downgrades",
     "downgraded", "bearish", "bankruptcy", "bankrupt", "antitrust", "slash", "slashes",
     "crash", "crashes", "deficit", "warning", "warnings", "warns", "underperform",
-    "debt", "shrink", "shrinks", "struggle", "struggles", "crisis", "recession",
-    "inflation", "negative", "scrutiny", "probe", "headwinds", "weakness", "weak", "curb"
+    "inflation", "negative", "scrutiny", "probe", "headwinds", "headwind", "weakness", "weak", "curb",
+    "pressure", "pressures", "pressured", "pressuring", "erode", "erodes", "eroded", "erosion",
+    "contract", "contracts", "contracted", "contracting", "lawsuit", "layoff", "layoffs"
 }
 
 FINANCIAL_STOPWORDS = {
@@ -211,10 +212,10 @@ class FinBERTService:
         """
         Predicts sentiment for a single financial text.
         Routes through Cloud AI (Gemini / HF) or local PyTorch according to engine_mode.
+        Strictly validates financial relevance and length before running any inference engine.
         """
-        cleaned_text = (text or "").strip()
-        if not cleaned_text:
-            raise ValueError("Input text cannot be empty or whitespace.")
+        from app.services.headline_validator import assert_valid_financial_headline
+        cleaned_text = assert_valid_financial_headline(text)
 
         cache_key = f"{cleaned_text}_{include_explanation}"
         if cache_key in self.cache:

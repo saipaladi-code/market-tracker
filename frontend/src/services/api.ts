@@ -204,7 +204,11 @@ export const api = {
       const res = await client.post('/api/analyze', { text });
       setOfflineStatus(false);
       return res.data;
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.response?.status === 422 || err?.response?.data?.error_code) {
+        // Backend HTTP 422 validation failure: rethrow directly to caller
+        throw err;
+      }
       console.warn('Backend unavailable for FinBERT inference. Using simulated inference:', err);
       setOfflineStatus(true);
       return simulateFinbertAnalysis(text);
@@ -216,7 +220,10 @@ export const api = {
       const res = await client.post('/api/analyze/batch', { texts });
       setOfflineStatus(false);
       return res.data;
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.response?.status === 422 || err?.response?.data?.error_code) {
+        throw err;
+      }
       setOfflineStatus(true);
       return texts.map(simulateFinbertAnalysis);
     }
