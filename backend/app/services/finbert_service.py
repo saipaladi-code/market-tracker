@@ -168,7 +168,26 @@ class FinBERTService:
             safetensors_file = os.path.join(local_bfloat16_dir, "model.safetensors")
 
             use_local = os.path.exists(safetensors_file) and os.path.getsize(safetensors_file) > 100 * 1024 * 1024
-            load_source = local_bfloat16_dir if use_local else settings.MODEL_NAME
+            if not use_local:
+                logger.warning(
+                    f"Local weights not found at '{safetensors_file}'. "
+                    "Skipping heavy in-memory download to prevent container memory exhaustion (OOM). "
+                    "Routing to Hosted Hugging Face or Lexical mode."
+                )
+                hf_keys = settings.get_huggingface_api_keys()
+                if hf_keys:
+                    self.engine_mode = "hosted-huggingface"
+                    self.status = "ready"
+                    self.error_message = None
+                    logger.info(f"FinBERT Sentiment Engine routed to Hosted Hugging Face Serverless API ({len(hf_keys)} keys configured).")
+                    return True
+                self.engine_mode = "lexical-fallback"
+                self.status = "ready"
+                self.error_message = "Local PyTorch weights not present on disk. Running in rule-based fallback mode."
+                logger.info("Sentiment Engine initialized in Rule-Based Institutional Lexicon Fallback Mode.")
+                return True
+
+            load_source = local_bfloat16_dir
 
             logger.info(f"Loading local PyTorch FinBERT from '{load_source}' on CPU...")
             self.tokenizer = AutoTokenizer.from_pretrained(load_source)
