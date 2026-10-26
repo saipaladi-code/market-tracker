@@ -139,16 +139,19 @@ export const api = {
     }
   },
 
-  // Dashboard Stats - strictly retrieves real analytics metrics from backend
+  // Dashboard Stats
   getDashboardStats: async (): Promise<DashboardStats> => {
     try {
       const res = await client.get('/api/dashboard/stats');
       setOfflineStatus(false);
       return res.data;
-    } catch (err: any) {
+    } catch (err) {
+      console.warn('Backend unavailable for dashboard stats. Falling back to demo intelligence:', err);
       setOfflineStatus(true);
-      // Propagate the actual error so the UI truthfully displays connection status
-      throw err;
+      return {
+        ...MOCK_DASHBOARD_STATS,
+        is_demo_dataset: true,
+      };
     }
   },
 
