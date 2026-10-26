@@ -25,6 +25,7 @@ class SentimentAnalysisResult(BaseModel):
     explanation_note: str
     is_fallback: bool = False
     engine_mode: Optional[str] = None
+    article_id: Optional[str] = None
 
 class AnalyzeRequest(BaseModel):
     text: str = Field(default="", description="Financial news headline or sentence")
@@ -33,6 +34,7 @@ class BatchAnalyzeRequest(BaseModel):
     texts: List[str] = Field(default=[], description="List of headlines to analyze")
 
 class Article(BaseModel):
+    model_config = {"protected_namespaces": ()}
     id: str
     canonical_id: str
     title: str
@@ -49,6 +51,9 @@ class Article(BaseModel):
     is_demo: bool = False
     is_fallback: Optional[bool] = False
     engine_mode: Optional[str] = None
+    model_name: Optional[str] = None
+    tokens: Optional[List[AttributionToken]] = None
+    explanation_note: Optional[str] = None
 
 class NewsSearchRequest(BaseModel):
     query: Optional[str] = None

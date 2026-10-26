@@ -7,9 +7,15 @@ interface ExplainModalProps {
   isOpen: boolean;
   onClose: () => void;
   result: SentimentAnalysisResult | null;
+  loadingTokens?: boolean;
 }
 
-export const ExplainModal: React.FC<ExplainModalProps> = ({ isOpen, onClose, result }) => {
+export const ExplainModal: React.FC<ExplainModalProps> = ({
+  isOpen,
+  onClose,
+  result,
+  loadingTokens = false,
+}) => {
   if (!isOpen) return null;
 
   return (
@@ -125,7 +131,12 @@ export const ExplainModal: React.FC<ExplainModalProps> = ({ isOpen, onClose, res
                 </span>
               </div>
 
-              {result.tokens && result.tokens.length > 0 ? (
+              {loadingTokens && (!result.tokens || result.tokens.length === 0) ? (
+                <div className="flex items-center justify-center gap-2.5 p-4 bg-navy-950/80 rounded-xl border border-navy-800 text-xs text-slate-400 font-mono">
+                  <RefreshCw className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+                  <span>Computing token perturbation attribution...</span>
+                </div>
+              ) : result.tokens && result.tokens.length > 0 ? (
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {result.tokens.map((token, idx) => {
                     const isPositiveImpact = token.impact > 0;

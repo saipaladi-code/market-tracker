@@ -23,6 +23,7 @@ import {
   simulateFinbertAnalysis,
   simulateAssistantChat,
 } from './mockData';
+import { getCanonicalSentimentResult, mergeExplanationTokens } from '../utils/canonicalSentiment';
 
 const STORAGE_KEY = 'FIN_SENTIMENT_API_URL';
 
@@ -210,6 +211,41 @@ export const api = {
         new_alerts_count: 0,
         is_demo_dataset: true,
       };
+    }
+  },
+
+  // Explain Article using canonical prediction and perturbation attribution
+  explainArticle: async (article: Article): Promise<SentimentAnalysisResult> => {
+    // 1. Immediately establish canonical prediction from article
+    const canonical = getCanonicalSentimentResult(article);
+    if (canonical.tokens && canonical.tokens.length > 0) {
+      return canonical;
+    }
+
+    try {
+      // 2. Fetch from backend /api/news/{article_id}/explain
+      const res = await client.get(`/api/news/${encodeURIComponent(article.id)}/explain`);
+      setOfflineStatus(false);
+      // Strictly preserve canonical sentiment, confidence, scores, text, article_id
+      return mergeExplanationTokens(
+        canonical,
+        res.data.tokens,
+        res.data.explanation_note,
+        res.data.is_fallback
+      );
+    } catch (err) {
+      // 3. Fallback: query analyzeHeadline for tokens, but strictly preserve canonical prediction
+      try {
+        const headlineRes = await api.analyzeHeadline(article.title);
+        return mergeExplanationTokens(
+          canonical,
+          headlineRes.tokens,
+          headlineRes.explanation_note,
+          headlineRes.is_fallback
+        );
+      } catch (headlineErr) {
+        return canonical;
+      }
     }
   },
 

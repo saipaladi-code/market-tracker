@@ -125,7 +125,7 @@ class GeminiAssistantService:
         context_prompt += f"\nUser Query: {user_query}\n\nProvide a professional, objective financial intelligence summary:"
 
         try:
-            response = self.model.generate_content(context_prompt)
+            response = self.model.generate_content(context_prompt, request_options={"timeout": 10})
             answer_text = response.text
         except Exception as e:
             logger.warning(f"Gemini API generation error: {e}. Falling back to structured grounded synthesis.")

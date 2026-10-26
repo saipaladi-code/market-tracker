@@ -20,6 +20,7 @@ import { api } from '../services/api';
 import { Article, SentimentAnalysisResult } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
 import { ExplainModal } from '../components/ExplainModal';
+import { getCanonicalSentimentResult } from '../utils/canonicalSentiment';
 
 const COMPANIES = [
   { label: 'All Companies', value: 'All Companies' },
@@ -95,12 +96,37 @@ export const NewsExplorerPage: React.FC = () => {
   };
 
   const handleInspectAttribution = async (article: Article) => {
+    // 1. Immediately establish and display canonical inference result from article
+    const canonical = getCanonicalSentimentResult(article);
+    setSelectedExplainResult(canonical);
+    setExplainError(null);
+
+    // 2. If article already has attribution tokens cached, no network fetch needed
+    if (canonical.tokens && canonical.tokens.length > 0) {
+      return;
+    }
+
+    // 3. Asynchronously fetch explanation tokens without overwriting canonical sentiment or confidence
     try {
       setExplainLoading(true);
-      setExplainError(null);
-      const result = await api.analyzeHeadline(article.title);
-      setSelectedExplainResult(result);
+      const explained = await api.explainArticle(article);
+      setSelectedExplainResult((current) => {
+        // Prevent race condition if user closed or switched to another article
+        if (!current || current.article_id !== article.id) return current;
+        return {
+          ...current,
+          tokens: explained.tokens && explained.tokens.length > 0 ? explained.tokens : current.tokens,
+          explanation_note: explained.explanation_note || current.explanation_note,
+          is_fallback: explained.is_fallback !== undefined ? explained.is_fallback : current.is_fallback,
+        };
+      });
+
+      // Cache tokens in article state so reopening modal is instantaneous
+      setArticles((prev) =>
+        prev.map((a) => (a.id === article.id ? { ...a, tokens: explained.tokens } : a))
+      );
     } catch (err: any) {
+      console.warn('Attribution lookup failed:', err);
       setExplainError(err?.message || 'Attribution lookup failed.');
     } finally {
       setExplainLoading(false);
@@ -428,9 +454,13 @@ export const NewsExplorerPage: React.FC = () => {
 
       {/* XAI Attribution Explain Modal */}
       <ExplainModal
-        isOpen={Boolean(selectedExplainResult) || explainLoading}
-        onClose={() => setSelectedExplainResult(null)}
+        isOpen={Boolean(selectedExplainResult)}
+        onClose={() => {
+          setSelectedExplainResult(null);
+          setExplainLoading(false);
+        }}
         result={selectedExplainResult}
+        loadingTokens={explainLoading}
       />
     </div>
   );

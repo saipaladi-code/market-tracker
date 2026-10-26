@@ -159,6 +159,10 @@ class DatabaseManager:
                     filtered.append(item)
             return filtered[:limit]
 
+    def find_one(self, collection_name: str, filter_dict: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        results = self.find(collection_name, filter_dict, limit=1)
+        return results[0] if results else None
+
     def update_one(self, collection_name: str, filter_dict: Dict[str, Any], update_dict: Dict[str, Any]) -> bool:
         if self.is_cloud and self.db is not None:
             res = self.db[collection_name].update_one(filter_dict, {"$set": update_dict})

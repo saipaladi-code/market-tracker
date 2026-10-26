@@ -22,6 +22,7 @@ export interface SentimentAnalysisResult {
   explanation_note: string;
   is_fallback?: boolean;
   engine_mode?: string;
+  article_id?: string;
 }
 
 export interface Article {
@@ -39,6 +40,11 @@ export interface Article {
   is_duplicate: boolean;
   duplicate_of?: string;
   is_demo: boolean;
+  is_fallback?: boolean;
+  engine_mode?: string;
+  model_name?: string;
+  tokens?: AttributionToken[];
+  explanation_note?: string;
 }
 
 export interface DashboardStats {

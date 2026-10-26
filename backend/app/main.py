@@ -252,6 +252,64 @@ def refresh_news():
         "is_demo_dataset": any(a.get("is_demo") for a in articles)
     }
 
+@app.get("/api/news/{article_id}/explain", response_model=SentimentAnalysisResult)
+def explain_article(article_id: str):
+    """
+    Returns the canonical sentiment inference result and token perturbation explanation for a specific article.
+    Preserves the article's canonical prediction and confidence without recalculating overall sentiment.
+    """
+    article = db.find_one("news_articles", {"id": article_id})
+    if not article:
+        article = db.find_one("news_articles", {"canonical_id": article_id})
+
+    if not article:
+        raise HTTPException(status_code=404, detail=f"Article '{article_id}' not found.")
+
+    sentiment = article.get("sentiment") or "neutral"
+    confidence = float(article.get("confidence", 0.70))
+    raw_scores = article.get("scores") or {}
+    scores = {
+        "positive": float(raw_scores.get("positive", confidence if sentiment == "positive" else 0.15)),
+        "negative": float(raw_scores.get("negative", confidence if sentiment == "negative" else 0.15)),
+        "neutral": float(raw_scores.get("neutral", confidence if sentiment == "neutral" else 0.70)),
+    }
+
+    tokens = article.get("tokens") or []
+    explanation_note = article.get("explanation_note") or ""
+
+    if not tokens:
+        try:
+            explanation = finbert_service.predict_one(
+                article["title"],
+                include_explanation=True,
+                validate_input=False
+            )
+            tokens = explanation.get("tokens", [])
+            explanation_note = explanation.get("explanation_note", "")
+            # Cache computed tokens back to article
+            db.update_one("news_articles", {"id": article["id"]}, {
+                "tokens": tokens,
+                "explanation_note": explanation_note
+            })
+        except Exception as e:
+            logger.warning(f"Failed to generate explanation for article {article_id}: {e}")
+            tokens = []
+            explanation_note = "Attribution explanation temporarily unavailable."
+
+    return {
+        "article_id": article["id"],
+        "text": article["title"],
+        "sentiment": sentiment,
+        "confidence": confidence,
+        "scores": scores,
+        "model_name": article.get("model_name") or ("ProsusAI/finbert (Offline Lexicon)" if article.get("is_fallback") else "ProsusAI/finbert"),
+        "analyzed_at": article.get("published_at") or (datetime.utcnow().isoformat() + "Z"),
+        "tokens": tokens,
+        "explanation_note": explanation_note or "FinBERT token attribution explanation.",
+        "is_fallback": bool(article.get("is_fallback", False)),
+        "engine_mode": article.get("engine_mode")
+    }
+
 @app.post("/api/analyze", response_model=SentimentAnalysisResult)
 def analyze_headline(req: AnalyzeRequest):
     """Analyzes a single headline using local ProsusAI/finbert with token perturbation explanation."""
