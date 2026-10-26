@@ -17,8 +17,10 @@ import {
   Database,
   Globe,
   X,
-  Server
+  Server,
+  LogOut
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
   modelStatus?: string;
@@ -45,6 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   unreadAlertsCount = 0,
   onOpenBackendSettings,
 }) => {
+  const { user, logout } = useAuth();
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, badge: null },
     { name: 'FinBERT Live Lab', path: '/analyze', icon: Sparkles, badge: 'AI' },
@@ -201,10 +204,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="font-mono text-[10px] text-blue-400 group-hover:underline">Configure →</span>
               </button>
             )}
+
+            {/* Authenticated User Session Info */}
+            {user && (
+              <div className="w-full mt-2 pt-2 border-t border-navy-750 flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-2 overflow-hidden min-w-0">
+                  <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-600 to-cyan-500 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                    {user.full_name
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .slice(0, 2)
+                      .toUpperCase() || 'AN'}
+                  </div>
+                  <div className="truncate min-w-0">
+                    <p className="font-semibold text-slate-200 truncate leading-tight text-[11px]">{user.full_name}</p>
+                    <p className="text-[9px] text-slate-400 font-mono truncate leading-tight">{user.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    await logout();
+                  }}
+                  className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors shrink-0 cursor-pointer"
+                  title="Sign out of analyst session"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <div className="flex flex-col items-center gap-2" title={`FinBERT: ${modelStatus} | News: ${feedStatus || (isDemo ? 'Demo' : 'Live')}`}>
             <span className={`w-2.5 h-2.5 rounded-full ${feedStatus === 'API ERROR' ? 'bg-rose-400' : 'bg-emerald-400 animate-pulse'}`} />
+            {user && (
+              <button
+                onClick={async () => {
+                  await logout();
+                }}
+                className="p-1.5 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                title="Sign Out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
 

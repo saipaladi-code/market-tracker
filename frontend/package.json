@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node src/utils/financialValidator.test.mjs && node src/utils/canonicalSentiment.test.mjs",
+    "test": "node src/utils/financialValidator.test.mjs && node src/utils/canonicalSentiment.test.mjs && node src/utils/authValidator.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

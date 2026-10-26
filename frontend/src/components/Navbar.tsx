@@ -1,16 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import {
   RefreshCw,
-  Activity,
   AlertCircle,
   Search,
   Menu,
-  Shield,
   Clock,
-  Sparkles,
-  UserCheck,
-  Server
+  Server,
+  LogOut,
+  ChevronDown
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -54,11 +53,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenMobileMenu,
   onOpenBackendSettings,
 }) => {
+  const { user, logout } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const currentMeta = PAGE_METADATA[location.pathname] || {
     title: 'Financial Market Sentiment Tracker',
@@ -222,12 +234,69 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span className="hidden sm:inline">{refreshing ? 'Syncing...' : 'Ingest News'}</span>
         </button>
 
-        {/* Analyst Session Badge */}
-        <div className="hidden md:flex items-center gap-2 pl-2 border-l border-navy-750 text-xs">
-          <div className="w-7 h-7 rounded-full bg-navy-800 border border-navy-700 flex items-center justify-center text-blue-400" title="Analyst Terminal Session">
-            <UserCheck className="w-3.5 h-3.5" />
+        {/* Analyst Session Badge / User Dropdown */}
+        {user ? (
+          <div className="relative pl-2 border-l border-navy-750" ref={userMenuRef}>
+            <button
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-navy-800/80 border border-transparent hover:border-navy-700 transition-colors cursor-pointer"
+              title={`Logged in as ${user.full_name} (${user.email})`}
+            >
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-600 to-cyan-500 text-white font-bold text-[11px] flex items-center justify-center shadow-sm">
+                {user.full_name
+                  .split(' ')
+                  .map((n) => n[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase() || 'AN'}
+              </div>
+              <div className="hidden lg:flex flex-col text-left">
+                <span className="text-xs font-semibold text-slate-200 leading-tight truncate max-w-[120px]">
+                  {user.full_name}
+                </span>
+                <span className="text-[10px] text-cyan-400 font-mono leading-tight">Analyst</span>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {userMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 rounded-xl bg-navy-900 border border-navy-750 shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-3 py-2 border-b border-navy-750/70">
+                  <p className="text-xs font-bold text-white truncate">{user.full_name}</p>
+                  <p className="text-[11px] text-slate-400 font-mono truncate">{user.email}</p>
+                  <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-emerald-400 font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Active Session</span>
+                  </div>
+                </div>
+
+                <div className="pt-1">
+                  <button
+                    onClick={async () => {
+                      setUserMenuOpen(false);
+                      await logout();
+                      navigate('/login');
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 transition-colors text-left cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        ) : (
+          <div className="pl-2 border-l border-navy-750">
+            <button
+              onClick={() => navigate('/login')}
+              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-colors"
+            >
+              Sign In
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

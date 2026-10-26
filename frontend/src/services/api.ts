@@ -10,7 +10,11 @@ import {
   DataQualityReport,
   AssistantChatResponse,
   NewsResponse,
-  FeedStatus
+  FeedStatus,
+  User,
+  AuthResponse,
+  ForgotPasswordResponse,
+  MessageResponse
 } from '../types';
 import {
   MOCK_ARTICLES,
@@ -51,14 +55,43 @@ export function getStoredApiUrl(): string {
   return 'http://localhost:8000';
 }
 
+let inMemoryToken: string | null = null;
 let currentBaseUrl = getStoredApiUrl();
-let client = axios.create({
-  baseURL: currentBaseUrl,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 25000, // 25s timeout to accommodate cloud container spin-up and network latency
-});
+const unauthorizedListeners: Array<() => void> = [];
+
+function notifyUnauthorized() {
+  unauthorizedListeners.forEach((cb) => cb());
+}
+
+function createAxiosClient(baseURL: string) {
+  const instance = axios.create({
+    baseURL,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(inMemoryToken ? { Authorization: `Bearer ${inMemoryToken}` } : {}),
+    },
+    withCredentials: true, // Required for HttpOnly session cookie persistence across CORS
+    timeout: 25000,
+  });
+
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error?.response?.status === 401) {
+        const url = error.config?.url || '';
+        // Only trigger session expiration for non-auth requests
+        if (!url.includes('/api/auth/login') && !url.includes('/api/auth/register')) {
+          notifyUnauthorized();
+        }
+      }
+      return Promise.reject(error);
+    }
+  );
+
+  return instance;
+}
+
+let client = createAxiosClient(currentBaseUrl);
 
 let isOfflineMode = false;
 const listeners: Array<(offline: boolean) => void> = [];
@@ -80,13 +113,7 @@ export const api = {
     try {
       localStorage.setItem(STORAGE_KEY, currentBaseUrl);
     } catch {}
-    client = axios.create({
-      baseURL: currentBaseUrl,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      timeout: 25000,
-    });
+    client = createAxiosClient(currentBaseUrl);
   },
 
   resetBaseUrl: () => {
@@ -94,13 +121,64 @@ export const api = {
       localStorage.removeItem(STORAGE_KEY);
     } catch {}
     currentBaseUrl = getStoredApiUrl();
-    client = axios.create({
-      baseURL: currentBaseUrl,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      timeout: 25000,
+    client = createAxiosClient(currentBaseUrl);
+  },
+
+  setAuthToken: (token: string | null) => {
+    inMemoryToken = token;
+    client = createAxiosClient(currentBaseUrl);
+  },
+
+  subscribeUnauthorized: (cb: () => void) => {
+    unauthorizedListeners.push(cb);
+    return () => {
+      const idx = unauthorizedListeners.indexOf(cb);
+      if (idx !== -1) unauthorizedListeners.splice(idx, 1);
+    };
+  },
+
+  // Authentication API endpoints
+  register: async (data: { full_name: string; email: string; password: string }): Promise<AuthResponse> => {
+    const res = await client.post<AuthResponse>('/api/auth/register', data);
+    setOfflineStatus(false);
+    return res.data;
+  },
+
+  login: async (data: { email: string; password: string; remember_me?: boolean }): Promise<AuthResponse> => {
+    const res = await client.post<AuthResponse>('/api/auth/login', data);
+    setOfflineStatus(false);
+    return res.data;
+  },
+
+  getMe: async (): Promise<User> => {
+    const res = await client.get<User>('/api/auth/me');
+    setOfflineStatus(false);
+    return res.data;
+  },
+
+  logout: async (): Promise<MessageResponse> => {
+    try {
+      const res = await client.post<MessageResponse>('/api/auth/logout');
+      return res.data;
+    } finally {
+      inMemoryToken = null;
+      client = createAxiosClient(currentBaseUrl);
+    }
+  },
+
+  forgotPassword: async (email: string): Promise<ForgotPasswordResponse> => {
+    const res = await client.post<ForgotPasswordResponse>('/api/auth/forgot-password', { email });
+    setOfflineStatus(false);
+    return res.data;
+  },
+
+  resetPassword: async (token: string, new_password: string): Promise<MessageResponse> => {
+    const res = await client.post<MessageResponse>('/api/auth/reset-password', {
+      token,
+      new_password,
     });
+    setOfflineStatus(false);
+    return res.data;
   },
 
   isOffline: (): boolean => isOfflineMode,

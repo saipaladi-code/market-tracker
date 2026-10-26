@@ -172,3 +172,29 @@ export interface AssistantChatResponse {
   is_gemini_active: boolean;
   disclaimer: string;
 }
+
+export interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  created_at?: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+  expires_in: number;
+  message: string;
+}
+
+export interface ForgotPasswordResponse {
+  message: string;
+  status: string;
+  smtp_configured: boolean;
+  dev_reset_token?: string;
+}
+
+export interface MessageResponse {
+  message: string;
+  status: string;
+}

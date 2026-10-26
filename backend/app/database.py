@@ -53,7 +53,9 @@ class DatabaseManager:
                 "news_articles": [],
                 "sentiment_results": [],
                 "sentiment_history": [],
-                "alerts": []
+                "alerts": [],
+                "users": [],
+                "password_resets": []
             }
             with open(LOCAL_DB_FILE, "w", encoding="utf-8") as f:
                 json.dump(initial_data, f, indent=2)
@@ -65,7 +67,14 @@ class DatabaseManager:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Error reading local db: {e}")
-            return {"news_articles": [], "sentiment_results": [], "sentiment_history": [], "alerts": []}
+            return {
+                "news_articles": [],
+                "sentiment_results": [],
+                "sentiment_history": [],
+                "alerts": [],
+                "users": [],
+                "password_resets": []
+            }
 
     def _write_local_db(self, data: Dict[str, List[Dict[str, Any]]]):
         try:
@@ -73,6 +82,7 @@ class DatabaseManager:
                 json.dump(data, f, indent=2, default=str)
         except Exception as e:
             logger.error(f"Error writing to local db: {e}")
+            raise RuntimeError(f"Local storage write failure: {e}")
 
     def _ensure_indexes(self):
         if self.is_cloud and self.db is not None:
@@ -83,8 +93,89 @@ class DatabaseManager:
                 self.db.sentiment_results.create_index("article_id")
                 self.db.sentiment_history.create_index([("company", 1), ("timestamp", -1)])
                 self.db.alerts.create_index("timestamp")
+                # User and security indexes
+                self.db.users.create_index("email", unique=True, sparse=True)
+                self.db.password_resets.create_index("token_hash", unique=True, sparse=True)
+                self.db.password_resets.create_index("expires_at")
             except Exception as e:
                 logger.warning(f"Could not build indexes: {e}")
+
+    def is_storage_available(self) -> bool:
+        """Verifies that persistent storage (MongoDB Atlas or writable local filesystem) is operational."""
+        if self.is_cloud:
+            if self.client is None or self.db is None:
+                return False
+            try:
+                self.client.admin.command('ping')
+                return True
+            except Exception:
+                return False
+        else:
+            try:
+                self._ensure_local_db()
+                return os.path.exists(LOCAL_DB_FILE) and os.access(LOCAL_DB_FILE, os.W_OK)
+            except Exception:
+                return False
+
+    def insert_user(self, user_doc: Dict[str, Any]) -> str:
+        """
+        Inserts a new user record into persistent storage with duplicate-email enforcement.
+        Never silently uses an insecure in-memory structure or ignores storage failure.
+        """
+        if not self.is_storage_available():
+            raise RuntimeError("Persistent database storage is unavailable. Registration aborted.")
+
+        normalized_email = (user_doc.get("email") or "").strip().lower()
+        if not normalized_email:
+            raise ValueError("User email is required.")
+
+        doc = dict(user_doc)
+        doc["email"] = normalized_email
+        doc_id = doc.get("id") or doc.get("_id")
+        if not doc_id:
+            import uuid
+            doc_id = f"usr_{uuid.uuid4().hex[:16]}"
+            doc["id"] = doc_id
+        doc["_id"] = doc_id
+
+        if self.is_cloud and self.db is not None:
+            from pymongo.errors import DuplicateKeyError
+            try:
+                res = self.db.users.insert_one(doc)
+                return str(res.inserted_id)
+            except DuplicateKeyError:
+                raise ValueError("An account with this email address already exists.")
+            except Exception as e:
+                logger.error(f"MongoDB user persistence failure: {e}")
+                raise RuntimeError(f"Database error during user persistence: {e}")
+        else:
+            db_data = self._read_local_db()
+            users = db_data.setdefault("users", [])
+            for u in users:
+                if (u.get("email") or "").strip().lower() == normalized_email:
+                    raise ValueError("An account with this email address already exists.")
+            users.append(doc)
+            self._write_local_db(db_data)
+            return doc_id
+
+    def find_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        normalized = (email or "").strip().lower()
+        if not normalized:
+            return None
+        return self.find_one("users", {"email": normalized})
+
+    def find_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        if not user_id:
+            return None
+        user = self.find_one("users", {"id": user_id})
+        if not user:
+            user = self.find_one("users", {"_id": user_id})
+        return user
+
+    def update_user_password(self, user_id: str, new_password_hash: str) -> bool:
+        if not self.is_storage_available():
+            raise RuntimeError("Persistent database storage is unavailable.")
+        return self.update_one("users", {"id": user_id}, {"password_hash": new_password_hash, "updated_at": datetime.utcnow().isoformat() + "Z"})
 
     def get_status(self) -> Dict[str, Any]:
         return {

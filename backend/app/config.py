@@ -35,6 +35,23 @@ class Settings(BaseSettings):
     HOST: str = "127.0.0.1"
     PORT: int = 8000
 
+    # Authentication & Security Settings
+    JWT_SECRET_KEY: str = "fin-sentiment-secure-jwt-secret-key-32bytes-min!"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
+    REMEMBER_ME_EXPIRE_MINUTES: int = 43200  # 30 days
+    COOKIE_NAME: str = "session_token"
+    COOKIE_SECURE: Optional[bool] = None  # None = auto-detect
+    COOKIE_SAMESITE: Optional[str] = None  # None = auto-detect ("none" for prod, "lax" for dev)
+
+    # Password Recovery (SMTP) Configuration
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: Optional[str] = None
+    SMTP_TLS: bool = True
+
     def get_huggingface_api_keys(self) -> List[str]:
         """
         Securely collects configured Hugging Face API keys in priority order:

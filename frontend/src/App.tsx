@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute';
 import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
+import { LoginPage } from './pages/LoginPage';
+import { SignupPage } from './pages/SignupPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LiveAnalysisPage } from './pages/LiveAnalysisPage';
 import { NewsExplorerPage } from './pages/NewsExplorerPage';
@@ -14,7 +20,7 @@ import { AssistantPage } from './pages/AssistantPage';
 import { BackendConfigModal } from './components/BackendConfigModal';
 import { api } from './services/api';
 
-export function App() {
+function AuthenticatedLayout() {
   const [healthData, setHealthData] = useState<any>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string>(new Date().toISOString());
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
@@ -85,63 +91,117 @@ export function App() {
   const modelStatus = healthData?.model?.status || 'ready';
 
   return (
-    <BrowserRouter>
-      <div className="flex min-h-screen bg-navy-950 text-slate-100 selection:bg-blue-600 selection:text-white antialiased font-sans">
-        {/* Navigation Sidebar */}
-        <Sidebar
-          modelStatus={modelStatus}
+    <div className="flex min-h-screen bg-navy-950 text-slate-100 selection:bg-blue-600 selection:text-white antialiased font-sans">
+      {/* Navigation Sidebar */}
+      <Sidebar
+        modelStatus={modelStatus}
+        isDemo={isDemo}
+        feedStatus={feedStatus}
+        isCollapsed={isCollapsed}
+        setIsCollapsed={setIsCollapsed}
+        mobileOpen={mobileOpen}
+        setMobileOpen={setMobileOpen}
+        activeConflictsCount={activeConflictsCount}
+        unreadAlertsCount={unreadAlertsCount}
+        onOpenBackendSettings={() => setShowBackendModal(true)}
+      />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <Navbar
+          lastUpdated={lastRefreshed}
           isDemo={isDemo}
           feedStatus={feedStatus}
-          isCollapsed={isCollapsed}
-          setIsCollapsed={setIsCollapsed}
-          mobileOpen={mobileOpen}
-          setMobileOpen={setMobileOpen}
-          activeConflictsCount={activeConflictsCount}
-          unreadAlertsCount={unreadAlertsCount}
+          onRefresh={handleGlobalRefresh}
+          onOpenMobileMenu={() => setMobileOpen(true)}
           onOpenBackendSettings={() => setShowBackendModal(true)}
         />
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <Navbar
-            lastUpdated={lastRefreshed}
-            isDemo={isDemo}
-            feedStatus={feedStatus}
-            onRefresh={handleGlobalRefresh}
-            onOpenMobileMenu={() => setMobileOpen(true)}
-            onOpenBackendSettings={() => setShowBackendModal(true)}
-          />
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto overflow-y-auto">
+          <Outlet />
+        </main>
 
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto overflow-y-auto">
-            <Routes>
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/analyze" element={<LiveAnalysisPage />} />
-              <Route path="/news" element={<NewsExplorerPage />} />
-              <Route path="/companies" element={<CompanyAnalysisPage />} />
-              <Route path="/conflicts" element={<ConflictDetectorPage />} />
-              <Route path="/sectors" element={<SectorHeatmapPage />} />
-              <Route path="/alerts" element={<AlertsHistoryPage />} />
-              <Route path="/data-quality" element={<DataQualityPage />} />
-              <Route path="/assistant" element={<AssistantPage />} />
-            </Routes>
-          </main>
+        {/* Toast Notification Pill */}
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 bg-navy-800 text-white px-4 py-2.5 rounded-xl border border-navy-750 shadow-2xl flex items-center gap-2 text-xs font-medium animate-in slide-in-from-bottom duration-200">
+            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
 
-          {/* Toast Notification Notification Pill */}
-          {toastMessage && (
-            <div className="fixed bottom-6 right-6 z-50 bg-navy-800 text-white px-4 py-2.5 rounded-xl border border-navy-750 shadow-2xl flex items-center gap-2 text-xs font-medium animate-in slide-in-from-bottom duration-200">
-              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-              <span>{toastMessage}</span>
-            </div>
-          )}
-
-          {/* Backend Configuration Modal */}
-          <BackendConfigModal
-            isOpen={showBackendModal}
-            onClose={() => setShowBackendModal(false)}
-            onSave={checkHealthAndStats}
-          />
-        </div>
+        {/* Backend Configuration Modal */}
+        <BackendConfigModal
+          isOpen={showBackendModal}
+          onClose={() => setShowBackendModal(false)}
+          onSave={checkHealthAndStats}
+        />
       </div>
+    </div>
+  );
+}
+
+export function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          {/* Public Authentication Routes */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <LoginPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/signup"
+            element={
+              <PublicRoute>
+                <SignupPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute>
+                <ForgotPasswordPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              <PublicRoute>
+                <ResetPasswordPage />
+              </PublicRoute>
+            }
+          />
+
+          {/* Protected Application Routes */}
+          <Route
+            element={
+              <ProtectedRoute>
+                <AuthenticatedLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/analyze" element={<LiveAnalysisPage />} />
+            <Route path="/news" element={<NewsExplorerPage />} />
+            <Route path="/companies" element={<CompanyAnalysisPage />} />
+            <Route path="/conflicts" element={<ConflictDetectorPage />} />
+            <Route path="/sectors" element={<SectorHeatmapPage />} />
+            <Route path="/alerts" element={<AlertsHistoryPage />} />
+            <Route path="/data-quality" element={<DataQualityPage />} />
+            <Route path="/assistant" element={<AssistantPage />} />
+          </Route>
+
+          {/* Catch-all Redirect */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

@@ -1,9 +1,9 @@
 import os
 import asyncio
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, Query, Path, Request
+from fastapi import FastAPI, HTTPException, Query, Path, Request, Response, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
@@ -13,6 +13,15 @@ from app.models.schemas import (
     NewsSearchRequest, NewsResponse, Article,
     CompanySentimentSummary, ConflictSignal, SectorSentiment,
     AlertRecord, DataQualityReport, AssistantChatRequest, AssistantChatResponse
+)
+from app.models.auth_models import (
+    UserRegisterRequest, UserLoginRequest, ForgotPasswordRequest,
+    ResetPasswordRequest, UserResponse, AuthResponse,
+    ForgotPasswordResponse, MessageResponse
+)
+from app.services.auth_service import auth_service
+from app.services.auth_dependencies import (
+    get_current_user, set_auth_cookie, clear_auth_cookie
 )
 from app.services.finbert_service import finbert_service
 from app.services.headline_validator import HeadlineValidationError, assert_valid_financial_headline
@@ -151,8 +160,59 @@ def get_health():
     }
 
 
+# ==============================================================================
+# AUTHENTICATION & SESSION ENDPOINTS
+# ==============================================================================
+
+@app.post("/api/auth/register", response_model=AuthResponse)
+def register_user(req: UserRegisterRequest, response: Response):
+    """Creates a new authenticated user account and issues session credentials."""
+    res = auth_service.register_user(req.full_name, req.email, req.password)
+    set_auth_cookie(response, res["token"], remember_me=False)
+    return res
+
+@app.post("/api/auth/login", response_model=AuthResponse)
+def login_user(req: UserLoginRequest, request: Request, response: Response):
+    """Validates user credentials, rate-limits brute force, and initiates session."""
+    client_ip = request.client.host if request.client else "unknown"
+    res = auth_service.login_user(req.email, req.password, remember_me=req.remember_me, client_ip=client_ip)
+    set_auth_cookie(response, res["token"], remember_me=req.remember_me)
+    return res
+
+@app.get("/api/auth/me", response_model=UserResponse)
+def get_current_user_profile(current_user: dict = Depends(get_current_user)):
+    """Returns profile for currently authenticated user session."""
+    return UserResponse(
+        id=current_user["id"],
+        email=current_user["email"],
+        full_name=current_user.get("full_name", "Financial Analyst"),
+        created_at=current_user.get("created_at")
+    )
+
+@app.post("/api/auth/logout", response_model=MessageResponse)
+def logout_user(response: Response):
+    """Terminates session and clears HttpOnly authentication cookie."""
+    clear_auth_cookie(response)
+    return {"message": "Logged out successfully.", "status": "success"}
+
+@app.post("/api/auth/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(req: ForgotPasswordRequest, request: Request):
+    """Initiates single-use expiring password recovery flow."""
+    client_ip = request.client.host if request.client else "unknown"
+    return auth_service.request_password_reset(req.email, client_ip=client_ip)
+
+@app.post("/api/auth/reset-password", response_model=MessageResponse)
+def reset_password(req: ResetPasswordRequest):
+    """Verifies single-use token and establishes updated password."""
+    return auth_service.reset_password(req.token, req.new_password)
+
+
+# ==============================================================================
+# PROTECTED ANALYTICS & MARKET INTELLIGENCE ENDPOINTS
+# ==============================================================================
+
 @app.get("/api/dashboard/stats")
-def get_dashboard_stats():
+def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     """Aggregates all top-level stats for the main analytics dashboard."""
     articles = news_service.fetch_articles()
     
@@ -220,7 +280,8 @@ def get_news(
     sentiment: Optional[str] = Query(default=None),
     query: Optional[str] = Query(default=None),
     today_only: Optional[bool] = Query(default=None),
-    date: Optional[str] = Query(default=None)
+    date: Optional[str] = Query(default=None),
+    current_user: dict = Depends(get_current_user)
 ):
     articles, total, is_demo, feed_status, last_synced, filter_date, provider = news_service.query_articles(
         query=query, company=company, sentiment=sentiment, page=page, page_size=page_size,
@@ -239,7 +300,7 @@ def get_news(
     )
 
 @app.post("/api/news/search", response_model=NewsResponse)
-def search_news(req: NewsSearchRequest):
+def search_news(req: NewsSearchRequest, current_user: dict = Depends(get_current_user)):
     articles, total, is_demo, feed_status, last_synced, filter_date, provider = news_service.query_articles(
         query=req.query, company=req.company, sentiment=req.sentiment, page=req.page, page_size=req.page_size,
         today_only=req.today_only, date=req.date
@@ -257,7 +318,7 @@ def search_news(req: NewsSearchRequest):
     )
 
 @app.post("/api/news/refresh")
-def refresh_news():
+def refresh_news(current_user: dict = Depends(get_current_user)):
     """Forces fresh retrieval and updates alerts & history."""
     articles = news_service.fetch_articles(force_refresh=True)
     new_alerts = alert_service.evaluate_and_generate_alerts(articles)
@@ -271,7 +332,7 @@ def refresh_news():
     }
 
 @app.get("/api/news/{article_id}/explain", response_model=SentimentAnalysisResult)
-def explain_article(article_id: str):
+def explain_article(article_id: str, current_user: dict = Depends(get_current_user)):
     """
     Returns the canonical sentiment inference result and token perturbation explanation for a specific article.
     Preserves the article's canonical prediction and confidence without recalculating overall sentiment.
@@ -329,7 +390,7 @@ def explain_article(article_id: str):
     }
 
 @app.post("/api/analyze", response_model=SentimentAnalysisResult)
-def analyze_headline(req: AnalyzeRequest):
+def analyze_headline(req: AnalyzeRequest, current_user: dict = Depends(get_current_user)):
     """Analyzes a single headline using local ProsusAI/finbert with token perturbation explanation."""
     cleaned_text = assert_valid_financial_headline(req.text)
     try:
@@ -353,7 +414,7 @@ def analyze_headline(req: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
 
 @app.post("/api/analyze/batch", response_model=List[SentimentAnalysisResult])
-def analyze_headlines_batch(req: BatchAnalyzeRequest):
+def analyze_headlines_batch(req: BatchAnalyzeRequest, current_user: dict = Depends(get_current_user)):
     """Batch sentiment classification using ProsusAI/finbert."""
     if not req.texts:
         raise HeadlineValidationError("Input texts list cannot be empty.", "HEADLINE_EMPTY")
@@ -371,7 +432,7 @@ def analyze_headlines_batch(req: BatchAnalyzeRequest):
         raise HTTPException(status_code=500, detail=f"Batch inference failed: {str(e)}")
 
 @app.get("/api/companies", response_model=List[CompanySentimentSummary])
-def get_companies():
+def get_companies(current_user: dict = Depends(get_current_user)):
     """Lists all monitored companies with sentiment statistics and conflict indicators."""
     articles = news_service.fetch_articles()
     conflicts = {c["company"]: True for c in conflict_service.detect_conflicts(articles)}
@@ -415,7 +476,7 @@ def get_companies():
     return sorted(list(company_stats.values()), key=lambda x: x.total_articles, reverse=True)
 
 @app.get("/api/companies/{company}/sentiment")
-def get_company_sentiment_detail(company: str = Path(...)):
+def get_company_sentiment_detail(company: str = Path(...), current_user: dict = Depends(get_current_user)):
     """Detailed view for an individual company including headlines, timeline, and conflict score."""
     articles = news_service.fetch_articles()
     target_comp = canonicalize_company(company) or company
@@ -457,7 +518,7 @@ def get_company_sentiment_detail(company: str = Path(...)):
     }
 
 @app.get("/api/sentiment/history")
-def get_sentiment_history(company: Optional[str] = Query(default=None)):
+def get_sentiment_history(company: Optional[str] = Query(default=None), current_user: dict = Depends(get_current_user)):
     """Returns stored historical sentiment progression."""
     query = {"company": company} if company and company.lower() != "all" else None
     history = db.find("sentiment_history", query, limit=50)
@@ -465,24 +526,24 @@ def get_sentiment_history(company: Optional[str] = Query(default=None)):
     return history
 
 @app.get("/api/sentiment/sectors", response_model=List[SectorSentiment])
-def get_sector_sentiments():
+def get_sector_sentiments(current_user: dict = Depends(get_current_user)):
     """Returns the market sector heatmap aggregations."""
     articles = news_service.fetch_articles()
     return sector_service.calculate_sector_heatmaps(articles)
 
 @app.get("/api/conflicts", response_model=List[ConflictSignal])
-def get_conflicts():
+def get_conflicts(current_user: dict = Depends(get_current_user)):
     """Returns all companies currently exhibiting Bullish/Bearish sentiment divergence."""
     articles = news_service.fetch_articles()
     return conflict_service.detect_conflicts(articles)
 
 @app.get("/api/alerts", response_model=List[AlertRecord])
-def get_alerts(unread_only: bool = Query(default=False)):
+def get_alerts(unread_only: bool = Query(default=False), current_user: dict = Depends(get_current_user)):
     """Returns risk alerts triggered by sentiment swings or conflict spikes."""
     return alert_service.get_alerts(unread_only=unread_only)
 
 @app.patch("/api/alerts/{alert_id}")
-def mark_alert_read(alert_id: str = Path(...)):
+def mark_alert_read(alert_id: str = Path(...), current_user: dict = Depends(get_current_user)):
     """Marks an alert record as read."""
     success = alert_service.mark_as_read(alert_id)
     if not success:
@@ -490,7 +551,7 @@ def mark_alert_read(alert_id: str = Path(...)):
     return {"message": "Alert marked as read.", "alert_id": alert_id}
 
 @app.get("/api/data-quality", response_model=DataQualityReport)
-def get_data_quality():
+def get_data_quality(current_user: dict = Depends(get_current_user)):
     """Returns rigorous operational metrics on data integrity, duplicates, confidence, and provider status."""
     all_articles = db.find("news_articles", limit=500)
     if not all_articles:
@@ -537,7 +598,7 @@ def get_data_quality():
     )
 
 @app.post("/api/assistant/chat", response_model=AssistantChatResponse)
-def assistant_chat(req: AssistantChatRequest):
+def assistant_chat(req: AssistantChatRequest, current_user: dict = Depends(get_current_user)):
     """Conversational Financial News Assistant grounded in stored sentiment data."""
     result = gemini_assistant_service.answer_query(req.message, req.company_focus)
     return AssistantChatResponse(**result)

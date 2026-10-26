@@ -26,4 +26,12 @@ services:
         value: "1"
       - key: NEWS_PROVIDER
         value: "auto"
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        value: "https://market-tracker-umber.vercel.app"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: "none"
 
