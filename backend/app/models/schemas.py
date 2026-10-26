@@ -23,12 +23,14 @@ class SentimentAnalysisResult(BaseModel):
     analyzed_at: str
     tokens: List[AttributionToken] = []
     explanation_note: str
+    is_fallback: bool = False
+    engine_mode: Optional[str] = None
 
 class AnalyzeRequest(BaseModel):
-    text: str = Field(..., description="Financial news headline or sentence")
+    text: str = Field(default="", description="Financial news headline or sentence")
 
 class BatchAnalyzeRequest(BaseModel):
-    texts: List[str] = Field(..., min_length=1, description="List of headlines to analyze")
+    texts: List[str] = Field(default=[], description="List of headlines to analyze")
 
 class Article(BaseModel):
     id: str
@@ -45,6 +47,8 @@ class Article(BaseModel):
     is_duplicate: bool = False
     duplicate_of: Optional[str] = None
     is_demo: bool = False
+    is_fallback: Optional[bool] = False
+    engine_mode: Optional[str] = None
 
 class NewsSearchRequest(BaseModel):
     query: Optional[str] = None
@@ -123,6 +127,7 @@ class DataQualityReport(BaseModel):
     model_status: str
     news_api_status: str
     database_status: Dict[str, Any]
+    engine_mode: Optional[str] = None
 
 class AssistantChatRequest(BaseModel):
     message: str = Field(..., min_length=1)

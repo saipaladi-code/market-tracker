@@ -107,13 +107,21 @@ export const DataQualityPage: React.FC = () => {
                 <Cpu className="w-4 h-4 text-emerald-400" />
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className={`w-2.5 h-2.5 rounded-full ${
+                  report.engine_mode === 'lexical-fallback' ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'
+                }`} />
                 <span className="text-base font-extrabold text-white uppercase font-mono">
-                  {report.model_status}
+                  {report.engine_mode || report.model_status}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                ProsusAI/finbert PyTorch CPU weights initialized in memory. Zero external inference cost.
+                {report.engine_mode === 'hosted-huggingface' || report.engine_mode === 'hosted-finbert'
+                  ? 'ProsusAI/finbert active via Hugging Face Serverless API.'
+                  : (report.engine_mode === 'cloud-gemini'
+                    ? 'Cloud AI Neural Sentiment Engine active.'
+                    : (report.engine_mode === 'local-bfloat16'
+                      ? 'Local FinBERT PyTorch CPU weights active in memory.'
+                      : 'Rule-based Loughran-McDonald lexicon fallback active.'))}
               </p>
             </div>
 

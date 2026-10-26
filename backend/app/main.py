@@ -3,7 +3,7 @@ import asyncio
 import logging
 from typing import List, Optional
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, Query, Path
+from fastapi import FastAPI, HTTPException, Query, Path, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
@@ -22,6 +22,7 @@ from app.services.conflict_service import conflict_service
 from app.services.sector_service import sector_service
 from app.services.alert_service import alert_service
 from app.services.gemini_service import gemini_assistant_service
+from app.services.financial_validator import validate_financial_headline, FinancialValidationError
 
 # Configure logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -58,6 +59,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 async def _warmup_background():
     """
@@ -116,19 +118,22 @@ def get_lightweight_health():
 
 @app.get("/api/health")
 def get_health():
+    if not finbert_service.is_ready():
+        finbert_service.load_model()
     db_status = db.get_status()
     mem_diag = finbert_service.get_memory_diagnostics()
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "model": {
-            "name": settings.MODEL_NAME,
+            "name": f"{settings.MODEL_NAME} (local-bfloat16)" if finbert_service.engine_mode == "local-bfloat16" else settings.MODEL_NAME,
             "status": "ready" if finbert_service.is_ready() else finbert_service.status,
             "engine_mode": finbert_service.engine_mode,
             "memory_usage_mb": mem_diag["process_rss_mb"],
             "memory_limit_mb": mem_diag["memory_limit_mb"],
             "memory_percent": mem_diag["percent_of_limit"],
             "is_within_limit": mem_diag["is_within_limit"],
+            "is_fallback": mem_diag["is_fallback"],
             "error": finbert_service.error_message
         },
         "database": db_status,
@@ -141,6 +146,7 @@ def get_health():
             "has_key": bool(settings.GEMINI_API_KEY)
         }
     }
+
 
 @app.get("/api/dashboard/stats")
 def get_dashboard_stats():
@@ -251,7 +257,7 @@ def analyze_headline(req: AnalyzeRequest):
     """Analyzes a single headline using local ProsusAI/finbert with token perturbation explanation."""
     cleaned_text = assert_valid_financial_headline(req.text)
     try:
-        result = finbert_service.predict_one(cleaned_text, include_explanation=True)
+        result = finbert_service.predict_one(cleaned_text, include_explanation=True, validate_input=False)
         # Persist analysis result into database
         db.insert_one("sentiment_results", {
             "text": result["text"],
@@ -262,7 +268,7 @@ def analyze_headline(req: AnalyzeRequest):
             "analyzed_at": result["analyzed_at"]
         })
         return result
-    except HeadlineValidationError:
+    except (HeadlineValidationError, FinancialValidationError):
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -273,12 +279,15 @@ def analyze_headline(req: AnalyzeRequest):
 @app.post("/api/analyze/batch", response_model=List[SentimentAnalysisResult])
 def analyze_headlines_batch(req: BatchAnalyzeRequest):
     """Batch sentiment classification using ProsusAI/finbert."""
+    if not req.texts:
+        raise HeadlineValidationError("Input texts list cannot be empty.", "HEADLINE_EMPTY")
+    # Validates all headlines in the batch before invoking model inference
     for text in req.texts:
         assert_valid_financial_headline(text)
     try:
-        results = finbert_service.predict_batch(req.texts)
+        results = finbert_service.predict_batch(req.texts, validate_input=False)
         return results
-    except HeadlineValidationError:
+    except (HeadlineValidationError, FinancialValidationError):
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -446,6 +455,7 @@ def get_data_quality():
         low_confidence_rate=low_conf_rate,
         stale_articles_count=stale_count,
         model_status="ready" if finbert_service.is_ready() else finbert_service.status,
+        engine_mode=finbert_service.engine_mode,
         news_api_status=news_service.news_api_status,
         database_status=db.get_status()
     )

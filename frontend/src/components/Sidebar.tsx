@@ -45,7 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, badge: null },
-    { name: 'FinBERT Live Lab', path: '/analyze', icon: Sparkles, badge: 'CPU' },
+    { name: 'FinBERT Live Lab', path: '/analyze', icon: Sparkles, badge: 'AI' },
     { name: 'Financial News Feed', path: '/news', icon: Newspaper, badge: null },
     { name: 'Company Deep Dive', path: '/companies', icon: Building2, badge: null },
     {

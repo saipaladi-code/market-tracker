@@ -20,6 +20,8 @@ export interface SentimentAnalysisResult {
   analyzed_at: string;
   tokens: AttributionToken[];
   explanation_note: string;
+  is_fallback?: boolean;
+  engine_mode?: string;
 }
 
 export interface Article {
@@ -124,6 +126,7 @@ export interface DataQualityReport {
   stale_articles_count: number;
   model_status: string;
   news_api_status: string;
+  engine_mode?: string;
   database_status: {
     persistence_mode: string;
     connected: boolean;

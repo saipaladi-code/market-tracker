@@ -5,10 +5,11 @@ import json
 import threading
 import logging
 import ctypes
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
 import requests
 from app.config import settings
+from app.services.financial_validator import validate_financial_headline, FinancialValidationError
 
 logger = logging.getLogger("finbert_service")
 
@@ -19,32 +20,43 @@ LABEL_MAPPING = {0: "positive", 1: "negative", 2: "neutral"}
 FINANCIAL_POSITIVE_LEXICON = {
     "record", "surge", "surges", "surged", "surging", "profit", "profits", "profitable",
     "gain", "gains", "gained", "gaining", "rally", "rallies", "growth", "grow", "grows",
-    "exceed", "exceeds", "exceeded", "upgrade", "upgrades", "upgraded", "bullish",
-    "dividend", "dividends", "rebound", "rebounds", "soar", "soars", "soared",
-    "beat", "beats", "beating", "climb", "climbs", "jump", "jumps", "jumped",
-    "outperform", "outperformed", "upside", "expansion", "expand", "expands", "expanded",
-    "strength", "strong", "stronger", "strongest", "breakthrough", "boost", "boosts",
-    "advance", "advances", "recovery", "success", "successful", "high", "higher", "highest",
-    "revenue", "positive", "innovative", "milestone", "milestones", "partnership"
+    "exceed", "exceeds", "exceeded", "upgrade", "upgrades", "upgraded", "upgrading", "bullish",
+    "dividend", "dividends", "rebound", "rebounds", "rebounded", "rebounding",
+    "soar", "soars", "soared", "soaring", "beat", "beats", "beating",
+    "climb", "climbs", "jump", "jumps", "jumped", "outperform", "outperformed", "outperforming",
+    "upside", "expansion", "expand", "expands", "expanded", "strength", "strong", "stronger",
+    "strongest", "strengthen", "strengthens", "strengthened", "strengthening",
+    "breakthrough", "boost", "boosts", "advance", "advances", "recovery", "success", "successful",
+    "high", "higher", "highest", "revenue", "positive", "innovative", "milestone", "milestones",
+    "partnership", "optimism", "optimistic", "resilience", "resilient", "accelerate", "accelerates",
+    "accelerated", "accelerating"
 }
 
 FINANCIAL_NEGATIVE_LEXICON = {
-    "plunge", "plunges", "plunged", "fall", "falls", "fell", "drop", "drops", "dropped",
-    "decline", "declines", "declined", "miss", "misses", "missed", "loss", "losses",
-    "slump", "slumps", "slumped", "fraud", "lawsuit", "lawsuits", "penalty", "penalties",
-    "fine", "fines", "fined", "investigation", "probe", "probes", "probed", "cut", "cuts",
-    "down", "default", "defaults", "risk", "risks", "risky", "downgrade", "downgrades",
-    "downgraded", "bearish", "bankruptcy", "bankrupt", "antitrust", "slash", "slashes",
-    "crash", "crashes", "deficit", "warning", "warnings", "warns", "underperform",
-    "inflation", "negative", "scrutiny", "probe", "headwinds", "headwind", "weakness", "weak", "curb",
+    "plunge", "plunges", "plunged", "fall", "falls", "fell", "falling",
+    "drop", "drops", "dropped", "dropping", "decline", "declines", "declined", "declining",
+    "miss", "misses", "missed", "loss", "losses", "slump", "slumps", "slumped",
+    "fraud", "lawsuit", "lawsuits", "penalty", "penalties", "fine", "fines", "fined",
+    "investigation", "probe", "probes", "probed", "cut", "cuts", "down",
+    "default", "defaults", "risk", "risks", "risky", "downgrade", "downgrades", "downgraded",
+    "bearish", "bankruptcy", "bankrupt", "antitrust", "slash", "slashes", "crash", "crashes",
+    "deficit", "deficits", "warning", "warnings", "warns", "underperform", "debt",
+    "shrink", "shrinks", "struggle", "struggles", "crisis", "recession", "inflation",
+    "negative", "scrutiny", "headwinds", "headwind", "weakness", "weak", "curb", "curbs", "curbed",
+    "plummet", "plummeted", "plummeting", "collapse", "collapsed",
+    "tension", "tensions", "weigh", "weighs", "weighed", "weighing",
     "pressure", "pressures", "pressured", "pressuring", "erode", "erodes", "eroded", "erosion",
-    "contract", "contracts", "contracted", "contracting", "lawsuit", "layoff", "layoffs"
+    "contract", "contracts", "contracted", "contracting", "layoff", "layoffs",
+    "uncertainty", "uncertainties", "uncertain", "slowdown", "slowdowns",
+    "turmoil", "volatility", "volatile", "threat", "threats", "threaten", "threatens",
+    "threatened", "adversity", "adverse", "stagnation", "stagnant"
 }
 
 FINANCIAL_STOPWORDS = {
     "the", "a", "an", "and", "or", "in", "on", "at", "to", "for", "of", "with",
     "is", "are", "was", "were", "be", "been", "by", "from", "as", "into", "it",
-    "its", "their", "this", "that", "these", "those", "has", "have", "had"
+    "its", "their", "this", "that", "these", "those", "has", "have", "had", "after",
+    "before", "about", "above", "below", "between", "both", "during", "each"
 }
 
 
@@ -67,7 +79,6 @@ def _get_process_rss_mb() -> float:
             ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.c_void_p(-1), ctypes.byref(counters), counters.cb)
             return round(counters.WorkingSetSize / (1024 * 1024), 2)
         else:
-            # Linux cgroups / resource
             import resource
             return round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 2)
     except Exception:
@@ -90,42 +101,41 @@ class FinBERTService:
             cls._instance.cache = {}
             cls._instance.precision = "bfloat16"
             cls._instance.gemini_model = None
+            cls._instance._active_key_index = 0
         return cls._instance
 
     def load_model(self) -> bool:
         """
-        Initializes the optimal financial sentiment inference engine.
-        In production (Render 512MB RAM), runs in zero-RAM Cloud AI / Hybrid Mode,
-        keeping total container resident memory at ~65MB and completely eliminating OOM kills.
-        If USE_LOCAL_FINBERT=true is explicitly set, lazily loads PyTorch with bfloat16.
+        Initializes the optimal financial sentiment inference engine with strict honesty.
+        Priority:
+          1. Local PyTorch (if USE_LOCAL_FINBERT=True)
+          2. Hosted ProsusAI/finbert via Hugging Face Serverless API (if any Hugging Face keys configured)
+          3. External Inference URL (if FINBERT_INFERENCE_URL configured)
+          4. Cloud AI Engine (if GEMINI_API_KEY configured)
+          5. Transparent Rule-Based Lexicon Fallback (is_fallback=True)
         """
         with self._load_lock:
-            if self.status == "ready":
+            if self.status == "ready" and self.engine_mode != "uninitialized":
                 return True
 
             self.status = "loading"
             current_mem = _get_process_rss_mb()
             logger.info(f"Initializing Financial Sentiment Engine (Process Memory: {current_mem:.1f} MB / 512 MB)...")
 
-            # 1. Check if Local PyTorch execution is explicitly requested
+            # 1. Local PyTorch execution (only when explicitly requested)
             if settings.USE_LOCAL_FINBERT:
                 return self._load_local_pytorch()
 
-            # 2. Check for Cloud Gemini Engine (Uses user's configured GEMINI_API_KEY)
-            if settings.GEMINI_API_KEY:
-                try:
-                    import google.generativeai as genai
-                    genai.configure(api_key=settings.GEMINI_API_KEY)
-                    self.gemini_model = genai.GenerativeModel("gemini-2.5-flash")
-                    self.engine_mode = "cloud-gemini"
-                    self.status = "ready"
-                    self.error_message = None
-                    logger.info("FinBERT Sentiment Engine initialized in Cloud AI Mode (Gemini 2.5 Flash, 0 MB local RAM).")
-                    return True
-                except Exception as e:
-                    logger.warning(f"Could not initialize Cloud Gemini engine: {e}")
+            # 2. Hosted ProsusAI/finbert via Hugging Face Serverless Inference API
+            hf_keys = settings.get_huggingface_api_keys()
+            if hf_keys:
+                self.engine_mode = "hosted-huggingface"
+                self.status = "ready"
+                self.error_message = None
+                logger.info(f"FinBERT Sentiment Engine routed to Hosted Hugging Face Serverless API ({len(hf_keys)} keys configured).")
+                return True
 
-            # 3. Check for External Dedicated Inference URL
+            # 3. External Dedicated Inference Service URL
             if settings.FINBERT_INFERENCE_URL:
                 self.engine_mode = "external-service"
                 self.status = "ready"
@@ -133,19 +143,11 @@ class FinBERTService:
                 logger.info(f"FinBERT Sentiment Engine routed to external service at {settings.FINBERT_INFERENCE_URL}.")
                 return True
 
-            # 4. Check for Hugging Face Token for Serverless Inference API
-            if settings.HUGGINGFACE_API_KEY:
-                self.engine_mode = "cloud-huggingface"
-                self.status = "ready"
-                self.error_message = None
-                logger.info("FinBERT Sentiment Engine routed to Hugging Face Serverless Router.")
-                return True
-
-            # 5. Deterministic Institutional Lexicon Fallback (0 MB RAM, always reliable)
-            self.engine_mode = "lexical-financial"
+            # 4. Transparent Rule-Based Lexical Fallback
+            self.engine_mode = "lexical-fallback"
             self.status = "ready"
-            self.error_message = None
-            logger.info("FinBERT Sentiment Engine initialized in Institutional Financial Lexicon Mode (0 MB local RAM).")
+            self.error_message = "No hosted FinBERT token (HUGGINGFACE_API_KEY) configured. Running in rule-based fallback mode."
+            logger.info("Sentiment Engine initialized in Rule-Based Institutional Lexicon Fallback Mode.")
             return True
 
     def _load_local_pytorch(self) -> bool:
@@ -154,7 +156,6 @@ class FinBERTService:
             import torch
             from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-            # Set thread limits and disable gradients
             try:
                 torch.set_num_threads(1)
                 torch.set_num_interop_threads(1)
@@ -187,9 +188,10 @@ class FinBERTService:
             logger.info(f"Local PyTorch FinBERT loaded successfully ({_get_process_rss_mb():.1f} MB RSS).")
             return True
         except Exception as e:
-            logger.error(f"Failed to load local PyTorch FinBERT: {e}. Falling back to Cloud/Lexical Engine.")
-            self.engine_mode = "lexical-financial"
+            logger.error(f"Failed to load local PyTorch FinBERT: {e}. Falling back to Lexical Engine.")
+            self.engine_mode = "lexical-fallback"
             self.status = "ready"
+            self.error_message = f"Local PyTorch failed: {str(e)}"
             return True
 
     def is_ready(self) -> bool:
@@ -199,23 +201,34 @@ class FinBERTService:
         """Provides operational memory metrics for Render health reporting."""
         rss = _get_process_rss_mb()
         limit = 512.0
+        hf_keys = settings.get_huggingface_api_keys()
         return {
             "process_rss_mb": rss,
             "memory_limit_mb": limit,
             "percent_of_limit": round((rss / limit) * 100, 1) if limit > 0 else 0.0,
             "engine_mode": self.engine_mode,
             "status": self.status,
-            "is_within_limit": rss < 500.0
+            "is_within_limit": rss < 500.0,
+            "has_hf_token": bool(hf_keys),
+            "configured_hf_keys_count": len(hf_keys),
+            "has_gemini_token": bool(settings.GEMINI_API_KEY),
+            "is_fallback": self.engine_mode == "lexical-fallback"
         }
 
-    def predict_one(self, text: str, include_explanation: bool = True) -> Dict[str, Any]:
+    def predict_one(self, text: str, include_explanation: bool = True, validate_input: bool = True) -> Dict[str, Any]:
         """
         Predicts sentiment for a single financial text.
-        Routes through Cloud AI (Gemini / HF) or local PyTorch according to engine_mode.
+        Routes to the active engine with transparent attribution and honest fallback reporting.
         Strictly validates financial relevance and length before running any inference engine.
         """
-        from app.services.headline_validator import assert_valid_financial_headline
-        cleaned_text = assert_valid_financial_headline(text)
+        from app.services.headline_validator import assert_valid_financial_headline, HeadlineValidationError
+        if validate_input:
+            cleaned_text = assert_valid_financial_headline(text)
+        else:
+            cleaned_text = (text or "").strip()
+            if not cleaned_text:
+                raise HeadlineValidationError("Input text cannot be empty or whitespace.", "HEADLINE_EMPTY")
+
 
         cache_key = f"{cleaned_text}_{include_explanation}"
         if cache_key in self.cache:
@@ -225,32 +238,201 @@ class FinBERTService:
             self.load_model()
 
         # Route by engine mode
-        if self.engine_mode == "cloud-gemini":
-            result = self._predict_gemini(cleaned_text, include_explanation)
-        elif self.engine_mode == "cloud-huggingface":
+        if self.engine_mode in ("hosted-huggingface", "hosted-finbert"):
             result = self._predict_huggingface(cleaned_text, include_explanation)
         elif self.engine_mode == "external-service":
             result = self._predict_external(cleaned_text, include_explanation)
+        elif self.engine_mode == "cloud-gemini":
+            result = self._predict_gemini(cleaned_text, include_explanation)
         elif self.engine_mode == "local-bfloat16":
             result = self._predict_local_pytorch(cleaned_text, include_explanation)
         else:
-            result = self._predict_lexical(cleaned_text, include_explanation)
+            result = self._predict_lexical(
+                cleaned_text,
+                include_explanation,
+                reason="No neural provider configured (no Hugging Face API keys set)."
+            )
 
         self.cache[cache_key] = result
         return result
 
+    def _predict_huggingface(self, text: str, include_explanation: bool) -> Dict[str, Any]:
+        """
+        Queries Hugging Face Serverless Inference API for genuine ProsusAI/finbert.
+        Supports up to 4 configured API keys (HUGGINGFACE_API_KEY_1..4) with failover.
+        Never logs, exposes, or returns API keys.
+        Performs key failover ONLY when recoverable by switching credentials (401, 403, 429).
+        Does NOT rotate keys on 402, 5xx, or malformed responses.
+        Uses sensible timeouts and bounded retries.
+        """
+        hf_keys = settings.get_huggingface_api_keys()
+        if not hf_keys:
+            self.engine_mode = "lexical-fallback"
+            self.error_message = "No Hugging Face API keys configured."
+            return self._predict_lexical(
+                text,
+                include_explanation,
+                reason="No Hugging Face API keys configured."
+            )
+
+        url = f"https://router.huggingface.co/hf-inference/models/{settings.MODEL_NAME}"
+
+        def _parse_scores(data: Any) -> Optional[Dict[str, float]]:
+            items = data[0] if (isinstance(data, list) and data and isinstance(data[0], list)) else data
+            if isinstance(items, list) and items:
+                sc = {"positive": 0.0, "negative": 0.0, "neutral": 0.0}
+                found = False
+                for it in items:
+                    if isinstance(it, dict) and "label" in it and "score" in it:
+                        lbl = str(it.get("label", "")).lower()
+                        if lbl in sc:
+                            sc[lbl] = max(0.0, float(it.get("score", 0.0)))
+                            found = True
+                if found:
+                    total_s = sum(sc.values()) or 1.0
+                    return {k: round(v / total_s, 4) for k, v in sc.items()}
+            return None
+
+        def _request_hf(key: str, input_str: str) -> tuple[Optional[Dict[str, float]], int, str]:
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "x-wait-for-model": "true"
+            }
+            try:
+                resp = requests.post(url, json={"inputs": input_str}, headers=headers, timeout=10)
+                status = resp.status_code
+                if status == 200:
+                    try:
+                        data = resp.json()
+                        parsed = _parse_scores(data)
+                        if parsed:
+                            return parsed, 200, "OK"
+                        return None, 200, "Malformed response structure from model endpoint."
+                    except Exception:
+                        return None, 200, "Invalid JSON received from endpoint."
+                elif status in (401, 403):
+                    return None, status, f"Authentication failed (HTTP {status}): credential invalid or unauthorized."
+                elif status == 429:
+                    return None, 429, "Rate limit reached on current credential (HTTP 429)."
+                elif status == 402:
+                    return None, 402, "Payment required or credits exhausted (HTTP 402)."
+                elif status >= 500:
+                    return None, status, f"Hugging Face server error (HTTP {status})."
+                else:
+                    return None, status, f"Hugging Face returned HTTP {status}."
+            except requests.exceptions.Timeout:
+                return None, 408, "Request timed out after 10s."
+            except requests.exceptions.RequestException as e:
+                return None, 599, f"Network exception: {type(e).__name__}."
+
+        scores: Optional[Dict[str, float]] = None
+        working_key: Optional[str] = None
+        last_reason: str = "Hosted Hugging Face FinBERT endpoint unavailable."
+
+        # Evaluate keys starting from known active key index
+        start_idx = self._active_key_index if (0 <= self._active_key_index < len(hf_keys)) else 0
+        candidate_indices = [(start_idx + i) % len(hf_keys) for i in range(len(hf_keys))]
+
+        for idx in candidate_indices:
+            key = hf_keys[idx]
+            result_scores, status_code, err_msg = _request_hf(key, text)
+
+            if result_scores is not None:
+                scores = result_scores
+                working_key = key
+                self._active_key_index = idx
+                break
+
+            last_reason = err_msg
+
+            # Failover logic according to constraints:
+            if status_code in (401, 403):
+                logger.warning(
+                    f"Hugging Face credential (key index {idx}) rejected with HTTP {status_code}. "
+                    "Attempting failover to next key if available."
+                )
+                continue
+            elif status_code == 429:
+                logger.warning(
+                    f"Hugging Face credential (key index {idx}) rate-limited (HTTP 429). "
+                    "Attempting failover to next key if available."
+                )
+                continue
+            elif status_code == 402:
+                # Do not assume HTTP 402 can be fixed by switching keys
+                # Do not bypass provider billing limits or rotate keys to evade usage restrictions
+                logger.warning(
+                    "Hugging Face returned HTTP 402 (Payment Required / Credits exhausted). "
+                    "Halting key failover and routing directly to fallback."
+                )
+                last_reason = "Hugging Face serverless inference credits exhausted or payment required (HTTP 402)."
+                break
+            elif status_code >= 500:
+                logger.warning(
+                    f"Hugging Face server error (HTTP {status_code}). "
+                    "Provider infrastructure issue detected; halting key failover."
+                )
+                last_reason = f"Hugging Face service unavailable or server error (HTTP {status_code})."
+                break
+            else:
+                logger.warning(f"Hugging Face request failed ({err_msg}). Halting key failover.")
+                break
+
+        if scores is None:
+            self.engine_mode = "lexical-fallback"
+            self.error_message = last_reason
+            return self._predict_lexical(
+                text,
+                include_explanation,
+                reason=last_reason
+            )
+
+        # Successful genuine FinBERT inference
+        self.engine_mode = "hosted-huggingface"
+        self.error_message = None
+
+        winning = max(scores.keys(), key=lambda k: scores[k])
+        conf = scores[winning]
+
+        tokens = []
+        if include_explanation and working_key:
+            def _call_working_key(perturbed_str: str) -> Optional[Dict[str, float]]:
+                s, _, _ = _request_hf(working_key, perturbed_str)
+                return s
+
+            tokens = self._explain_prediction_perturbation(
+                text=text,
+                winning_sentiment=winning,
+                baseline_conf=conf,
+                infer_scores_fn=_call_working_key
+            )
+
+        return {
+            "text": text,
+            "sentiment": winning,
+            "confidence": conf,
+            "scores": scores,
+            "model_name": f"{settings.MODEL_NAME} (Hosted Hugging Face)",
+            "analyzed_at": datetime.utcnow().isoformat() + "Z",
+            "tokens": tokens,
+            "explanation_note": "Genuine ProsusAI/finbert neural inference via Hugging Face Serverless API.",
+            "is_fallback": False,
+            "engine_mode": "hosted-huggingface"
+        }
+
     def _predict_gemini(self, text: str, include_explanation: bool) -> Dict[str, Any]:
-        """Queries Google Gemini 2.5 Flash for financial news tone & token attribution."""
+        """Queries Google Gemini for financial tone with honest model labeling."""
         try:
             prompt = (
-                "You are the financial sentiment analyzer for FIN-SENTIMENT platform, simulating ProsusAI/finbert.\n"
-                f"Analyze the financial tone of this headline: '{text}'\n\n"
-                "Return valid JSON ONLY (no markdown blocks, no code fences):\n"
+                "You are an expert financial sentiment classifier analyzing financial news.\n"
+                f"Headline: '{text}'\n\n"
+                "Return JSON ONLY with exact format:\n"
                 "{\n"
                 '  "sentiment": "positive" | "negative" | "neutral",\n'
-                '  "confidence": float between 0.0 and 1.0,\n'
+                '  "confidence": float,\n'
                 '  "scores": {"positive": float, "negative": float, "neutral": float},\n'
-                '  "tokens": [{"token": string, "impact": float, "direction": "positive"|"negative"|"neutral"}]\n'
+                '  "salient_words": ["word1", "word2"]\n'
                 "}\n"
                 "Ensure scores sum to 1.0."
             )
@@ -266,68 +448,58 @@ class FinBERTService:
                 sentiment = "neutral"
 
             scores = data.get("scores", {"positive": 0.33, "negative": 0.33, "neutral": 0.34})
-            scores = {k: round(float(v), 4) for k, v in scores.items()}
+            scores = {k: max(0.0, float(v)) for k, v in scores.items()}
             total_s = sum(scores.values()) or 1.0
             scores = {k: round(v / total_s, 4) for k, v in scores.items()}
-            conf = round(float(data.get("confidence", scores[sentiment])), 4)
+            conf = scores[sentiment]
 
-            tokens = data.get("tokens", [])
-            if not isinstance(tokens, list):
-                tokens = []
+            tokens = []
+            if include_explanation:
+                salient_words = data.get("salient_words", [])
+                for sw in salient_words[:3]:
+                    tokens.append({
+                        "token": str(sw),
+                        "impact": 0.20 if sentiment == "positive" else -0.20,
+                        "direction": sentiment,
+                        "method": "llm-attention"
+                    })
 
             return {
                 "text": text,
                 "sentiment": sentiment,
                 "confidence": conf,
                 "scores": scores,
-                "model_name": "ProsusAI/finbert (Cloud Accelerated)",
+                "model_name": "Google Gemini (Cloud AI Engine)",
                 "analyzed_at": datetime.utcnow().isoformat() + "Z",
-                "tokens": tokens[:6],
-                "explanation_note": "FinBERT tone classification powered by institutional cloud inference."
+                "tokens": tokens,
+                "explanation_note": "Cloud AI financial tone classification via Google Gemini.",
+                "is_fallback": False,
+                "engine_mode": "cloud-gemini"
             }
         except Exception as e:
-            logger.warning(f"Cloud Gemini inference failed ({e}), falling back to lexical financial analyzer.")
-            return self._predict_lexical(text, include_explanation)
-
-    def _predict_huggingface(self, text: str, include_explanation: bool) -> Dict[str, Any]:
-        """Queries Hugging Face Router for ProsusAI/finbert."""
-        try:
-            url = f"https://router.huggingface.co/hf-inference/models/{settings.MODEL_NAME}"
-            headers = {"Authorization": f"Bearer {settings.HUGGINGFACE_API_KEY}"} if settings.HUGGINGFACE_API_KEY else {}
-            resp = requests.post(url, json={"inputs": text}, headers=headers, timeout=8)
-            if resp.status_code == 200:
-                data = resp.json()
-                if isinstance(data, list) and data and isinstance(data[0], list):
-                    items = data[0]
-                    scores = {"positive": 0.0, "negative": 0.0, "neutral": 0.0}
-                    for it in items:
-                        lbl = str(it.get("label", "")).lower()
-                        if lbl in scores:
-                            scores[lbl] = round(float(it.get("score", 0.0)), 4)
-                    winning = max(scores.keys(), key=lambda k: scores[k])
-                    return {
-                        "text": text,
-                        "sentiment": winning,
-                        "confidence": scores[winning],
-                        "scores": scores,
-                        "model_name": settings.MODEL_NAME,
-                        "analyzed_at": datetime.utcnow().isoformat() + "Z",
-                        "tokens": self._extract_lexical_tokens(text, winning),
-                        "explanation_note": "Hugging Face hosted ProsusAI/finbert inference."
-                    }
-        except Exception as e:
-            logger.warning(f"Hugging Face Router error: {e}")
-        return self._predict_lexical(text, include_explanation)
+            logger.warning(f"Cloud Gemini inference failed ({e}), routing to identified fallback.")
+            return self._predict_lexical(
+                text,
+                include_explanation,
+                reason=f"Google Gemini quota exceeded or unavailable ({type(e).__name__})."
+            )
 
     def _predict_external(self, text: str, include_explanation: bool) -> Dict[str, Any]:
         """Queries external dedicated inference service endpoint."""
         try:
             resp = requests.post(settings.FINBERT_INFERENCE_URL, json={"text": text}, timeout=10)
             if resp.status_code == 200:
-                return resp.json()
+                data = resp.json()
+                data["is_fallback"] = False
+                data["engine_mode"] = "external-service"
+                return data
         except Exception as e:
             logger.warning(f"External inference service error: {e}")
-        return self._predict_lexical(text, include_explanation)
+        return self._predict_lexical(
+            text,
+            include_explanation,
+            reason="External inference service connection failed."
+        )
 
     def _predict_local_pytorch(self, text: str, include_explanation: bool) -> Dict[str, Any]:
         """Runs inference via local PyTorch bfloat16 instance."""
@@ -357,7 +529,26 @@ class FinBERTService:
         confidence = scores[sentiment]
 
         del logits
-        tokens_attribution = self._explain_prediction_local(text, sentiment, confidence) if include_explanation else []
+
+        def _call_local(t: str) -> Optional[Dict[str, float]]:
+            try:
+                inp = self.tokenizer(t, return_tensors="pt", padding=True, truncation=True, max_length=64).to(self.device)
+                with torch.inference_mode():
+                    out = self.model(**inp)
+                    p = torch.softmax(out.logits.float(), dim=1).squeeze().tolist()
+                del inp, out
+                return {"positive": float(p[0]), "negative": float(p[1]), "neutral": float(p[2])}
+            except Exception:
+                return None
+
+        tokens_attribution = []
+        if include_explanation:
+            tokens_attribution = self._explain_prediction_perturbation(
+                text=text,
+                winning_sentiment=sentiment,
+                baseline_conf=confidence,
+                infer_scores_fn=_call_local
+            )
 
         return {
             "text": text,
@@ -367,13 +558,81 @@ class FinBERTService:
             "model_name": f"{settings.MODEL_NAME} (local-bfloat16)",
             "analyzed_at": datetime.utcnow().isoformat() + "Z",
             "tokens": tokens_attribution,
-            "explanation_note": "Local FinBERT CPU inference."
+            "explanation_note": "Local FinBERT PyTorch CPU forward-pass inference.",
+            "is_fallback": False,
+            "engine_mode": "local-bfloat16"
         }
 
-    def _predict_lexical(self, text: str, include_explanation: bool) -> Dict[str, Any]:
+    def _explain_prediction_perturbation(
+        self,
+        text: str,
+        winning_sentiment: str,
+        baseline_conf: float,
+        infer_scores_fn: Callable[[str], Optional[Dict[str, float]]]
+    ) -> List[Dict[str, Any]]:
         """
-        Deterministic Institutional Financial Lexicon (Loughran-McDonald).
-        Zero memory overhead, 100% resilient fallback for offline / low-resource environments.
+        Genuine perturbation-based word salience attribution:
+        Selects candidate non-stopword tokens, removes each token individually from the text,
+        queries the model, and calculates the delta:
+            delta = baseline_confidence - perturbed_confidence
+        Limits additional calls to at most 2 words to strictly control latency and provider rate limits.
+        """
+        words = re.findall(r"\b[\w'-]+\b", text)
+        if len(words) <= 1:
+            return []
+
+        # Candidate words: significant non-stopwords of length > 2, prioritizing financial terms
+        candidate_words = [w for w in words if w.lower() not in FINANCIAL_STOPWORDS and len(w) > 2]
+        candidates = sorted(
+            candidate_words,
+            key=lambda w: (w.lower() in FINANCIAL_POSITIVE_LEXICON or w.lower() in FINANCIAL_NEGATIVE_LEXICON),
+            reverse=True
+        )[:2]
+        if not candidates:
+            candidates = words[:1]
+
+        salient_tokens = []
+        for word in candidates:
+            try:
+                # Remove single occurrence of candidate word
+                perturbed = re.sub(r'\b' + re.escape(word) + r'\b', '', text, count=1, flags=re.IGNORECASE)
+                perturbed = re.sub(r'\s+', ' ', perturbed).strip()
+                if not perturbed:
+                    continue
+
+                perturbed_scores = infer_scores_fn(perturbed)
+                if not perturbed_scores:
+                    continue
+
+                perturbed_conf = perturbed_scores.get(winning_sentiment, 0.0)
+                delta = round(baseline_conf - perturbed_conf, 4)
+                direction = winning_sentiment if delta > 0 else "counter-evidence"
+
+                salient_tokens.append({
+                    "token": word,
+                    "impact": delta,
+                    "direction": direction,
+                    "method": "perturbation-delta"
+                })
+            except Exception as e:
+                logger.debug(f"Perturbation failed for token '{word}': {e}")
+                continue
+
+        salient_tokens.sort(key=lambda x: abs(x["impact"]), reverse=True)
+        return salient_tokens
+
+    def _predict_lexical(
+        self,
+        text: str,
+        include_explanation: bool,
+        reason: str = "Hosted neural provider unavailable."
+    ) -> Dict[str, Any]:
+        """
+        Transparent Rule-Based Institutional Lexicon Fallback (Loughran-McDonald).
+        Zero memory overhead, 100% resilient offline fallback.
+        Explicitly marked as a fallback: scores are heuristic polarity weights,
+        not calibrated neural network probabilities.
+        Ensures positive, negative, and neutral scores sum to exactly 1.0000.
         """
         words = re.findall(r"\b[\w'-]+\b", text.lower())
         pos_hits = [w for w in words if w in FINANCIAL_POSITIVE_LEXICON]
@@ -381,129 +640,114 @@ class FinBERTService:
 
         p_count = len(pos_hits)
         n_count = len(neg_hits)
+        total_polar = p_count + n_count
 
-        if p_count > n_count:
+        if total_polar == 0:
+            # Informational financial news without overt directional keywords
+            sentiment = "neutral"
+            scores = {"positive": 0.1500, "negative": 0.1500, "neutral": 0.7000}
+            confidence = 0.7000
+        elif p_count == n_count:
+            # Balanced mixed signals: opposing forces cancel out
+            sentiment = "neutral"
+            scores = {"positive": 0.3500, "negative": 0.3500, "neutral": 0.3000}
+            confidence = 0.3500
+        elif p_count > n_count:
             sentiment = "positive"
             margin = p_count - n_count
-            pos_score = min(0.95, 0.70 + 0.08 * margin)
-            neg_score = round((1.0 - pos_score) * 0.25, 4)
+            # Base neutral dampener reflects dictionary-matching uncertainty
+            neu_weight = max(0.1200, round(0.30 / (1.0 + 0.40 * margin), 4))
+            polar_pool = 1.0 - neu_weight
+            pos_score = round(polar_pool * ((p_count + 0.25) / (total_polar + 0.50)), 4)
+            neg_score = round(polar_pool * ((n_count + 0.25) / (total_polar + 0.50)), 4)
             neu_score = round(1.0 - pos_score - neg_score, 4)
             scores = {"positive": pos_score, "negative": neg_score, "neutral": neu_score}
             confidence = pos_score
-        elif n_count > p_count:
+        else:
             sentiment = "negative"
             margin = n_count - p_count
-            neg_score = min(0.95, 0.70 + 0.08 * margin)
-            pos_score = round((1.0 - neg_score) * 0.25, 4)
-            neu_score = round(1.0 - neg_score - pos_score, 4)
+            # Base neutral dampener reflects dictionary-matching uncertainty
+            neu_weight = max(0.1200, round(0.30 / (1.0 + 0.40 * margin), 4))
+            polar_pool = 1.0 - neu_weight
+            neg_score = round(polar_pool * ((n_count + 0.25) / (total_polar + 0.50)), 4)
+            pos_score = round(polar_pool * ((p_count + 0.25) / (total_polar + 0.50)), 4)
+            neu_score = round(1.0 - pos_score - neg_score, 4)
             scores = {"positive": pos_score, "negative": neg_score, "neutral": neu_score}
             confidence = neg_score
-        else:
-            sentiment = "neutral"
-            scores = {"positive": 0.15, "negative": 0.15, "neutral": 0.70}
-            confidence = 0.70
 
-        tokens = self._extract_lexical_tokens(text, sentiment) if include_explanation else []
+        tokens = []
+        if include_explanation:
+            orig_words = re.findall(r"\b[\w'-]+\b", text)
+            word_freq: Dict[str, int] = {}
+            for w in orig_words:
+                wl = w.lower()
+                if wl in FINANCIAL_POSITIVE_LEXICON or wl in FINANCIAL_NEGATIVE_LEXICON:
+                    word_freq[wl] = word_freq.get(wl, 0) + 1
+
+            total_hits = sum(word_freq.values())
+            seen_lower = set()
+
+            if total_hits > 0:
+                for w in orig_words:
+                    wl = w.lower()
+                    if wl in seen_lower:
+                        continue
+                    if wl in FINANCIAL_POSITIVE_LEXICON:
+                        seen_lower.add(wl)
+                        share = round(word_freq[wl] / total_hits, 4)
+                        tokens.append({
+                            "token": w,
+                            "impact": share,
+                            "direction": "positive",
+                            "method": "lexicon-match"
+                        })
+                    elif wl in FINANCIAL_NEGATIVE_LEXICON:
+                        seen_lower.add(wl)
+                        share = round(word_freq[wl] / total_hits, 4)
+                        tokens.append({
+                            "token": w,
+                            "impact": -share,
+                            "direction": "negative",
+                            "method": "lexicon-match"
+                        })
+
+                # Sort by impact magnitude descending
+                tokens.sort(key=lambda t: abs(t["impact"]), reverse=True)
+                tokens = tokens[:6]
 
         return {
             "text": text,
             "sentiment": sentiment,
             "confidence": confidence,
             "scores": scores,
-            "model_name": f"{settings.MODEL_NAME} (Institutional Lexicon Engine)",
+            "model_name": "Loughran-McDonald Institutional Lexicon (Rule-Based Fallback)",
             "analyzed_at": datetime.utcnow().isoformat() + "Z",
             "tokens": tokens,
-            "explanation_note": "Loughran-McDonald Institutional Financial Lexicon assessment."
+            "explanation_note": (
+                f"Rule-based fallback active: {reason} "
+                "Sentiment estimated via the Loughran-McDonald institutional financial dictionary. "
+                "Scores are heuristic polarity weights, not calibrated neural probabilities. "
+                "Matched financial terms indicate dictionary keyword attribution."
+            ),
+            "is_fallback": True,
+            "engine_mode": "lexical-fallback"
         }
 
-    def _extract_lexical_tokens(self, text: str, winning_sentiment: str) -> List[Dict[str, Any]]:
-        """Extracts key salient words matching financial lexicons."""
-        words = re.findall(r"\b[\w'-]+\b", text)
-        salient = []
-        for w in words:
-            wl = w.lower()
-            if wl in FINANCIAL_POSITIVE_LEXICON:
-                salient.append({
-                    "token": w,
-                    "impact": 0.35 if winning_sentiment == "positive" else -0.20,
-                    "direction": "positive",
-                    "method": "financial-lexicon"
-                })
-            elif wl in FINANCIAL_NEGATIVE_LEXICON:
-                salient.append({
-                    "token": w,
-                    "impact": 0.35 if winning_sentiment == "negative" else -0.20,
-                    "direction": "negative",
-                    "method": "financial-lexicon"
-                })
-        salient.sort(key=lambda x: abs(x["impact"]), reverse=True)
-        return salient[:6]
-
-    def _explain_prediction_local(self, text: str, winning_sentiment: str, baseline_conf: float) -> List[Dict[str, Any]]:
-        """Local perturbation salience on candidate words."""
-        try:
-            import torch
-            words = re.findall(r"\b[\w'-]+\b", text)
-            if len(words) <= 1:
-                return []
-
-            candidates = [w for w in words if w.lower() not in FINANCIAL_STOPWORDS and len(w) > 2][:4]
-            if not candidates:
-                candidates = words[:3]
-
-            perturbed_texts = []
-            for word in candidates:
-                perturbed = re.sub(r'\b' + re.escape(word) + r'\b', '', text, count=1, flags=re.IGNORECASE)
-                perturbed = re.sub(r'\s+', ' ', perturbed).strip()
-                perturbed_texts.append((word, perturbed))
-
-            if not perturbed_texts:
-                return []
-
-            inputs = self.tokenizer(
-                [pt[1] for pt in perturbed_texts],
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=64
-            ).to(self.device)
-
-            with torch.inference_mode():
-                outputs = self.model(**inputs)
-                probs = torch.softmax(outputs.logits.float(), dim=1).tolist()
-
-            target_idx = 0 if winning_sentiment == "positive" else (1 if winning_sentiment == "negative" else 2)
-            salient = []
-            for idx, (word, _) in enumerate(perturbed_texts):
-                perturbed_conf = probs[idx][target_idx]
-                delta = round(baseline_conf - perturbed_conf, 4)
-                direction = winning_sentiment if delta > 0 else "counter-evidence"
-                salient.append({
-                    "token": word,
-                    "impact": delta,
-                    "direction": direction,
-                    "method": "perturbation"
-                })
-
-            del inputs, outputs, probs
-            gc.collect()
-            salient.sort(key=lambda x: abs(x["impact"]), reverse=True)
-            return salient[:4]
-        except Exception:
-            return self._extract_lexical_tokens(text, winning_sentiment)
-
-    def predict_batch(self, texts: List[str], chunk_size: int = 4) -> List[Dict[str, Any]]:
+    def predict_batch(self, texts: List[str], chunk_size: int = 4, validate_input: bool = True) -> List[Dict[str, Any]]:
         """Processes a list of financial texts using the active engine."""
         if not texts:
             return []
 
-        cleaned_texts = [t.strip() for t in texts if (t or "").strip()]
-        if not cleaned_texts:
-            raise ValueError("All input texts are empty.")
+        if validate_input:
+            cleaned_texts = [validate_financial_headline(t) for t in texts]
+        else:
+            cleaned_texts = [t.strip() for t in texts if (t or "").strip()]
+            if not cleaned_texts:
+                raise FinancialValidationError("HEADLINE_EMPTY", "All input texts are empty.")
 
         results = []
         for text in cleaned_texts:
-            res = self.predict_one(text, include_explanation=False)
+            res = self.predict_one(text, include_explanation=False, validate_input=False)
             results.append(res)
         return results
 

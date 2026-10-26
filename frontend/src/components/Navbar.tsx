@@ -23,7 +23,7 @@ interface NavbarProps {
 
 const PAGE_METADATA: Record<string, { title: string; section: string; desc: string }> = {
   '/': { title: 'Executive Sentiment Overview', section: 'Analytics Terminal', desc: 'Real-time tone & divergence metrics' },
-  '/analyze': { title: 'FinBERT Interactive Lab', section: 'AI Testing Workbench', desc: 'Direct inference on local HuggingFace model' },
+  '/analyze': { title: 'FinBERT Interactive Lab', section: 'AI Testing Workbench', desc: 'Direct financial sentiment & explainable AI analysis' },
   '/news': { title: 'Financial News Intelligence Feed', section: 'Data Stream', desc: 'Classified headlines with duplicate filtering' },
   '/companies': { title: 'Company Sentiment Deep Dive', section: 'Securities Analysis', desc: 'Individual stock tone & coverage breakdown' },
   '/conflicts': { title: 'Bullish/Bearish Conflict Detector', section: 'Divergence Engine', desc: 'Companies facing simultaneous opposing narratives' },

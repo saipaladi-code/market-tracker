@@ -391,6 +391,7 @@ class NewsService:
                         article["sentiment"] = res["sentiment"]
                         article["confidence"] = res["confidence"]
                         article["scores"] = res["scores"]
+                        article["is_fallback"] = res.get("is_fallback", False)
             except Exception as e:
                 logger.error(f"FinBERT batch analysis error during seeding: {e}")
 
@@ -465,17 +466,21 @@ class NewsService:
             processed_articles, dup_count = deduplication_service.process_articles(raw_articles)
             headlines = [a["title"] for a in processed_articles]
             try:
-                sentiment_results = finbert_service.predict_batch(headlines)
+                sentiment_results = finbert_service.predict_batch(headlines, validate_input=False)
                 for idx, article in enumerate(processed_articles):
                     if idx < len(sentiment_results):
                         res = sentiment_results[idx]
                         article["sentiment"] = res["sentiment"]
                         article["confidence"] = res["confidence"]
                         article["scores"] = res["scores"]
+                        article["is_fallback"] = res.get("is_fallback", False)
+                        article["engine_mode"] = res.get("engine_mode", finbert_service.engine_mode)
                     else:
                         article["sentiment"] = "neutral"
                         article["confidence"] = 0.5
                         article["scores"] = {"positive": 0.25, "negative": 0.25, "neutral": 0.5}
+                        article["is_fallback"] = True
+                        article["engine_mode"] = finbert_service.engine_mode
 
                     db.insert_one("news_articles", article)
             except Exception as e:

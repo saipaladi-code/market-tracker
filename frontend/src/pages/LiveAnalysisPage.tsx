@@ -1,18 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Sparkles,
-  Send,
-  HelpCircle,
-  AlertTriangle,
-  CheckCircle,
-  RefreshCw,
-  X,
   Zap,
-  Cpu,
-  Layers,
+  Send,
+  RefreshCw,
+  AlertTriangle,
   Info,
-  Clock,
-  ArrowRight,
+  X,
+  HelpCircle,
+  Cpu,
   TrendingUp,
   TrendingDown,
   Minus
@@ -60,10 +56,34 @@ export const LiveAnalysisPage: React.FC = () => {
   const [result, setResult] = useState<SentimentAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pasteNotification, setPasteNotification] = useState<string | null>(null);
+  const [pasteNotice, setPasteNotice] = useState<string | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [flashCard, setFlashCard] = useState(false);
+  const [engineInfo, setEngineInfo] = useState<string>('ProsusAI/finbert');
+  const [isFallbackMode, setIsFallbackMode] = useState<boolean>(false);
   const resultRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.getHealth().then((h: any) => {
+      if (h?.model?.name) {
+        const mode = h?.model?.engine_mode || '';
+        let label = h.model.name;
+        if (mode === 'hosted-huggingface' || mode === 'hosted-finbert') {
+          label = 'ProsusAI/finbert (Hosted Hugging Face)';
+        } else if (mode === 'cloud-gemini') {
+          label = 'Cloud AI Engine (Google Gemini)';
+        } else if (mode === 'local-bfloat16') {
+          label = 'ProsusAI/finbert (Local PyTorch CPU)';
+        } else if (mode === 'lexical-fallback') {
+          label = 'Rule-Based Lexicon (Fallback Mode)';
+          setIsFallbackMode(true);
+        }
+        setEngineInfo(label);
+      }
+    }).catch(() => {
+      setEngineInfo('ProsusAI/finbert (Checking provider...)');
+    });
+  }, []);
 
   const trimmedHeadline = headline.trim();
   const validation = validateFinancialHeadline(trimmedHeadline);
@@ -84,8 +104,8 @@ export const LiveAnalysisPage: React.FC = () => {
       e.preventDefault();
       const truncated = prospective.slice(0, MAX_HEADLINE_LENGTH);
       setHeadline(truncated);
-      setPasteNotification('Pasted text was truncated to the 1,000-character limit.');
-      setTimeout(() => setPasteNotification(null), 6000);
+      setPasteNotice('Pasted text exceeded the 1,000-character limit and was truncated.');
+      setTimeout(() => setPasteNotice(null), 5000);
       if (error) setError(null);
     }
   };
@@ -100,7 +120,7 @@ export const LiveAnalysisPage: React.FC = () => {
   };
 
   const handleAnalyze = async (textToAnalyze?: string) => {
-    if (loading) return; // Prevent repeated submissions while processing
+    if (loading) return; // Prevent repeated submissions while request is processing
 
     const rawText = textToAnalyze !== undefined ? textToAnalyze : headline;
     const text = rawText.trim();
@@ -137,7 +157,7 @@ export const LiveAnalysisPage: React.FC = () => {
       setResult(null); // Clear stale sentiment results on rejection
       const apiError = err?.response?.data;
       const msg = apiError?.detail || apiError?.message || err?.message || 'Sentiment analysis failed on backend.';
-      setError(msg);
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setLoading(false);
     }
@@ -147,7 +167,7 @@ export const LiveAnalysisPage: React.FC = () => {
     setHeadline('');
     setResult(null);
     setError(null);
-    setPasteNotification(null);
+    setPasteNotice(null);
   };
 
   return (
@@ -161,13 +181,13 @@ export const LiveAnalysisPage: React.FC = () => {
           <div>
             <h2 className="text-lg font-extrabold text-white tracking-tight">FinBERT Interactive Sentiment Lab</h2>
             <p className="text-xs text-slate-400 font-mono">
-              Live PyTorch CPU forward pass via <code className="text-blue-300">ProsusAI/finbert</code>
+              Financial News Polarity &amp; Explainability Workbench via <code className="text-blue-300">ProsusAI/finbert</code>
             </p>
           </div>
         </div>
         <p className="text-xs text-slate-300 leading-relaxed mt-2 max-w-2xl">
-          Enter any financial headline, earnings report excerpt, or analyst statement. The model executes on-device CPU inference,
-          returning softmax probability distributions and perturbation-based token attribution deltas.
+          Enter any financial headline, earnings report excerpt, or analyst statement. Evaluates semantic financial polarity,
+          returning probability distributions and word-attribution salience.
         </p>
       </div>
 
@@ -179,12 +199,12 @@ export const LiveAnalysisPage: React.FC = () => {
               <span>Financial Headline / Statement Input</span>
               <span
                 id="char-counter"
-                className={`text-[10px] font-mono font-medium transition-colors ${
+                className={`text-[11px] font-mono font-medium transition-colors ${
                   headline.length >= MAX_HEADLINE_LENGTH
-                    ? 'text-amber-400 font-bold'
-                    : headline.length > 900
-                    ? 'text-blue-400'
-                    : 'text-slate-500'
+                    ? 'text-rose-400 font-bold'
+                    : headline.length >= 900
+                    ? 'text-amber-400'
+                    : 'text-slate-400'
                 }`}
               >
                 ({headline.length} / {MAX_HEADLINE_LENGTH} characters)
@@ -206,21 +226,38 @@ export const LiveAnalysisPage: React.FC = () => {
             <textarea
               id="financial-headline-input"
               rows={3}
-              value={headline}
               maxLength={MAX_HEADLINE_LENGTH}
+              value={headline}
               onChange={handleChange}
               onPaste={handlePaste}
               placeholder="e.g. Alphabet surges 7% after cloud revenue accelerates past Wall Street targets..."
               className="w-full bg-navy-950 border border-navy-700/80 rounded-xl p-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-sans leading-relaxed"
             />
           </div>
+
+          {/* Real-time Inline Relevance Guidance */}
+          {trimmedHeadline.length > 0 && !validation.isValid && !error && (
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-400/90">
+              <Info className="w-3.5 h-3.5 shrink-0" />
+              <span>{validation.message}</span>
+            </div>
+          )}
         </div>
 
         {/* Truncation Notification */}
-        {pasteNotification && (
-          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex items-center gap-2.5">
-            <Info className="w-4 h-4 shrink-0 text-amber-400" />
-            <span>{pasteNotification}</span>
+        {pasteNotice && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>{pasteNotice}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPasteNotice(null)}
+              className="text-amber-400 hover:text-amber-200 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
 
@@ -229,14 +266,6 @@ export const LiveAnalysisPage: React.FC = () => {
           <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-center gap-2.5">
             <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
             <span className="flex-1 leading-relaxed">{error}</span>
-          </div>
-        )}
-
-        {/* Inline Guidance When Input Is Active But Invalid */}
-        {trimmedHeadline.length > 0 && !error && !validation.isValid && (
-          <div className="p-2.5 bg-navy-950/90 border border-slate-700/60 rounded-xl text-[11px] text-slate-400 flex items-center gap-2">
-            <Info className="w-3.5 h-3.5 shrink-0 text-blue-400" />
-            <span className="leading-snug">{validation.message}</span>
           </div>
         )}
 
@@ -264,9 +293,9 @@ export const LiveAnalysisPage: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-between pt-2 border-t border-navy-800/80">
-            <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
+            <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
               <Cpu className="w-3.5 h-3.5 text-blue-400" />
-              <span>Inference Engine: Local CPU (No Cloud Token Required)</span>
+              <span>Inference Engine: <strong className="text-slate-200">{result?.model_name || engineInfo}</strong></span>
             </div>
 
             <button
@@ -274,17 +303,21 @@ export const LiveAnalysisPage: React.FC = () => {
               type="button"
               onClick={() => handleAnalyze()}
               disabled={isButtonDisabled}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                isButtonDisabled
+                  ? 'bg-slate-800/80 text-slate-500 border border-navy-750 cursor-not-allowed opacity-60'
+                  : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 cursor-pointer'
+              }`}
             >
               {loading ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Computing Softmax...</span>
+                  <span>Computing Sentiment...</span>
                 </>
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  <span>Run FinBERT Inference</span>
+                  <span>{engineInfo.includes('Fallback') ? 'Run Sentiment Analysis' : 'Run FinBERT Inference'}</span>
                 </>
               )}
             </button>
@@ -304,8 +337,10 @@ export const LiveAnalysisPage: React.FC = () => {
           <div className="flex items-center justify-between pb-4 border-b border-navy-750/80 flex-wrap gap-3">
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider font-semibold">
-                  FinBERT Classification Verdict
+                <span className={`text-[10px] uppercase font-mono tracking-wider font-semibold ${
+                  result.is_fallback ? 'text-amber-400' : 'text-slate-400'
+                }`}>
+                  {result.is_fallback ? 'Rule-Based Sentiment Estimate (Loughran-McDonald Lexicon)' : 'FinBERT Classification Verdict'}
                 </span>
                 {latencyMs !== null && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px] font-mono border border-emerald-500/20">
@@ -317,7 +352,16 @@ export const LiveAnalysisPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <SentimentBadge sentiment={result.sentiment} confidence={result.confidence} size="md" />
                 <span className="text-xs text-slate-300 font-mono">
-                  Confidence Score: <strong className="text-white">{(result.confidence * 100).toFixed(1)}%</strong>
+                  {result.is_fallback ? (
+                    <>
+                      Heuristic Polarity Weight: <strong className="text-amber-300">{(result.confidence * 100).toFixed(1)}%</strong>
+                      <span className="text-[10px] text-slate-400 ml-1.5">(Rule-based estimate)</span>
+                    </>
+                  ) : (
+                    <>
+                      Confidence Score: <strong className="text-white">{(result.confidence * 100).toFixed(1)}%</strong>
+                    </>
+                  )}
                 </span>
               </div>
             </div>
@@ -328,18 +372,43 @@ export const LiveAnalysisPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Three Probability Distribution Meters */}
+          {/* Explicit Fallback Warning Banner if Neural Provider was Unavailable */}
+          {result.is_fallback && (
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+              <div>
+                <strong className="block text-amber-200 mb-0.5">Rule-Based Lexical Fallback Active</strong>
+                <span className="text-slate-300">
+                  Hosted neural inference was unavailable or unconfigured. This estimate was computed using the Loughran-McDonald institutional financial dictionary. Scores are heuristic keyword polarity weights summing to 100%, not calibrated neural probabilities.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Three Probability / Weight Distribution Meters */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              Softmax Probability Distribution
-            </h4>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                {result.is_fallback ? 'Heuristic Sentiment Weights Distribution' : 'Softmax Probability Distribution'}
+              </h4>
+              {result.is_fallback && (
+                <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                  Uncalibrated Rule-Based Weights (Sum: 100.0%)
+                </span>
+              )}
+            </div>
+            {result.is_fallback && (
+              <p className="text-[11px] text-slate-400">
+                Calculated from Loughran-McDonald institutional dictionary keyword counts with base uncertainty dampening. These represent relative directional weights, not calibrated model probabilities.
+              </p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Bullish */}
               <div className="bg-navy-950/80 p-4 rounded-xl border border-navy-800">
                 <div className="flex items-center justify-between text-xs mb-2">
                   <span className="text-slate-400 flex items-center gap-1.5">
                     <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Bullish (Positive)</span>
+                    <span>{result.is_fallback ? 'Bullish Weight' : 'Bullish (Positive)'}</span>
                   </span>
                   <span className="text-emerald-400 font-mono font-bold">
                     {(result.scores.positive * 100).toFixed(1)}%
@@ -358,7 +427,7 @@ export const LiveAnalysisPage: React.FC = () => {
                 <div className="flex items-center justify-between text-xs mb-2">
                   <span className="text-slate-400 flex items-center gap-1.5">
                     <Minus className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Neutral Tone</span>
+                    <span>{result.is_fallback ? 'Neutral Weight' : 'Neutral Tone'}</span>
                   </span>
                   <span className="text-amber-400 font-mono font-bold">
                     {(result.scores.neutral * 100).toFixed(1)}%
@@ -377,7 +446,7 @@ export const LiveAnalysisPage: React.FC = () => {
                 <div className="flex items-center justify-between text-xs mb-2">
                   <span className="text-slate-400 flex items-center gap-1.5">
                     <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Bearish (Negative)</span>
+                    <span>{result.is_fallback ? 'Bearish Weight' : 'Bearish (Negative)'}</span>
                   </span>
                   <span className="text-rose-400 font-mono font-bold">
                     {(result.scores.negative * 100).toFixed(1)}%
@@ -393,17 +462,29 @@ export const LiveAnalysisPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Explainable AI: Token Perturbation Breakdown */}
+          {/* Explainability Breakdown */}
           <div className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                <span>Explainable AI: Perturbation Word Salience</span>
-                <span title="Measures drop in model confidence when each token is masked individually.">
+                <span>
+                  {result.is_fallback
+                    ? 'Explainability: Loughran-McDonald Keyword Attribution'
+                    : 'Explainable AI: Perturbation Word Salience'}
+                </span>
+                <span title={result.is_fallback
+                  ? 'Displays matched institutional financial terms from the Loughran-McDonald dictionary and their directional contribution to the heuristic score.'
+                  : 'Measures drop in model confidence when each token is masked individually.'}>
                   <HelpCircle className="w-3.5 h-3.5 text-slate-500" />
                 </span>
               </h4>
-              <span className="text-[10px] text-blue-400 font-mono bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
-                Method: Token Masking Delta ΔP
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                result.tokens?.[0]?.method === 'perturbation-delta'
+                  ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                  : (result.is_fallback ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' : 'text-blue-400 bg-blue-500/10 border-blue-500/20')
+              }`}>
+                Method: {result.tokens?.[0]?.method === 'perturbation-delta'
+                  ? 'Token Masking Delta ΔP (Perturbation)'
+                  : (result.is_fallback ? 'Dictionary Keyword Attribution (Loughran-McDonald)' : 'Attention Salience')}
               </span>
             </div>
 
@@ -411,6 +492,7 @@ export const LiveAnalysisPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {result.tokens.map((token, i) => {
                   const isPositiveDelta = token.impact > 0;
+                  const isLexical = token.method === 'lexicon-match';
                   return (
                     <div
                       key={i}
@@ -421,19 +503,26 @@ export const LiveAnalysisPage: React.FC = () => {
                           {token.token}
                         </span>
                         <span className="text-[11px] text-slate-400 capitalize">
-                          {token.direction} influence
+                          {isLexical ? `${token.direction} financial term` : `${token.direction} influence`}
                         </span>
                       </div>
-                      <span className={`font-mono font-bold ${isPositiveDelta ? 'text-emerald-400' : 'text-slate-400'}`}>
-                        {isPositiveDelta ? `+${(token.impact * 100).toFixed(1)}%` : `${(token.impact * 100).toFixed(1)}%`}
-                      </span>
+                      <div className="text-right">
+                        <span className={`font-mono font-bold ${isPositiveDelta ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {isPositiveDelta ? `+${(Math.abs(token.impact) * 100).toFixed(1)}%` : `-${(Math.abs(token.impact) * 100).toFixed(1)}%`}
+                        </span>
+                        {isLexical && (
+                          <span className="block text-[9px] text-slate-500 font-mono">lexical contribution</span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
             ) : (
-              <p className="text-xs text-slate-500 italic p-3 bg-navy-950 rounded-xl border border-navy-800">
-                Single-token text or uniform attention distribution.
+              <p className="text-xs text-slate-400 italic p-3 bg-navy-950 rounded-xl border border-navy-800">
+                {result.is_fallback
+                  ? 'No overt directional financial sentiment keywords from the Loughran-McDonald dictionary were detected; headline classified with baseline neutral weight.'
+                  : 'Single-token text or uniform attention distribution.'}
               </p>
             )}
           </div>
@@ -442,11 +531,19 @@ export const LiveAnalysisPage: React.FC = () => {
           <div className="p-4 bg-navy-950/90 border border-navy-800 rounded-xl text-xs space-y-1.5 text-slate-400">
             <div className="flex items-center gap-2 font-bold text-slate-300">
               <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>Scientific Note & Platform Transparency</span>
+              <span>
+                {result.is_fallback
+                  ? 'Rule-Based Fallback Methodology & Transparency'
+                  : 'Scientific Note & Platform Transparency'}
+              </span>
             </div>
-            <p className="text-[11px] leading-relaxed text-slate-400">
-              {result.explanation_note} Word impact scores represent local confidence shifts when individual words are masked.
-              FinBERT is an NLP sentiment classifier analyzing semantic tone; it does not evaluate corporate fundamentals or forecast stock price movements.
+            <p className="text-[11px] leading-relaxed text-slate-300">
+              {result.explanation_note}
+            </p>
+            <p className="text-[10px] leading-relaxed text-slate-500">
+              {result.is_fallback
+                ? 'Heuristic weights reflect proportional term frequencies in institutional financial lexicons and base uncertainty dampening. They are not calibrated probabilities from a deep neural network and do not predict asset price movements.'
+                : 'FinBERT is an NLP sentiment classifier analyzing semantic tone; it does not evaluate corporate fundamentals or forecast stock price movements.'}
             </p>
           </div>
         </div>
