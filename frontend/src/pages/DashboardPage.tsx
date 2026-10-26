@@ -70,27 +70,31 @@ export const DashboardPage: React.FC = () => {
 
       if (statsData.status === 'fulfilled' && statsData.value) {
         setStats(statsData.value);
+        setError(null);
       } else {
-        setStats(MOCK_DASHBOARD_STATS);
+        const errorReason = statsData.status === 'rejected' ? statsData.reason : null;
+        const msg =
+          errorReason?.response?.data?.detail ||
+          errorReason?.message ||
+          'Failed to retrieve analytics metrics from backend service.';
+        setError(msg);
+        setStats(null);
       }
 
       if (newsData.status === 'fulfilled' && newsData.value) {
         setRecentNews(newsData.value.articles || []);
       } else {
-        setRecentNews(MOCK_ARTICLES.slice(0, 6));
+        setRecentNews([]);
       }
 
       if (historyList.status === 'fulfilled' && Array.isArray(historyList.value)) {
         setHistoryData(historyList.value);
       } else {
-        setHistoryData(MOCK_HISTORY);
+        setHistoryData([]);
       }
     } catch (err: any) {
-      console.warn('Dashboard sync note:', err);
-      // Seamlessly fall back so user is never locked out
-      setStats(MOCK_DASHBOARD_STATS);
-      setRecentNews(MOCK_ARTICLES.slice(0, 6));
-      setHistoryData(MOCK_HISTORY);
+      setError(err?.message || 'Failed to retrieve analytics metrics from backend service.');
+      setStats(null);
     } finally {
       setLoading(false);
     }
@@ -99,13 +103,6 @@ export const DashboardPage: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
-
-  const handleUseDemo = () => {
-    setError(null);
-    setStats(MOCK_DASHBOARD_STATS);
-    setRecentNews(MOCK_ARTICLES.slice(0, 6));
-    setHistoryData(MOCK_HISTORY);
-  };
 
   if (loading) {
     return (
@@ -128,17 +125,17 @@ export const DashboardPage: React.FC = () => {
         <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto mb-4 text-rose-400">
           <AlertTriangle className="w-6 h-6" />
         </div>
-        <h3 className="text-base font-bold text-white mb-1.5">Backend Service Unreachable</h3>
+        <h3 className="text-base font-bold text-white mb-1.5">Failed to Connect to Analytics Service</h3>
         <p className="text-xs text-slate-400 mb-6 max-w-sm mx-auto leading-relaxed">
-          {error || `Unable to reach API server at ${api.getBaseUrl()}.`}
+          {error || `Failed to retrieve analytics metrics from backend service at ${api.getBaseUrl()}.`}
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <button
-            onClick={handleUseDemo}
+            onClick={loadData}
             className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-blue-600/20 transition-all cursor-pointer flex items-center gap-2"
           >
-            <Zap className="w-4 h-4 text-amber-300" />
-            <span>Load Demo Intelligence</span>
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry Connection</span>
           </button>
           <button
             onClick={() => setShowBackendModal(true)}
@@ -146,12 +143,6 @@ export const DashboardPage: React.FC = () => {
           >
             <Server className="w-4 h-4 text-blue-400" />
             <span>Configure Backend URL</span>
-          </button>
-          <button
-            onClick={loadData}
-            className="px-4 py-2.5 bg-navy-850 hover:bg-navy-800 text-slate-300 rounded-xl text-xs font-semibold transition-all cursor-pointer"
-          >
-            Retry Connection
           </button>
         </div>
 
@@ -647,7 +638,12 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {recentNews.map((art) => (
+          {recentNews.length === 0 ? (
+            <div className="col-span-full p-8 text-center bg-navy-950/60 rounded-xl border border-navy-800/80 text-xs text-slate-500">
+              No recent classified financial articles recorded. Trigger news refresh to ingest market headlines.
+            </div>
+          ) : (
+            recentNews.map((art) => (
             <div
               key={art.id}
               className="bg-navy-950/90 border border-navy-800/90 rounded-xl p-4 flex flex-col justify-between space-y-3 hover:border-navy-700 hover:shadow-md transition-all"
@@ -677,7 +673,7 @@ export const DashboardPage: React.FC = () => {
                 </a>
               </div>
             </div>
-          ))}
+          )))}
         </div>
       </div>
     </div>

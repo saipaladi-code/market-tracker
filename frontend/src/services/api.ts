@@ -33,7 +33,19 @@ export function getStoredApiUrl(): string {
   } catch {
     // localStorage not accessible
   }
-  return import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) {
+    return import.meta.env.VITE_API_URL.trim();
+  }
+  // If running in production mode or on a deployed domain (such as Vercel), default to the deployed backend
+  if (
+    import.meta.env.PROD ||
+    (typeof window !== 'undefined' &&
+      window.location.hostname !== 'localhost' &&
+      window.location.hostname !== '127.0.0.1')
+  ) {
+    return 'https://market-tracker-c6ou.onrender.com';
+  }
+  return 'http://localhost:8000';
 }
 
 let currentBaseUrl = getStoredApiUrl();
@@ -42,7 +54,7 @@ let client = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 4500, // Responsive timeout so pages never hang
+  timeout: 25000, // 25s timeout to accommodate cloud container spin-up and network latency
 });
 
 let isOfflineMode = false;
@@ -68,7 +80,7 @@ export const api = {
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 4500,
+      timeout: 25000,
     });
   },
 
@@ -76,13 +88,13 @@ export const api = {
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {}
-    currentBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    currentBaseUrl = getStoredApiUrl();
     client = axios.create({
       baseURL: currentBaseUrl,
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 4500,
+      timeout: 25000,
     });
   },
 
@@ -100,7 +112,7 @@ export const api = {
     const url = (targetUrl || currentBaseUrl).replace(/\/+$/, '');
     const start = performance.now();
     try {
-      const res = await axios.get(`${url}/api/health`, { timeout: 4000 });
+      const res = await axios.get(`${url}/api/health`, { timeout: 15000 });
       const latency = Math.round(performance.now() - start);
       if (res.status === 200) {
         setOfflineStatus(false);
@@ -127,16 +139,16 @@ export const api = {
     }
   },
 
-  // Dashboard Stats
+  // Dashboard Stats - strictly retrieves real analytics metrics from backend
   getDashboardStats: async (): Promise<DashboardStats> => {
     try {
       const res = await client.get('/api/dashboard/stats');
       setOfflineStatus(false);
       return res.data;
-    } catch (err) {
-      console.warn('Backend unavailable for dashboard stats. Falling back to demo data:', err);
+    } catch (err: any) {
       setOfflineStatus(true);
-      return MOCK_DASHBOARD_STATS;
+      // Propagate the actual error so the UI truthfully displays connection status
+      throw err;
     }
   },
 
