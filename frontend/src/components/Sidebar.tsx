@@ -23,6 +23,7 @@ import {
 interface SidebarProps {
   modelStatus?: string;
   isDemo?: boolean;
+  feedStatus?: string;
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
   mobileOpen: boolean;
@@ -35,6 +36,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   modelStatus = 'ready',
   isDemo = false,
+  feedStatus = 'LIVE FEED',
   isCollapsed,
   setIsCollapsed,
   mobileOpen,
@@ -174,11 +176,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>News Feed</span>
               </span>
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border ${
-                isDemo 
-                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
-                  : 'bg-blue-500/10 text-blue-300 border-blue-500/20'
+                feedStatus === 'LIVE FEED' || (!isDemo && feedStatus !== 'DEMO DATA' && feedStatus !== 'API ERROR')
+                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                  : feedStatus === 'CACHED LIVE DATA'
+                  ? 'bg-blue-500/10 text-blue-300 border-blue-500/20'
+                  : feedStatus === 'API ERROR'
+                  ? 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                  : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
               }`}>
-                {isDemo ? 'DEMO DATA' : 'LIVE API'}
+                {feedStatus || (isDemo ? 'DEMO DATA' : 'LIVE FEED')}
               </span>
             </div>
 
@@ -197,8 +203,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </>
         ) : (
-          <div className="flex flex-col items-center gap-2" title={`FinBERT: ${modelStatus} | News: ${isDemo ? 'Demo' : 'Live'}`}>
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+          <div className="flex flex-col items-center gap-2" title={`FinBERT: ${modelStatus} | News: ${feedStatus || (isDemo ? 'Demo' : 'Live')}`}>
+            <span className={`w-2.5 h-2.5 rounded-full ${feedStatus === 'API ERROR' ? 'bg-rose-400' : 'bg-emerald-400 animate-pulse'}`} />
           </div>
         )}
 

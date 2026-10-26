@@ -53,6 +53,10 @@ export const NewsExplorerPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(12);
   const [isDemoDataset, setIsDemoDataset] = useState(false);
+  const [feedStatus, setFeedStatus] = useState<string>('LIVE FEED');
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
+  const [filterDate, setFilterDate] = useState<string | null>(null);
+  const [todayOnly, setTodayOnly] = useState<boolean>(true);
 
   // Explain modal state
   const [selectedExplainResult, setSelectedExplainResult] = useState<SentimentAnalysisResult | null>(null);
@@ -68,6 +72,7 @@ export const NewsExplorerPage: React.FC = () => {
         company: selectedCompany === 'All Companies' ? undefined : selectedCompany,
         sentiment: selectedSentiment === 'All' ? undefined : selectedSentiment.toLowerCase(),
         query: searchQuery.trim() || undefined,
+        today_only: todayOnly,
       });
 
       let items = data.articles || [];
@@ -78,6 +83,9 @@ export const NewsExplorerPage: React.FC = () => {
       setArticles(items);
       setTotalCount(data.total_count || 0);
       setIsDemoDataset(data.is_demo_dataset || false);
+      if (data.feed_status) setFeedStatus(data.feed_status);
+      if (data.last_synced) setLastSynced(data.last_synced);
+      if (data.filter_date) setFilterDate(data.filter_date);
     } catch (err) {
       console.error('Failed to load news:', err);
     } finally {
@@ -87,7 +95,7 @@ export const NewsExplorerPage: React.FC = () => {
 
   useEffect(() => {
     fetchNews();
-  }, [page, selectedCompany, selectedSentiment, showDuplicates]);
+  }, [page, selectedCompany, selectedSentiment, showDuplicates, todayOnly]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,16 +177,39 @@ export const NewsExplorerPage: React.FC = () => {
             </p>
           </div>
 
-          {/* Dataset Status Badge */}
-          {isDemoDataset ? (
+          {/* Dataset Status Badge - Honest Multi-State Indicator */}
+          {feedStatus === 'LIVE FEED' && !isDemoDataset && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs self-start md:self-auto font-mono">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>LIVE FEED</span>
+              {filterDate && (
+                <span className="text-[10px] text-emerald-300/80 border-l border-emerald-500/30 pl-2">
+                  Asia/Kolkata: {filterDate}
+                </span>
+              )}
+            </div>
+          )}
+          {feedStatus === 'CACHED LIVE DATA' && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs self-start md:self-auto font-mono">
+              <Clock className="w-3.5 h-3.5 text-blue-400" />
+              <span>CACHED LIVE DATA</span>
+              {lastSynced && (
+                <span className="text-[10px] text-blue-300/80 border-l border-blue-500/30 pl-2">
+                  Synced: {new Date(lastSynced).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+          )}
+          {(feedStatus === 'DEMO DATA' || (isDemoDataset && feedStatus !== 'API ERROR')) && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs self-start md:self-auto font-mono">
               <AlertCircle className="w-4 h-4 text-amber-400" />
               <span>DEMO DATASET ACTIVE</span>
             </div>
-          ) : (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs self-start md:self-auto font-mono">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>NEWSAPI LIVE FEED</span>
+          )}
+          {feedStatus === 'API ERROR' && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs self-start md:self-auto font-mono">
+              <AlertCircle className="w-4 h-4 text-rose-400" />
+              <span>API ERROR</span>
             </div>
           )}
         </div>
@@ -237,7 +268,20 @@ export const NewsExplorerPage: React.FC = () => {
 
           {/* Bottom Filter Toggles & Actions */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div className="flex items-center gap-4 text-xs">
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={todayOnly}
+                  onChange={(e) => {
+                    setTodayOnly(e.target.checked);
+                    setPage(1);
+                  }}
+                  className="accent-blue-500 rounded cursor-pointer"
+                />
+                <span className="font-medium text-slate-200">Today's News Only (Asia/Kolkata)</span>
+              </label>
+
               <label className="flex items-center gap-2 cursor-pointer text-slate-300">
                 <input
                   type="checkbox"
@@ -389,7 +433,15 @@ export const NewsExplorerPage: React.FC = () => {
                   <div className="min-w-0">
                     <span className="truncate block font-medium text-slate-300">{art.source}</span>
                     <span className="text-[10px] text-slate-500 font-mono">
-                      {art.published_at ? new Date(art.published_at).toLocaleDateString() : 'Recent'}
+                      {art.published_at
+                        ? new Date(art.published_at).toLocaleString([], {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : 'Recent'}
                     </span>
                   </div>
 

@@ -78,7 +78,8 @@ def test_assistant_chat_fallback():
     assert "response" in data
     assert "disclaimer" in data
 
-def test_company_and_sentiment_filtering_scenarios():
+def test_company_and_sentiment_filtering_scenarios(monkeypatch):
+    monkeypatch.setattr("app.config.settings.USE_DEMO_DATA", True)
     # 1. All articles with no filters
     r_all = client.get("/api/news?page_size=100")
     assert r_all.status_code == 200

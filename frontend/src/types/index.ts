@@ -47,6 +47,21 @@ export interface Article {
   explanation_note?: string;
 }
 
+export type FeedStatus = 'LIVE FEED' | 'CACHED LIVE DATA' | 'DEMO DATA' | 'API ERROR';
+
+export interface NewsResponse {
+  articles: Article[];
+  total_count: number;
+  page: number;
+  page_size: number;
+  is_demo_dataset: boolean;
+  feed_status?: FeedStatus;
+  last_synced?: string;
+  filter_date?: string;
+  news_provider?: string;
+  error_message?: string;
+}
+
 export interface DashboardStats {
   total_articles: number;
   total_including_duplicates: number;
@@ -65,6 +80,9 @@ export interface DashboardStats {
   active_conflicts_count: number;
   active_conflicts: ConflictSignal[];
   is_demo_dataset: boolean;
+  feed_status?: FeedStatus;
+  filter_date?: string;
+  last_synced?: string;
   last_updated: string;
   model_status: string;
 }

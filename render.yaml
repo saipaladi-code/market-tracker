@@ -24,3 +24,6 @@ services:
         value: ""
       - key: PYTORCH_NO_CUDA_MEMORY_CACHING
         value: "1"
+      - key: NEWS_PROVIDER
+        value: "auto"
+

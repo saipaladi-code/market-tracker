@@ -13,3 +13,4 @@ google-generativeai>=0.8.0
 transformers>=4.45.0
 safetensors>=0.4.0
 accelerate>=0.26.0
+tzdata>=2024.1

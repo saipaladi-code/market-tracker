@@ -63,6 +63,8 @@ class NewsSearchRequest(BaseModel):
     end_date: Optional[str] = None
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
+    today_only: Optional[bool] = None
+    date: Optional[str] = None
 
 class NewsResponse(BaseModel):
     articles: List[Article]
@@ -70,6 +72,10 @@ class NewsResponse(BaseModel):
     page: int
     page_size: int
     is_demo_dataset: bool
+    feed_status: Optional[str] = "LIVE FEED"
+    last_synced: Optional[str] = None
+    filter_date: Optional[str] = None
+    news_provider: Optional[str] = None
 
 class CompanySentimentSummary(BaseModel):
     company: str

@@ -16,6 +16,7 @@ ENV_PATH = str(BACKEND_DIR / ".env")
 
 class Settings(BaseSettings):
     NEWS_API_KEY: Optional[str] = None
+    NEWS_PROVIDER: str = "auto"  # "auto", "rss", "newsapi"
     MONGODB_URI: Optional[str] = None
     MONGODB_DATABASE: str = "financial_sentiment"
     GEMINI_API_KEY: Optional[str] = None

@@ -19,6 +19,7 @@ export function App() {
   const [lastRefreshed, setLastRefreshed] = useState<string>(new Date().toISOString());
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
+  const [feedStatus, setFeedStatus] = useState<string>('LIVE FEED');
   const [activeConflictsCount, setActiveConflictsCount] = useState<number>(0);
   const [unreadAlertsCount, setUnreadAlertsCount] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -34,9 +35,15 @@ export function App() {
 
       if (health.status === 'fulfilled') {
         setHealthData(health.value);
+        if (health.value?.news_api?.feed_status) {
+          setFeedStatus(health.value.news_api.feed_status);
+        }
       }
       if (dashboardStats.status === 'fulfilled') {
         setActiveConflictsCount(dashboardStats.value.active_conflicts_count || 0);
+        if (dashboardStats.value.feed_status) {
+          setFeedStatus(dashboardStats.value.feed_status);
+        }
       }
       if (unreadAlerts.status === 'fulfilled') {
         setUnreadAlertsCount(unreadAlerts.value.length || 0);
@@ -61,6 +68,9 @@ export function App() {
     try {
       const res = await api.refreshNews();
       setLastRefreshed(new Date().toISOString());
+      if (res.feed_status) {
+        setFeedStatus(res.feed_status);
+      }
       await checkHealthAndStats();
       showToast(`Refreshed ${res.articles_count || 0} articles & synchronized sentiment metrics.`);
     } catch (err: any) {
@@ -69,7 +79,9 @@ export function App() {
     }
   };
 
-  const isDemo = healthData?.news_api?.has_key === false || healthData?.news_api?.status?.includes('Demo');
+  const isDemo =
+    feedStatus === 'DEMO DATA' ||
+    (Boolean(healthData?.news_api?.status?.includes('Demo')) && !healthData?.news_api?.status?.includes('Connected'));
   const modelStatus = healthData?.model?.status || 'ready';
 
   return (
@@ -79,6 +91,7 @@ export function App() {
         <Sidebar
           modelStatus={modelStatus}
           isDemo={isDemo}
+          feedStatus={feedStatus}
           isCollapsed={isCollapsed}
           setIsCollapsed={setIsCollapsed}
           mobileOpen={mobileOpen}
@@ -93,6 +106,7 @@ export function App() {
           <Navbar
             lastUpdated={lastRefreshed}
             isDemo={isDemo}
+            feedStatus={feedStatus}
             onRefresh={handleGlobalRefresh}
             onOpenMobileMenu={() => setMobileOpen(true)}
             onOpenBackendSettings={() => setShowBackendModal(true)}

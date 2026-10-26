@@ -8,7 +8,9 @@ import {
   SectorSentiment,
   AlertRecord,
   DataQualityReport,
-  AssistantChatResponse
+  AssistantChatResponse,
+  NewsResponse,
+  FeedStatus
 } from '../types';
 import {
   MOCK_ARTICLES,
@@ -67,6 +69,8 @@ function setOfflineStatus(offline: boolean) {
     listeners.forEach((cb) => cb(isOfflineMode));
   }
 }
+
+let cachedLiveNewsResponse: NewsResponse | null = null;
 
 export const api = {
   getBaseUrl: (): string => currentBaseUrl,
@@ -147,53 +151,76 @@ export const api = {
       setOfflineStatus(false);
       return res.data;
     } catch (err) {
-      console.warn('Backend unavailable for dashboard stats. Falling back to demo intelligence:', err);
+      console.warn('Backend unavailable for dashboard stats:', err);
       setOfflineStatus(true);
       return {
         ...MOCK_DASHBOARD_STATS,
         is_demo_dataset: true,
+        feed_status: 'API ERROR',
       };
     }
   },
 
-  // News Explorer
+  // News Explorer with honest multi-state live / cached / error handling
   getNews: async (params?: {
     page?: number;
     page_size?: number;
     company?: string;
     sentiment?: string;
     query?: string;
-  }) => {
+    today_only?: boolean;
+    date?: string;
+  }): Promise<NewsResponse> => {
     try {
-      const res = await client.get('/api/news', { params });
+      const res = await client.get<NewsResponse>('/api/news', { params });
       setOfflineStatus(false);
+      if (res.data && !res.data.is_demo_dataset && res.data.articles && res.data.articles.length > 0) {
+        cachedLiveNewsResponse = res.data;
+      }
       return res.data;
-    } catch (err) {
-      console.warn('Backend unavailable for news. Falling back to demo data:', err);
+    } catch (err: any) {
+      console.warn('Backend unavailable for news:', err);
       setOfflineStatus(true);
 
-      let items = [...MOCK_ARTICLES];
-      if (params?.company && params.company !== 'All Companies') {
-        items = items.filter((a) => a.company.toLowerCase() === params.company!.toLowerCase());
-      }
-      if (params?.sentiment && params.sentiment !== 'all') {
-        items = items.filter((a) => a.sentiment?.toLowerCase() === params.sentiment!.toLowerCase());
-      }
-      if (params?.query) {
-        const q = params.query.toLowerCase();
-        items = items.filter((a) => a.title.toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q));
+      // If we previously fetched live data, return cached genuine results with clear stale-data indicator
+      if (cachedLiveNewsResponse && cachedLiveNewsResponse.articles.length > 0) {
+        let items = [...cachedLiveNewsResponse.articles];
+        if (params?.company && params.company !== 'All Companies') {
+          items = items.filter((a) => a.company.toLowerCase() === params.company!.toLowerCase());
+        }
+        if (params?.sentiment && params.sentiment !== 'all') {
+          items = items.filter((a) => a.sentiment?.toLowerCase() === params.sentiment!.toLowerCase());
+        }
+        if (params?.query) {
+          const q = params.query.toLowerCase();
+          items = items.filter((a) => a.title.toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q));
+        }
+
+        const page = params?.page || 1;
+        const pageSize = params?.page_size || 12;
+        const paginated = items.slice((page - 1) * pageSize, page * pageSize);
+
+        return {
+          ...cachedLiveNewsResponse,
+          articles: paginated,
+          total_count: items.length,
+          page,
+          page_size: pageSize,
+          is_demo_dataset: false,
+          feed_status: 'CACHED LIVE DATA',
+        };
       }
 
-      const page = params?.page || 1;
-      const pageSize = params?.page_size || 12;
-      const paginated = items.slice((page - 1) * pageSize, page * pageSize);
-
+      // If no real news is available, return an honest API ERROR state with empty list.
+      // Do not silently substitute demo articles and label them as live.
       return {
-        articles: paginated,
-        total_count: items.length,
-        page,
-        page_size: pageSize,
-        is_demo_dataset: true,
+        articles: [],
+        total_count: 0,
+        page: params?.page || 1,
+        page_size: params?.page_size || 12,
+        is_demo_dataset: false,
+        feed_status: 'API ERROR',
+        error_message: err?.response?.data?.detail || err?.message || 'Financial news service is currently unreachable.',
       };
     }
   },
@@ -203,14 +230,9 @@ export const api = {
       const res = await client.post('/api/news/refresh');
       setOfflineStatus(false);
       return res.data;
-    } catch (err) {
+    } catch (err: any) {
       setOfflineStatus(true);
-      return {
-        message: 'Refreshed 15 demo articles in standalone mode.',
-        articles_count: MOCK_ARTICLES.length,
-        new_alerts_count: 0,
-        is_demo_dataset: true,
-      };
+      throw new Error(err?.response?.data?.detail || err?.message || 'Failed to refresh news feed from backend.');
     }
   },
 

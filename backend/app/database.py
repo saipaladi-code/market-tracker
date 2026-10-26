@@ -134,9 +134,58 @@ class DatabaseManager:
             self._write_local_db(db_data)
             return str(doc_id or cid or len(items))
 
-    def find(self, collection_name: str, filter_dict: Optional[Dict[str, Any]] = None, limit: int = 100) -> List[Dict[str, Any]]:
+    def bulk_upsert(self, collection_name: str, documents: List[Dict[str, Any]], key_field: str = "canonical_id") -> int:
+        """High-speed bulk upsert across MongoDB Atlas and local JSON storage."""
+        if not documents:
+            return 0
         if self.is_cloud and self.db is not None:
-            cursor = self.db[collection_name].find(filter_dict or {}).limit(limit)
+            try:
+                from pymongo import ReplaceOne
+                operations = []
+                for doc in documents:
+                    doc_copy = dict(doc)
+                    if "_id" not in doc_copy and "id" in doc_copy:
+                        doc_copy["_id"] = doc_copy["id"]
+                    val = doc_copy.get(key_field) or doc_copy.get("_id")
+                    if val:
+                        operations.append(ReplaceOne({key_field: val}, doc_copy, upsert=True))
+                if operations:
+                    res = self.db[collection_name].bulk_write(operations, ordered=False)
+                    return (res.upserted_count or 0) + (res.modified_count or 0)
+                return 0
+            except Exception as e:
+                logger.warning(f"MongoDB bulk write notice: {e}. Falling back to iterative insert.")
+                count = 0
+                for d in documents:
+                    self.insert_one(collection_name, d)
+                    count += 1
+                return count
+        else:
+            db_data = self._read_local_db()
+            items = db_data.setdefault(collection_name, [])
+            index_by_key = {}
+            for idx, it in enumerate(items):
+                k = it.get(key_field) or it.get("id") or it.get("_id")
+                if k:
+                    index_by_key[k] = idx
+            for doc in documents:
+                doc_copy = dict(doc)
+                k = doc_copy.get(key_field) or doc_copy.get("id") or doc_copy.get("_id")
+                if k and k in index_by_key:
+                    items[index_by_key[k]] = doc_copy
+                else:
+                    items.append(doc_copy)
+                    if k:
+                        index_by_key[k] = len(items) - 1
+            self._write_local_db(db_data)
+            return len(documents)
+
+    def find(self, collection_name: str, filter_dict: Optional[Dict[str, Any]] = None, limit: int = 100, sort: Optional[List[tuple]] = None) -> List[Dict[str, Any]]:
+        if self.is_cloud and self.db is not None:
+            cursor = self.db[collection_name].find(filter_dict or {})
+            if sort:
+                cursor = cursor.sort(sort)
+            cursor = cursor.limit(limit)
             results = []
             for doc in cursor:
                 doc["_id"] = str(doc.get("_id"))
@@ -146,18 +195,37 @@ class DatabaseManager:
             db_data = self._read_local_db()
             items = db_data.get(collection_name, [])
             if not filter_dict:
-                return items[:limit]
-            
-            filtered = []
-            for item in items:
-                matches = True
-                for k, v in filter_dict.items():
-                    if item.get(k) != v:
-                        matches = False
-                        break
-                if matches:
-                    filtered.append(item)
+                filtered = list(items)
+            else:
+                filtered = []
+                for item in items:
+                    matches = True
+                    for k, v in filter_dict.items():
+                        if item.get(k) != v:
+                            matches = False
+                            break
+                    if matches:
+                        filtered.append(item)
+            if sort:
+                for key, direction in reversed(sort):
+                    filtered = sorted(filtered, key=lambda x: str(x.get(key, "")), reverse=(direction == -1))
             return filtered[:limit]
+
+    def delete_many(self, collection_name: str, filter_dict: Dict[str, Any]) -> int:
+        """Deletes matching documents from collection."""
+        if self.is_cloud and self.db is not None:
+            res = self.db[collection_name].delete_many(filter_dict)
+            return res.deleted_count
+        else:
+            db_data = self._read_local_db()
+            items = db_data.get(collection_name, [])
+            initial_count = len(items)
+            db_data[collection_name] = [
+                item for item in items
+                if not all(item.get(k) == v for k, v in filter_dict.items())
+            ]
+            self._write_local_db(db_data)
+            return initial_count - len(db_data[collection_name])
 
     def find_one(self, collection_name: str, filter_dict: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         results = self.find(collection_name, filter_dict, limit=1)

@@ -16,6 +16,7 @@ import {
 interface NavbarProps {
   lastUpdated?: string;
   isDemo?: boolean;
+  feedStatus?: string;
   onRefresh?: () => Promise<void>;
   onOpenMobileMenu?: () => void;
   onOpenBackendSettings?: () => void;
@@ -48,6 +49,7 @@ const TRACKED_COMPANIES = [
 export const Navbar: React.FC<NavbarProps> = ({
   lastUpdated,
   isDemo = false,
+  feedStatus = 'LIVE FEED',
   onRefresh,
   onOpenMobileMenu,
   onOpenBackendSettings,
@@ -169,15 +171,25 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Right Controls: Freshness, Mode, Refresh, Profile */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Data Mode Indicator */}
-        {isDemo ? (
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] font-medium" title="Demonstration dataset active due to missing or exhausted NewsAPI key">
-            <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden md:inline font-mono">DEMO DATASET</span>
-          </div>
-        ) : (
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-medium" title="Live financial news stream active via NewsAPI">
+        {feedStatus === 'LIVE FEED' || (!isDemo && feedStatus !== 'DEMO DATA' && feedStatus !== 'API ERROR') ? (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-medium" title="Live financial news stream active">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="hidden md:inline font-mono">LIVE FEED</span>
+          </div>
+        ) : feedStatus === 'CACHED LIVE DATA' ? (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[11px] font-medium" title="Displaying cached genuine articles">
+            <Clock className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden md:inline font-mono">CACHED LIVE DATA</span>
+          </div>
+        ) : feedStatus === 'API ERROR' ? (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-300 text-[11px] font-medium" title="News provider or backend is unreachable">
+            <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+            <span className="hidden md:inline font-mono">API ERROR</span>
+          </div>
+        ) : (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] font-medium" title="Demonstration dataset active">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden md:inline font-mono">DEMO DATASET</span>
           </div>
         )}
 

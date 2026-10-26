@@ -139,7 +139,10 @@ def get_health():
         "database": db_status,
         "news_api": {
             "status": news_service.news_api_status,
-            "has_key": bool(settings.NEWS_API_KEY)
+            "has_key": bool(settings.NEWS_API_KEY),
+            "feed_status": news_service.get_feed_status(),
+            "provider": getattr(settings, "NEWS_PROVIDER", "auto"),
+            "last_synced": news_service.get_last_synced_iso()
         },
         "gemini_assistant": {
             "active": gemini_assistant_service.is_active,
@@ -204,7 +207,8 @@ def get_dashboard_stats():
         "active_conflicts_count": len(conflicts),
         "active_conflicts": conflicts[:3],
         "is_demo_dataset": is_demo_dataset,
-        "last_updated": datetime.utcnow().isoformat() + "Z",
+        "feed_status": news_service.get_feed_status(),
+        "last_updated": news_service.get_last_synced_iso(),
         "model_status": "ready" if finbert_service.is_ready() else finbert_service.status
     }
 
@@ -214,30 +218,42 @@ def get_news(
     page_size: int = Query(default=20, ge=1, le=100),
     company: Optional[str] = Query(default=None),
     sentiment: Optional[str] = Query(default=None),
-    query: Optional[str] = Query(default=None)
+    query: Optional[str] = Query(default=None),
+    today_only: Optional[bool] = Query(default=None),
+    date: Optional[str] = Query(default=None)
 ):
-    articles, total, is_demo = news_service.query_articles(
-        query=query, company=company, sentiment=sentiment, page=page, page_size=page_size
+    articles, total, is_demo, feed_status, last_synced, filter_date, provider = news_service.query_articles(
+        query=query, company=company, sentiment=sentiment, page=page, page_size=page_size,
+        today_only=today_only, date=date
     )
     return NewsResponse(
         articles=articles,
         total_count=total,
         page=page,
         page_size=page_size,
-        is_demo_dataset=is_demo
+        is_demo_dataset=is_demo,
+        feed_status=feed_status,
+        last_synced=last_synced,
+        filter_date=filter_date,
+        news_provider=provider
     )
 
 @app.post("/api/news/search", response_model=NewsResponse)
 def search_news(req: NewsSearchRequest):
-    articles, total, is_demo = news_service.query_articles(
-        query=req.query, company=req.company, sentiment=req.sentiment, page=req.page, page_size=req.page_size
+    articles, total, is_demo, feed_status, last_synced, filter_date, provider = news_service.query_articles(
+        query=req.query, company=req.company, sentiment=req.sentiment, page=req.page, page_size=req.page_size,
+        today_only=req.today_only, date=req.date
     )
     return NewsResponse(
         articles=articles,
         total_count=total,
         page=req.page,
         page_size=req.page_size,
-        is_demo_dataset=is_demo
+        is_demo_dataset=is_demo,
+        feed_status=feed_status,
+        last_synced=last_synced,
+        filter_date=filter_date,
+        news_provider=provider
     )
 
 @app.post("/api/news/refresh")
@@ -249,7 +265,9 @@ def refresh_news():
         "message": "News refreshed and analyzed successfully.",
         "articles_count": len(articles),
         "new_alerts_count": len(new_alerts),
-        "is_demo_dataset": any(a.get("is_demo") for a in articles)
+        "is_demo_dataset": any(a.get("is_demo") for a in articles) if articles else bool(settings.USE_DEMO_DATA),
+        "feed_status": news_service.get_feed_status(),
+        "last_synced": news_service.get_last_synced_iso()
     }
 
 @app.get("/api/news/{article_id}/explain", response_model=SentimentAnalysisResult)
