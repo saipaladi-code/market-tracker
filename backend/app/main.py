@@ -3,7 +3,7 @@ import asyncio
 import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, Query, Path, Request, Response, Depends
+from fastapi import FastAPI, HTTPException, Query, Path, Request, Response, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
@@ -345,12 +345,13 @@ def search_news(req: NewsSearchRequest, current_user: dict = Depends(get_current
     )
 
 @app.api_route("/api/news/refresh", methods=["GET", "POST"])
-def refresh_news(current_user: dict = Depends(get_current_user)):
-    """Forces fresh retrieval and updates alerts & history."""
-    articles = news_service.fetch_articles(force_refresh=True)
+def refresh_news(background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Triggers live ingestion in background to avoid gateway timeouts, and returns current articles."""
+    articles = news_service.fetch_articles(force_refresh=False)
+    background_tasks.add_task(news_service.ingest_live_news, force=True)
     new_alerts = alert_service.evaluate_and_generate_alerts(articles)
     return {
-        "message": "News refreshed and analyzed successfully.",
+        "message": "News refresh initiated and live feed synchronized.",
         "articles_count": len(articles),
         "new_alerts_count": len(new_alerts),
         "is_demo_dataset": any(a.get("is_demo") for a in articles) if articles else bool(settings.USE_DEMO_DATA),
