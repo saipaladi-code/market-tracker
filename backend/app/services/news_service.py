@@ -603,11 +603,14 @@ class NewsService:
             "Accept": "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8"
         }
 
-        for feed_cfg in feeds:
+        import concurrent.futures
+
+        def _fetch_single_feed(feed_cfg):
+            feed_items = []
             feed_url = feed_cfg["url"]
             try:
                 req = urllib.request.Request(feed_url, headers=headers)
-                with urllib.request.urlopen(req, timeout=6) as response:
+                with urllib.request.urlopen(req, timeout=5) as response:
                     xml_data = response.read()
                     root = ET.fromstring(xml_data)
                     items = root.findall(".//item")
@@ -643,7 +646,7 @@ class NewsService:
                         matched_company = self._infer_company(clean_title, clean_desc)
                         canonical_id = generate_canonical_id(clean_title, link)
 
-                        raw_articles.append({
+                        feed_items.append({
                             "id": f"art-{canonical_id[:12]}",
                             "canonical_id": canonical_id,
                             "title": clean_title,
@@ -656,6 +659,11 @@ class NewsService:
                         })
             except Exception as e:
                 logger.warning(f"Live RSS ingestion notice for feed '{feed_cfg.get('name')}': {e}")
+            return feed_items
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(feeds), 5)) as executor:
+            for feed_results in executor.map(_fetch_single_feed, feeds):
+                raw_articles.extend(feed_results)
 
         logger.info(f"Ingested {len(raw_articles)} raw genuine articles from financial RSS feeds.")
         return raw_articles
