@@ -761,11 +761,15 @@ class NewsService:
 
         # 5. Batch FinBERT inference for newly discovered genuine headlines
         if unclassified_articles:
-            headlines = [a["title"] for a in unclassified_articles]
-            logger.info(f"Executing FinBERT neural classification on {len(headlines)} fresh live headlines...")
+            # Bound synchronous neural inference to the top 10 fresh headlines to keep response latency < 8s.
+            # Remaining newly discovered headlines immediately receive Loughran-McDonald lexical analysis.
+            neural_slice = unclassified_articles[:10]
+            lexical_slice = unclassified_articles[10:]
+            headlines = [a["title"] for a in neural_slice]
+            logger.info(f"Executing FinBERT neural classification on {len(headlines)} fresh live headlines (and {len(lexical_slice)} via institutional fallback)...")
             try:
                 sentiment_results = finbert_service.predict_batch(headlines, validate_input=False)
-                for idx, article in enumerate(unclassified_articles):
+                for idx, article in enumerate(neural_slice):
                     if idx < len(sentiment_results):
                         res = sentiment_results[idx]
                         article["sentiment"] = res["sentiment"]
@@ -775,21 +779,32 @@ class NewsService:
                         article["engine_mode"] = res.get("engine_mode", finbert_service.engine_mode)
                         article["model_name"] = res.get("model_name", settings.MODEL_NAME)
                     else:
-                        article["sentiment"] = "neutral"
-                        article["confidence"] = 0.50
-                        article["scores"] = {"positive": 0.25, "negative": 0.25, "neutral": 0.50}
+                        lex = finbert_service._predict_lexical(article["title"], include_explanation=False)
+                        article["sentiment"] = lex["sentiment"]
+                        article["confidence"] = lex["confidence"]
+                        article["scores"] = lex["scores"]
                         article["is_fallback"] = True
-                        article["engine_mode"] = finbert_service.engine_mode
-                        article["model_name"] = settings.MODEL_NAME
+                        article["engine_mode"] = "lexical-fallback"
+                        article["model_name"] = lex["model_name"]
             except Exception as e:
                 logger.error(f"FinBERT batch inference error on live headlines: {e}")
-                for article in unclassified_articles:
-                    article["sentiment"] = "neutral"
-                    article["confidence"] = 0.50
-                    article["scores"] = {"positive": 0.25, "negative": 0.25, "neutral": 0.50}
+                for article in neural_slice:
+                    lex = finbert_service._predict_lexical(article["title"], include_explanation=False)
+                    article["sentiment"] = lex["sentiment"]
+                    article["confidence"] = lex["confidence"]
+                    article["scores"] = lex["scores"]
                     article["is_fallback"] = True
-                    article["engine_mode"] = finbert_service.engine_mode
-                    article["model_name"] = settings.MODEL_NAME
+                    article["engine_mode"] = "lexical-fallback"
+                    article["model_name"] = lex["model_name"]
+
+            for article in lexical_slice:
+                lex = finbert_service._predict_lexical(article["title"], include_explanation=False)
+                article["sentiment"] = lex["sentiment"]
+                article["confidence"] = lex["confidence"]
+                article["scores"] = lex["scores"]
+                article["is_fallback"] = True
+                article["engine_mode"] = "lexical-fallback"
+                article["model_name"] = lex["model_name"]
 
         # 6. Upsert genuine articles into database using high-speed bulk upsert
         db.bulk_upsert("news_articles", processed_articles, key_field="canonical_id")
