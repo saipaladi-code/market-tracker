@@ -55,7 +55,36 @@ export function getStoredApiUrl(): string {
   return 'http://localhost:8000';
 }
 
-let inMemoryToken: string | null = null;
+const AUTH_TOKEN_KEY = 'FIN_SENTIMENT_AUTH_TOKEN';
+const CACHE_NEWS_KEY = 'FIN_SENTIMENT_CACHED_NEWS';
+
+function getStoredAuthToken(): string | null {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function getStoredCachedNews(): NewsResponse | null {
+  try {
+    const raw = sessionStorage.getItem(CACHE_NEWS_KEY) || localStorage.getItem(CACHE_NEWS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function setStoredCachedNews(data: NewsResponse | null) {
+  try {
+    if (data && data.articles && data.articles.length > 0 && !data.is_demo_dataset) {
+      const serialized = JSON.stringify(data);
+      sessionStorage.setItem(CACHE_NEWS_KEY, serialized);
+      localStorage.setItem(CACHE_NEWS_KEY, serialized);
+    }
+  } catch {}
+}
+
+let inMemoryToken: string | null = getStoredAuthToken();
 let currentBaseUrl = getStoredApiUrl();
 const unauthorizedListeners: Array<() => void> = [];
 
@@ -79,8 +108,8 @@ function createAxiosClient(baseURL: string) {
     (error) => {
       if (error?.response?.status === 401) {
         const url = error.config?.url || '';
-        // Only trigger session expiration for non-auth requests
-        if (!url.includes('/api/auth/login') && !url.includes('/api/auth/register')) {
+        // Only trigger session expiration for non-auth requests (don't wipe session on login, register, demo, or initial me probe)
+        if (!url.includes('/api/auth/login') && !url.includes('/api/auth/register') && !url.includes('/api/auth/me') && !url.includes('/api/auth/demo')) {
           notifyUnauthorized();
         }
       }
@@ -103,7 +132,7 @@ function setOfflineStatus(offline: boolean) {
   }
 }
 
-let cachedLiveNewsResponse: NewsResponse | null = null;
+let cachedLiveNewsResponse: NewsResponse | null = getStoredCachedNews();
 
 export const api = {
   getBaseUrl: (): string => currentBaseUrl,
@@ -126,6 +155,13 @@ export const api = {
 
   setAuthToken: (token: string | null) => {
     inMemoryToken = token;
+    try {
+      if (token) {
+        localStorage.setItem(AUTH_TOKEN_KEY, token);
+      } else {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+      }
+    } catch {}
     client = createAxiosClient(currentBaseUrl);
   },
 
@@ -141,12 +177,27 @@ export const api = {
   register: async (data: { full_name: string; email: string; password: string }): Promise<AuthResponse> => {
     const res = await client.post<AuthResponse>('/api/auth/register', data);
     setOfflineStatus(false);
+    if (res.data?.token) {
+      api.setAuthToken(res.data.token);
+    }
     return res.data;
   },
 
   login: async (data: { email: string; password: string; remember_me?: boolean }): Promise<AuthResponse> => {
     const res = await client.post<AuthResponse>('/api/auth/login', data);
     setOfflineStatus(false);
+    if (res.data?.token) {
+      api.setAuthToken(res.data.token);
+    }
+    return res.data;
+  },
+
+  demoLogin: async (): Promise<AuthResponse> => {
+    const res = await client.post<AuthResponse>('/api/auth/demo');
+    setOfflineStatus(false);
+    if (res.data?.token) {
+      api.setAuthToken(res.data.token);
+    }
     return res.data;
   },
 
@@ -161,8 +212,7 @@ export const api = {
       const res = await client.post<MessageResponse>('/api/auth/logout');
       return res.data;
     } finally {
-      inMemoryToken = null;
-      client = createAxiosClient(currentBaseUrl);
+      api.setAuthToken(null);
     }
   },
 
@@ -231,10 +281,14 @@ export const api = {
     } catch (err) {
       console.warn('Backend unavailable for dashboard stats:', err);
       setOfflineStatus(true);
+      const effectiveCache = cachedLiveNewsResponse || getStoredCachedNews();
+      const status: FeedStatus = (effectiveCache && effectiveCache.articles && effectiveCache.articles.length > 0)
+        ? 'CACHED LIVE DATA'
+        : 'API ERROR';
       return {
         ...MOCK_DASHBOARD_STATS,
-        is_demo_dataset: true,
-        feed_status: 'API ERROR',
+        is_demo_dataset: false,
+        feed_status: status,
       };
     }
   },
@@ -254,15 +308,17 @@ export const api = {
       setOfflineStatus(false);
       if (res.data && !res.data.is_demo_dataset && res.data.articles && res.data.articles.length > 0) {
         cachedLiveNewsResponse = res.data;
+        setStoredCachedNews(res.data);
       }
       return res.data;
     } catch (err: any) {
       console.warn('Backend unavailable for news:', err);
       setOfflineStatus(true);
 
+      const effectiveCache = cachedLiveNewsResponse || getStoredCachedNews();
       // If we previously fetched live data, return cached genuine results with clear stale-data indicator
-      if (cachedLiveNewsResponse && cachedLiveNewsResponse.articles.length > 0) {
-        let items = [...cachedLiveNewsResponse.articles];
+      if (effectiveCache && effectiveCache.articles && effectiveCache.articles.length > 0) {
+        let items = [...effectiveCache.articles];
         if (params?.company && params.company !== 'All Companies') {
           items = items.filter((a) => a.company.toLowerCase() === params.company!.toLowerCase());
         }
@@ -279,7 +335,7 @@ export const api = {
         const paginated = items.slice((page - 1) * pageSize, page * pageSize);
 
         return {
-          ...cachedLiveNewsResponse,
+          ...effectiveCache,
           articles: paginated,
           total_count: items.length,
           page,

@@ -102,6 +102,8 @@ class FinBERTService:
             cls._instance.precision = "bfloat16"
             cls._instance.gemini_model = None
             cls._instance._active_key_index = 0
+            cls._instance._hf_cooldown_until = 0.0
+            cls._instance._hf_last_reason = None
         return cls._instance
 
     def load_model(self) -> bool:
@@ -764,10 +766,21 @@ class FinBERTService:
             if not cleaned_texts:
                 raise FinancialValidationError("HEADLINE_EMPTY", "All input texts are empty.")
 
+        # Fast path: If engine is lexical-fallback, batch predict with lexical fallback immediately
+        if self.engine_mode == "lexical-fallback":
+            reason = self.error_message or "Rule-based lexical fallback active."
+            return [self._predict_lexical(t, include_explanation=False, reason=reason) for t in cleaned_texts]
+
         results = []
-        for text in cleaned_texts:
+        for idx, text in enumerate(cleaned_texts):
             res = self.predict_one(text, include_explanation=False, validate_input=False)
             results.append(res)
+            # If the engine switched to lexical-fallback during this batch, process all remaining items via lexical fallback immediately
+            if self.engine_mode == "lexical-fallback":
+                reason = self.error_message or "Rule-based lexical fallback active."
+                for remaining_text in cleaned_texts[idx + 1:]:
+                    results.append(self._predict_lexical(remaining_text, include_explanation=False, reason=reason))
+                break
         return results
 
 

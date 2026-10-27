@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { TrendingUp, Mail, Lock, Eye, EyeOff, AlertCircle, Loader2, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { login } = useAuth();
+  const { login, demoLogin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -189,6 +189,34 @@ export const LoginPage: React.FC = () => {
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
+            </button>
+
+            {/* Quick Demo Sign-In Button */}
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-navy-750"></div>
+              <span className="flex-shrink mx-2 text-[10px] uppercase font-mono text-slate-500">or</span>
+              <div className="flex-grow border-t border-navy-750"></div>
+            </div>
+
+            <button
+              type="button"
+              disabled={loading}
+              onClick={async () => {
+                try {
+                  setLoading(true);
+                  setFormError(null);
+                  await demoLogin();
+                  navigate(redirectTarget, { replace: true });
+                } catch (err: any) {
+                  setFormError(err.message || 'Demo analyst login failed.');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="w-full py-2.5 px-4 bg-navy-800/80 hover:bg-navy-800 text-cyan-400 hover:text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:border-cyan-400/50"
+            >
+              <ShieldCheck className="w-4 h-4 text-cyan-400" />
+              <span>Instant Demo Analyst Sign-In (1-Click)</span>
             </button>
           </form>
 

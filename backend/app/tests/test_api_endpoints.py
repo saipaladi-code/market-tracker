@@ -145,3 +145,51 @@ def test_company_and_sentiment_filtering_scenarios(monkeypatch):
     assert r_reset.status_code == 200
     assert r_reset.json()["total_count"] == total_unfiltered
 
+def test_demo_analyst_login_and_authenticated_news_access():
+    """Verifies instant demo analyst sign-in and Bearer-authenticated news retrieval."""
+    res = client.post("/api/auth/demo")
+    assert res.status_code == 200
+    data = res.json()
+    assert "token" in data
+    assert data["user"]["email"] == "demo.analyst@finsentiment.ai"
+    assert len(data["token"]) > 20
+
+    token = data["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Verify access to protected news endpoint
+    news_res = client.get("/api/news", headers=headers)
+    assert news_res.status_code == 200
+    news_data = news_res.json()
+    assert "articles" in news_data
+    assert "feed_status" in news_data
+    assert news_data["feed_status"] in ("LIVE FEED", "CACHED LIVE DATA")
+
+    # Verify access to dashboard stats
+    stats_res = client.get("/api/dashboard/stats", headers=headers)
+    assert stats_res.status_code == 200
+    assert "total_articles" in stats_res.json()
+
+def test_news_refresh_endpoints_support_get_and_post():
+    """Ensures /api/news/refresh responds on both POST and GET without 405 Method Not Allowed."""
+    from unittest.mock import patch
+    from app.services.news_service import news_service
+
+    auth_res = client.post("/api/auth/demo")
+    token = auth_res.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch.object(news_service, "fetch_articles", return_value=[{"title": "Test news", "is_demo": False}]):
+        # Test POST /api/news/refresh
+        res_post = client.post("/api/news/refresh", headers=headers)
+        assert res_post.status_code == 200
+        assert "message" in res_post.json()
+        assert "feed_status" in res_post.json()
+
+        # Test GET /api/news/refresh
+        res_get = client.get("/api/news/refresh", headers=headers)
+        assert res_get.status_code == 200
+        assert "message" in res_get.json()
+        assert "feed_status" in res_get.json()
+
+

@@ -89,6 +89,13 @@ async def _warmup_background():
     except Exception as e:
         logger.error(f"Error during background sentiment engine initialization: {e}")
 
+    try:
+        logger.info("Pre-warming live news cache in background...")
+        articles = news_service.fetch_articles()
+        logger.info(f"News cache pre-warmed: {len(articles)} articles available (Status: {news_service.get_feed_status()}).")
+    except Exception as e:
+        logger.error(f"Error pre-warming news cache: {e}")
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("Initializing Financial Market Sentiment Tracker API (non-blocking)...")
@@ -206,6 +213,26 @@ def reset_password(req: ResetPasswordRequest):
     """Verifies single-use token and establishes updated password."""
     return auth_service.reset_password(req.token, req.new_password)
 
+@app.post("/api/auth/demo", response_model=AuthResponse)
+def demo_login(response: Response):
+    """Provides instant 1-click evaluation access for analysts and recruiters."""
+    demo_email = "demo.analyst@finsentiment.ai"
+    user = db.find_user_by_email(demo_email)
+    if not user:
+        try:
+            res = auth_service.register_user(
+                full_name="Lead Market Analyst",
+                email=demo_email,
+                password="DemoPassword123!"
+            )
+            set_auth_cookie(response, res["token"], remember_me=True)
+            return res
+        except Exception:
+            pass
+    res = auth_service.login_user(demo_email, "DemoPassword123!", remember_me=True)
+    set_auth_cookie(response, res["token"], remember_me=True)
+    return res
+
 
 # ==============================================================================
 # PROTECTED ANALYTICS & MARKET INTELLIGENCE ENDPOINTS
@@ -317,7 +344,7 @@ def search_news(req: NewsSearchRequest, current_user: dict = Depends(get_current
         news_provider=provider
     )
 
-@app.post("/api/news/refresh")
+@app.api_route("/api/news/refresh", methods=["GET", "POST"])
 def refresh_news(current_user: dict = Depends(get_current_user)):
     """Forces fresh retrieval and updates alerts & history."""
     articles = news_service.fetch_articles(force_refresh=True)

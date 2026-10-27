@@ -7,6 +7,7 @@ interface AuthContextType {
   isLoading: boolean;
   error: string | null;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  demoLogin: () => Promise<void>;
   register: (fullName: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkSession: () => Promise<void>;
@@ -62,6 +63,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const demoLogin = async () => {
+    setError(null);
+    try {
+      const res = await api.demoLogin();
+      setUser(res.user);
+      api.setAuthToken(res.token);
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.detail ||
+        err?.message ||
+        'Demo analyst login failed. Please retry.';
+      setError(msg);
+      throw new Error(msg);
+    }
+  };
+
   const register = async (fullName: string, email: string, password: string) => {
     setError(null);
     try {
@@ -96,6 +113,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isLoading,
         error,
         login,
+        demoLogin,
         register,
         logout,
         checkSession,
