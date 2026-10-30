@@ -39,6 +39,10 @@ from app.models.metals_models import (
 )
 from app.services.metals_service import metals_service
 from app.services.translation_service import translation_service
+from app.models.trading_models import (
+    CompanyTradingRoute, SupportedInstrumentsResponse, BrokerCapabilitiesResponse
+)
+from app.services.broker_routing_service import broker_routing_service
 
 # Configure logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -698,6 +702,33 @@ def translate_content(req: TranslateRequest):
 def get_translation_languages():
     """Returns all supported languages with native names and text directions."""
     return translation_service.get_supported_languages()
+
+
+
+# -------------------------------------------------------------
+# BROKER TRADING ROUTING ENDPOINTS
+# -------------------------------------------------------------
+@app.get("/api/trading/route", response_model=CompanyTradingRoute)
+def get_trading_route(
+    company: Optional[str] = Query(None, description="Company name or alias"),
+    ticker: Optional[str] = Query(None, description="Stock ticker symbol")
+):
+    """
+    Resolves company/ticker to verified instrument and provides authorized broker destination:
+    Upstox for Indian equities (NSE/BSE), Interactive Brokers (IBKR) for US equities (NASDAQ/NYSE).
+    """
+    query = ticker or company
+    return broker_routing_service.get_trading_route(query)
+
+@app.get("/api/trading/supported-instruments", response_model=SupportedInstrumentsResponse)
+def get_supported_instruments():
+    """Lists all verified Indian and international tradable instruments with official coverage."""
+    return broker_routing_service.get_all_supported_instruments()
+
+@app.get("/api/trading/brokers", response_model=BrokerCapabilitiesResponse)
+def get_broker_capabilities():
+    """Returns official broker partner capabilities, market coverage, and compliance statements."""
+    return broker_routing_service.get_broker_capabilities()
 
 if __name__ == "__main__":
     import uvicorn

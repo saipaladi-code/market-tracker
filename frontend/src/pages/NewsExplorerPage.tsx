@@ -15,12 +15,15 @@ import {
   SlidersHorizontal,
   Building2,
   Languages,
+  TrendingUp,
   X
 } from 'lucide-react';
 import { api } from '../services/api';
 import { Article, SentimentAnalysisResult } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
 import { ExplainModal } from '../components/ExplainModal';
+import { TradeRoutingModal } from '../components/TradeRoutingModal';
+import { resolveVerifiedTicker } from '../utils/tickerLookup';
 import { getCanonicalSentimentResult } from '../utils/canonicalSentiment';
 import { useTranslation } from 'react-i18next';
 
@@ -35,6 +38,16 @@ const COMPANIES = [
   { label: 'JPMorgan Chase (JPM)', value: 'JPMorgan Chase' },
   { label: 'Pfizer (PFE)', value: 'Pfizer' },
   { label: 'ExxonMobil (XOM)', value: 'ExxonMobil' },
+  { label: 'Reliance (RELIANCE)', value: 'Reliance' },
+  { label: 'Tata Motors (TATAMOTORS)', value: 'Tata Motors' },
+  { label: 'TCS (TCS)', value: 'TCS' },
+  { label: 'Infosys (INFY)', value: 'Infosys' },
+  { label: 'HDFC Bank (HDFCBANK)', value: 'HDFC Bank' },
+  { label: 'ICICI Bank (ICICIBANK)', value: 'ICICI Bank' },
+  { label: 'SBI (SBIN)', value: 'SBIN' },
+  { label: 'Bharti Airtel (BHARTIARTL)', value: 'Bharti Airtel' },
+  { label: 'L&T (LT)', value: 'Larsen & Toubro' },
+  { label: 'Wipro (WIPRO)', value: 'Wipro' },
 ];
 
 const SENTIMENTS = [
@@ -98,6 +111,10 @@ export const NewsExplorerPage: React.FC = () => {
   const [selectedExplainResult, setSelectedExplainResult] = useState<SentimentAnalysisResult | null>(null);
   const [explainLoading, setExplainLoading] = useState(false);
   const [explainError, setExplainError] = useState<string | null>(null);
+
+  // Trade routing modal state
+  const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
+  const [tradeModalOpen, setTradeModalOpen] = useState(false);
 
   const fetchNews = async () => {
     try {
@@ -431,6 +448,7 @@ export const NewsExplorerPage: React.FC = () => {
             const tr = translations[art.id];
             const isTranslated = tr && tr.isTranslated && tr.text;
             const headlineText = isTranslated ? tr.text : art.title;
+            const verifiedTicker = resolveVerifiedTicker(art.company, art.ticker);
 
             return (
               <div
@@ -446,6 +464,11 @@ export const NewsExplorerPage: React.FC = () => {
                       <span className="font-bold text-xs text-white px-2 py-0.5 rounded bg-navy-800 border border-navy-700 font-mono">
                         {art.company}
                       </span>
+                      {verifiedTicker && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold">
+                          {verifiedTicker}
+                        </span>
+                      )}
                       {isDuplicate && (
                         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
                           Duplicate
@@ -498,6 +521,19 @@ export const NewsExplorerPage: React.FC = () => {
                         <span>{tr?.loading ? 'Translating...' : isTranslated ? 'Original' : 'Translate'}</span>
                       </button>
                     )}
+
+                    {/* Trade Button */}
+                    <button
+                      onClick={() => {
+                        setSelectedTradeArticle(art);
+                        setTradeModalOpen(true);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                      title={`Trade ${art.company} via verified broker`}
+                    >
+                      <TrendingUp className="w-3 h-3 text-emerald-400" />
+                      <span>Trade</span>
+                    </button>
 
                     {/* Explain Button */}
                     <button
@@ -556,6 +592,16 @@ export const NewsExplorerPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Broker Trade Routing Modal */}
+      <TradeRoutingModal
+        isOpen={tradeModalOpen}
+        onClose={() => {
+          setTradeModalOpen(false);
+          setSelectedTradeArticle(null);
+        }}
+        article={selectedTradeArticle}
+      />
 
       {/* XAI Attribution Explain Modal */}
       <ExplainModal

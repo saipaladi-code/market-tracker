@@ -19,7 +19,10 @@ import {
   MetalsNewsResponse,
   MetalsSentimentSummary,
   MetalsHistoryResponse,
-  TranslateResponse
+  TranslateResponse,
+  BrokerDestination,
+  CompanyTradingRoute,
+  SupportedInstrumentsResponse
 } from '../types';
 import {
   MOCK_ARTICLES,
@@ -679,5 +682,24 @@ export const api = {
       setOfflineStatus(true);
       return simulateAssistantChat(message, companyFocus);
     }
+  },
+
+  // Broker Trading Routing
+  getTradingRoute: async (company?: string, ticker?: string): Promise<CompanyTradingRoute> => {
+    const params: Record<string, string> = {};
+    if (company) params.company = company;
+    if (ticker) params.ticker = ticker;
+    const res = await client.get<CompanyTradingRoute>('/api/trading/route', { params });
+    return res.data;
+  },
+
+  getSupportedTradingInstruments: async (): Promise<SupportedInstrumentsResponse> => {
+    const res = await client.get<SupportedInstrumentsResponse>('/api/trading/supported-instruments');
+    return res.data;
+  },
+
+  getBrokerCapabilities: async () => {
+    const res = await client.get('/api/trading/brokers');
+    return res.data;
   },
 };

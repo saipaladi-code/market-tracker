@@ -43,6 +43,7 @@ class Article(BaseModel):
     source: str
     published_at: str
     company: str
+    ticker: Optional[str] = None
     sentiment: Optional[str] = None
     confidence: Optional[float] = None
     scores: Optional[SentimentScores] = None

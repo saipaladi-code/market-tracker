@@ -40,6 +40,8 @@ import { api } from '../services/api';
 import { DashboardStats, Article } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
 import { BackendConfigModal } from '../components/BackendConfigModal';
+import { TradeRoutingModal } from '../components/TradeRoutingModal';
+import { resolveVerifiedTicker } from '../utils/tickerLookup';
 import { MOCK_DASHBOARD_STATS, MOCK_ARTICLES, MOCK_HISTORY } from '../services/mockData';
 
 const COLORS = {
@@ -55,6 +57,8 @@ export const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [timeframe, setTimeframe] = useState<'live' | '24h' | '7d' | 'all'>('live');
   const [showBackendModal, setShowBackendModal] = useState(false);
+  const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
+  const [tradeModalOpen, setTradeModalOpen] = useState(false);
   const navigate = useNavigate();
 
   const loadData = async () => {
@@ -600,39 +604,72 @@ export const DashboardPage: React.FC = () => {
               No recent classified financial articles recorded. Trigger news refresh to ingest market headlines.
             </div>
           ) : (
-            recentNews.map((art) => (
-            <div
-              key={art.id}
-              className="bg-navy-950/90 border border-navy-800/90 rounded-xl p-4 flex flex-col justify-between space-y-3 hover:border-navy-700 hover:shadow-md transition-all"
-            >
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-white px-2 py-0.5 rounded bg-navy-850 border border-navy-750 font-mono text-[11px]">
-                    {art.company}
-                  </span>
-                  <SentimentBadge sentiment={art.sentiment} confidence={art.confidence} size="xs" />
-                </div>
-                <h4 className="text-xs font-medium text-slate-100 line-clamp-2 leading-snug">
-                  {art.title}
-                </h4>
-              </div>
+            recentNews.map((art) => {
+              const verifiedTicker = resolveVerifiedTicker(art.company, art.ticker);
 
-              <div className="pt-2 border-t border-navy-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                <span className="truncate max-w-[140px]">{art.source}</span>
-                <a
-                  href={art.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
+              return (
+                <div
+                  key={art.id}
+                  className="bg-navy-950/90 border border-navy-800/90 rounded-xl p-4 flex flex-col justify-between space-y-3 hover:border-navy-700 hover:shadow-md transition-all"
                 >
-                  <span>Source</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            </div>
-          )))}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-white px-2 py-0.5 rounded bg-navy-850 border border-navy-750 font-mono text-[11px]">
+                          {art.company}
+                        </span>
+                        {verifiedTicker && (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold">
+                            {verifiedTicker}
+                          </span>
+                        )}
+                      </div>
+                      <SentimentBadge sentiment={art.sentiment} confidence={art.confidence} size="xs" />
+                    </div>
+                    <h4 className="text-xs font-medium text-slate-100 line-clamp-2 leading-snug">
+                      {art.title}
+                    </h4>
+                  </div>
+
+                  <div className="pt-2 border-t border-navy-800/80 flex items-center justify-between text-[11px] text-slate-400 gap-2">
+                    <span className="truncate max-w-[110px]">{art.source}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedTradeArticle(art);
+                          setTradeModalOpen(true);
+                        }}
+                        className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        title={`Trade ${art.company} via verified broker`}
+                      >
+                        <TrendingUp className="w-3 h-3 text-emerald-400" />
+                        <span>Trade</span>
+                      </button>
+                      <a
+                        href={art.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
+                      >
+                        <span>Source</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              );
+            }))}
         </div>
       </div>
+      {/* Broker Trade Routing Modal */}
+      <TradeRoutingModal
+        isOpen={tradeModalOpen}
+        onClose={() => {
+          setTradeModalOpen(false);
+          setSelectedTradeArticle(null);
+        }}
+        article={selectedTradeArticle}
+      />
     </div>
   );
 };

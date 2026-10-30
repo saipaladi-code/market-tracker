@@ -34,6 +34,7 @@ export interface Article {
   source: string;
   published_at: string;
   company: string;
+  ticker?: string;
   sentiment?: 'positive' | 'negative' | 'neutral';
   confidence?: number;
   scores?: SentimentScores;
@@ -348,4 +349,49 @@ export interface LanguageInfo {
   name: string;
   native: string;
   dir: 'ltr' | 'rtl';
+}
+
+export interface BrokerDestination {
+  broker_id: string;
+  broker_name: string;
+  country: string;
+  market_coverage: string;
+  entry_url: string;
+  is_direct_link_verified: boolean;
+  requires_user_login: boolean;
+  instructions: string;
+  compliance_notice: string;
+}
+
+export interface CompanyTradingRoute {
+  status: 'supported' | 'unsupported';
+  is_tradable: boolean;
+  company: string;
+  ticker: string | null;
+  exchange: string | null;
+  country: string | null;
+  isin?: string | null;
+  upstox_instrument_key?: string | null;
+  brokers: BrokerDestination[];
+  recommended_broker: BrokerDestination | null;
+  message: string;
+  disclaimer: string;
+}
+
+export interface SupportedInstrumentsResponse {
+  total_instruments: number;
+  indian_instruments: Array<{
+    company: string;
+    ticker: string;
+    exchange: string;
+    country: string;
+    isin?: string;
+    upstox_instrument_key?: string;
+  }>;
+  international_instruments: Array<{
+    company: string;
+    ticker: string;
+    exchange: string;
+    country: string;
+  }>;
 }

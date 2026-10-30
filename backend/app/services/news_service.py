@@ -34,6 +34,13 @@ SUPPORTED_COMPANIES = {
     "JPMorgan Chase": ["JPM", "jpmorgan", "jamie dimon", "chase bank"],
     "Pfizer": ["PFE", "pfizer", "bourla", "oncology"],
     "ExxonMobil": ["XOM", "exxon", "mobil", "permian basin"],
+    "Reliance": ["RELIANCE", "reliance", "mukesh ambani", "jio"],
+    "Tata Motors": ["TATAMOTORS", "tata motors", "tatamotors"],
+    "TCS": ["TCS", "tata consultancy", "tcs"],
+    "Infosys": ["INFY", "infosys", "salil parekh"],
+    "HDFC Bank": ["HDFCBANK", "hdfc bank", "hdfc"],
+    "ICICI Bank": ["ICICIBANK", "icici bank", "icici"],
+    "State Bank of India": ["SBIN", "state bank of india", "sbi"],
 }
 
 # Fast case-insensitive alias lookup mapping ticker and lowercase names to canonical company name
@@ -60,6 +67,21 @@ COMPANY_ALIAS_LOOKUP = {
     "exxonmobil": "ExxonMobil",
     "exxon": "ExxonMobil",
     "xom": "ExxonMobil",
+    "reliance": "Reliance",
+    "ril": "Reliance",
+    "tata motors": "Tata Motors",
+    "tatamotors": "Tata Motors",
+    "tcs": "TCS",
+    "infosys": "Infosys",
+    "infy": "Infosys",
+    "hdfc bank": "HDFC Bank",
+    "hdfc": "HDFC Bank",
+    "hdfcbank": "HDFC Bank",
+    "icici bank": "ICICI Bank",
+    "icicibank": "ICICI Bank",
+    "state bank of india": "State Bank of India",
+    "sbi": "State Bank of India",
+    "sbin": "State Bank of India",
 }
 
 def canonicalize_company(name: Optional[str]) -> Optional[str]:
@@ -982,6 +1004,17 @@ class NewsService:
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         paged_articles = filtered[start_idx:end_idx]
+
+        # Enrich articles with verified ticker for trading destination
+        try:
+            from app.services.broker_routing_service import broker_routing_service
+            for item in paged_articles:
+                if not item.get('ticker') and item.get('company'):
+                    route = broker_routing_service.get_trading_route(item.get('company'))
+                    if route.is_tradable and route.ticker:
+                        item['ticker'] = route.ticker
+        except Exception as e:
+            logger.debug('Could not enrich article ticker: %s', e)
 
         is_demo_dataset = any(a.get("is_demo", False) for a in paged_articles) if paged_articles else bool(settings.USE_DEMO_DATA)
         feed_status = self.get_feed_status()
