@@ -525,7 +525,10 @@ export const NewsExplorerPage: React.FC = () => {
                     {/* Trade Button */}
                     <button
                       onClick={() => {
-                        setSelectedTradeArticle(art);
+                        setSelectedTradeArticle({
+                          ...art,
+                          ticker: verifiedTicker || art.ticker,
+                        });
                         setTradeModalOpen(true);
                       }}
                       className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"

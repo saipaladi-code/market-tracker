@@ -1,3 +1,4 @@
+import re
 import logging
 from typing import Dict, Any, List, Optional
 from app.models.trading_models import (
@@ -33,6 +34,7 @@ IBKR_BROKER = BrokerDestination(
 )
 
 # Verified Indian Stock Instruments (NSE / BSE)
+# Upstox is the preferred and verified broker for all Indian equities.
 VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
     "reliance": {
         "company": "Reliance Industries",
@@ -41,7 +43,11 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "IN",
         "isin": "INE002A01018",
         "upstox_instrument_key": "NSE_EQ|INE002A01018",
-        "aliases": ["reliance", "reliance industries", "ril", "jio"]
+        "preferred_broker": "upstox",
+        "aliases": [
+            "reliance", "reliance industries", "reliance industries limited", "reliance industries ltd",
+            "ril", "jio", "reliance (reliance)", "reliance industries (ril)"
+        ]
     },
     "tata motors": {
         "company": "Tata Motors",
@@ -50,7 +56,10 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "IN",
         "isin": "INE155A01022",
         "upstox_instrument_key": "NSE_EQ|INE155A01022",
-        "aliases": ["tata motors", "tatamotors", "tata motors limited"]
+        "preferred_broker": "upstox",
+        "aliases": [
+            "tata motors", "tatamotors", "tata motors limited", "tata motors ltd", "tata motors (tatamotors)"
+        ]
     },
     "tcs": {
         "company": "Tata Consultancy Services",
@@ -59,7 +68,11 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "IN",
         "isin": "INE467B01029",
         "upstox_instrument_key": "NSE_EQ|INE467B01029",
-        "aliases": ["tcs", "tata consultancy services", "tata consultancy"]
+        "preferred_broker": "upstox",
+        "aliases": [
+            "tcs", "tata consultancy services", "tata consultancy services (tcs)", "tata consultancy",
+            "tcs ltd", "tata consultancy services limited"
+        ]
     },
     "infosys": {
         "company": "Infosys",
@@ -68,7 +81,10 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "IN",
         "isin": "INE009A01021",
         "upstox_instrument_key": "NSE_EQ|INE009A01021",
-        "aliases": ["infosys", "infy", "infosys limited"]
+        "preferred_broker": "upstox",
+        "aliases": [
+            "infosys", "infy", "infosys limited", "infosys ltd", "infosys (infy)"
+        ]
     },
     "hdfc bank": {
         "company": "HDFC Bank",
@@ -77,7 +93,10 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "IN",
         "isin": "INE040A01034",
         "upstox_instrument_key": "NSE_EQ|INE040A01034",
-        "aliases": ["hdfc bank", "hdfcbank", "hdfc"]
+        "preferred_broker": "upstox",
+        "aliases": [
+            "hdfc bank", "hdfcbank", "hdfc", "hdfc bank limited", "hdfc bank ltd", "hdfc bank (hdfcbank)"
+        ]
     },
     "icici bank": {
         "company": "ICICI Bank",
@@ -86,7 +105,10 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "IN",
         "isin": "INE090A01021",
         "upstox_instrument_key": "NSE_EQ|INE090A01021",
-        "aliases": ["icici bank", "icicibank", "icici"]
+        "preferred_broker": "upstox",
+        "aliases": [
+            "icici bank", "icicibank", "icici", "icici bank limited", "icici bank ltd", "icici bank (icicibank)"
+        ]
     },
     "state bank of india": {
         "company": "State Bank of India",
@@ -95,7 +117,10 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "IN",
         "isin": "INE062A01020",
         "upstox_instrument_key": "NSE_EQ|INE062A01020",
-        "aliases": ["state bank of india", "sbi", "sbin"]
+        "preferred_broker": "upstox",
+        "aliases": [
+            "state bank of india", "sbi", "sbin", "state bank of india (sbin)", "state bank"
+        ]
     },
     "bharti airtel": {
         "company": "Bharti Airtel",
@@ -104,7 +129,10 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "IN",
         "isin": "INE397D01024",
         "upstox_instrument_key": "NSE_EQ|INE397D01024",
-        "aliases": ["bharti airtel", "airtel", "bhartiartl"]
+        "preferred_broker": "upstox",
+        "aliases": [
+            "bharti airtel", "airtel", "bhartiartl", "bharti airtel (bhartiartl)", "bharti airtel limited"
+        ]
     },
     "larsen & toubro": {
         "company": "Larsen & Toubro",
@@ -113,7 +141,10 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "IN",
         "isin": "INE018A01030",
         "upstox_instrument_key": "NSE_EQ|INE018A01030",
-        "aliases": ["larsen & toubro", "l&t", "lt"]
+        "preferred_broker": "upstox",
+        "aliases": [
+            "larsen & toubro", "l&t", "lt", "larsen and toubro", "larsen & toubro (lt)", "larsen & toubro limited"
+        ]
     },
     "wipro": {
         "company": "Wipro",
@@ -122,19 +153,24 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "IN",
         "isin": "INE075A01022",
         "upstox_instrument_key": "NSE_EQ|INE075A01022",
-        "aliases": ["wipro", "wipro limited"]
+        "preferred_broker": "upstox",
+        "aliases": [
+            "wipro", "wipro limited", "wipro ltd", "wipro (wipro)"
+        ]
     }
 }
 
-# Verified International Stock Instruments (NASDAQ / NYSE)
-VERIFIED_INTERNATIONAL_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
+# Verified US Stock Instruments (NASDAQ / NYSE)
+# Interactive Brokers (IBKR) is only used when the relevant instrument and destination are verified as supported.
+VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
     "apple": {
         "company": "Apple",
         "ticker": "AAPL",
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US0378331005",
-        "aliases": ["apple", "aapl", "apple inc"]
+        "preferred_broker": "ibkr",
+        "aliases": ["apple", "aapl", "apple inc", "apple inc.", "apple (aapl)"]
     },
     "microsoft": {
         "company": "Microsoft",
@@ -142,7 +178,8 @@ VERIFIED_INTERNATIONAL_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US5949181045",
-        "aliases": ["microsoft", "msft", "microsoft corp"]
+        "preferred_broker": "ibkr",
+        "aliases": ["microsoft", "msft", "microsoft corp", "microsoft corporation", "microsoft (msft)"]
     },
     "nvidia": {
         "company": "Nvidia",
@@ -150,7 +187,8 @@ VERIFIED_INTERNATIONAL_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US67066G1040",
-        "aliases": ["nvidia", "nvda", "nvidia corp"]
+        "preferred_broker": "ibkr",
+        "aliases": ["nvidia", "nvda", "nvidia corp", "nvidia corporation", "nvidia (nvda)"]
     },
     "tesla": {
         "company": "Tesla",
@@ -158,7 +196,8 @@ VERIFIED_INTERNATIONAL_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US88160R1014",
-        "aliases": ["tesla", "tsla", "tesla inc"]
+        "preferred_broker": "ibkr",
+        "aliases": ["tesla", "tsla", "tesla inc", "tesla inc.", "tesla motors", "tesla (tsla)"]
     },
     "alphabet": {
         "company": "Alphabet",
@@ -166,7 +205,8 @@ VERIFIED_INTERNATIONAL_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US02079K3059",
-        "aliases": ["alphabet", "google", "googl", "goog"]
+        "preferred_broker": "ibkr",
+        "aliases": ["alphabet", "google", "googl", "goog", "alphabet inc", "alphabet (googl)"]
     },
     "amazon": {
         "company": "Amazon",
@@ -174,7 +214,8 @@ VERIFIED_INTERNATIONAL_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US0231351067",
-        "aliases": ["amazon", "amzn", "amazon.com"]
+        "preferred_broker": "ibkr",
+        "aliases": ["amazon", "amzn", "amazon.com", "amazon.com inc", "amazon (amzn)"]
     },
     "jpmorgan chase": {
         "company": "JPMorgan Chase",
@@ -182,7 +223,8 @@ VERIFIED_INTERNATIONAL_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NYSE",
         "country": "US",
         "isin": "US46625H1005",
-        "aliases": ["jpmorgan chase", "jpmorgan", "jpm", "chase"]
+        "preferred_broker": "ibkr",
+        "aliases": ["jpmorgan chase", "jpmorgan", "jpm", "chase", "jpmorgan chase & co", "jpmorgan chase (jpm)"]
     },
     "pfizer": {
         "company": "Pfizer",
@@ -190,7 +232,8 @@ VERIFIED_INTERNATIONAL_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NYSE",
         "country": "US",
         "isin": "US7170811035",
-        "aliases": ["pfizer", "pfe", "pfizer inc"]
+        "preferred_broker": "ibkr",
+        "aliases": ["pfizer", "pfe", "pfizer inc", "pfizer (pfe)"]
     },
     "exxonmobil": {
         "company": "ExxonMobil",
@@ -198,7 +241,8 @@ VERIFIED_INTERNATIONAL_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NYSE",
         "country": "US",
         "isin": "US30231G1022",
-        "aliases": ["exxonmobil", "exxon", "xom", "mobil"]
+        "preferred_broker": "ibkr",
+        "aliases": ["exxonmobil", "exxon", "xom", "mobil", "exxon mobil corp", "exxonmobil (xom)"]
     },
     "meta": {
         "company": "Meta Platforms",
@@ -206,7 +250,8 @@ VERIFIED_INTERNATIONAL_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US30303M1027",
-        "aliases": ["meta", "meta platforms", "facebook"]
+        "preferred_broker": "ibkr",
+        "aliases": ["meta", "meta platforms", "facebook", "meta platforms inc", "meta (meta)"]
     }
 }
 
@@ -216,33 +261,92 @@ class BrokerRoutingService:
         self._build_lookup_index()
 
     def _build_lookup_index(self):
-        # Index Indian instruments
+        # 1. Index Indian instruments (Upstox) - Priority 1 for Indian equities
         for key, data in VERIFIED_INDIAN_INSTRUMENTS.items():
-            inst_record = dict(data, is_indian=True)
-            self._alias_to_instrument[key] = inst_record
+            inst_record = dict(data, is_indian=True, is_verified_us=False)
+            self._alias_to_instrument[key.lower()] = inst_record
             self._alias_to_instrument[data["ticker"].lower()] = inst_record
+            self._alias_to_instrument[data["company"].lower()] = inst_record
             for alias in data.get("aliases", []):
                 self._alias_to_instrument[alias.lower()] = inst_record
 
-        # Index International instruments
-        for key, data in VERIFIED_INTERNATIONAL_INSTRUMENTS.items():
-            inst_record = dict(data, is_indian=False)
-            self._alias_to_instrument[key] = inst_record
+        # 2. Index US instruments (IBKR) - Only for verified US equities
+        for key, data in VERIFIED_US_INSTRUMENTS.items():
+            inst_record = dict(data, is_indian=False, is_verified_us=True)
+            self._alias_to_instrument[key.lower()] = inst_record
             self._alias_to_instrument[data["ticker"].lower()] = inst_record
+            self._alias_to_instrument[data["company"].lower()] = inst_record
             for alias in data.get("aliases", []):
                 self._alias_to_instrument[alias.lower()] = inst_record
+
+    def _normalize_string(self, text: Optional[str]) -> str:
+        if not text:
+            return ""
+        # Remove extra whitespace and convert to lowercase
+        cleaned = text.strip().lower()
+        # Remove common corporate punctuation and noise
+        cleaned = re.sub(r'[\'\"\,]', '', cleaned)
+        return cleaned
+
+    def _extract_candidates(self, identifier: Optional[str]) -> List[str]:
+        """Extracts candidate lookup strings handling parenthetical tickers like 'Apple (AAPL)'."""
+        if not identifier:
+            return []
+        raw = identifier.strip()
+        candidates: List[str] = [raw]
+
+        # 1. Check parenthetical format: e.g. "Apple (AAPL)" or "Tata Consultancy Services (TCS)"
+        paren_match = re.search(r'^(.*?)\s*\(([A-Za-z0-9\.\-\:\&]+)\)\s*$', raw)
+        if paren_match:
+            name_part = paren_match.group(1).strip()
+            ticker_part = paren_match.group(2).strip()
+            # Prioritize ticker candidate then name candidate
+            if ticker_part:
+                candidates.append(ticker_part)
+            if name_part:
+                candidates.append(name_part)
+
+        # 2. Common corporate suffix stripping: "Apple Inc." -> "Apple", "Reliance Industries Limited" -> "Reliance Industries"
+        for c in list(candidates):
+            stripped = re.sub(
+                r'\b(inc\.|inc|corp\.|corp|corporation|ltd\.|ltd|limited|co\.|co|plc|holdings|platforms)\b',
+                '',
+                c,
+                flags=re.IGNORECASE
+            ).strip()
+            if stripped and stripped != c:
+                candidates.append(stripped)
+
+        return candidates
 
     def resolve_instrument(self, identifier: Optional[str]) -> Optional[Dict[str, Any]]:
         if not identifier:
             return None
-        cleaned = identifier.strip().lower()
-        return self._alias_to_instrument.get(cleaned)
+
+        candidates = self._extract_candidates(identifier)
+        for cand in candidates:
+            norm = self._normalize_string(cand)
+            if norm in self._alias_to_instrument:
+                return self._alias_to_instrument[norm]
+
+        # Fallback check against ticker keys directly (case-insensitive)
+        for cand in candidates:
+            c_clean = cand.strip().upper()
+            for inst in VERIFIED_INDIAN_INSTRUMENTS.values():
+                if inst["ticker"] == c_clean or inst["company"].upper() == c_clean:
+                    return dict(inst, is_indian=True, is_verified_us=False)
+            for inst in VERIFIED_US_INSTRUMENTS.values():
+                if inst["ticker"] == c_clean or inst["company"].upper() == c_clean:
+                    return dict(inst, is_indian=False, is_verified_us=True)
+
+        return None
 
     def get_trading_route(self, identifier: Optional[str]) -> CompanyTradingRoute:
         inst = self.resolve_instrument(identifier)
         if not inst:
             raw_name = (identifier or "Unknown").strip()
             return CompanyTradingRoute(
+                status="unsupported",
                 is_tradable=False,
                 company=raw_name,
                 ticker=None,
@@ -251,46 +355,109 @@ class BrokerRoutingService:
                 isin=None,
                 upstox_instrument_key=None,
                 brokers=[],
-                message="Trading for this stock is not currently supported."
+                recommended_broker=None,
+                message="Trading destination not verified or currently unavailable. FIN-SENTIMENT only routes to verified broker instruments.",
+                disclaimer="Trading routes require verified broker instrument catalog mappings. Unverified or general market securities cannot be traded directly."
             )
 
-        is_indian = inst.get("is_indian", False)
+        country = inst.get("country", "")
+        exchange = inst.get("exchange", "")
         ticker = inst["ticker"]
-        exchange = inst["exchange"]
         company = inst["company"]
 
-        if is_indian:
-            # Customise Upstox instructions with verified ticker & exchange
+        # RULE 1: Indian stocks MUST use Upstox as preferred broker
+        if country == "IN" or exchange in ("NSE", "BSE") or inst.get("is_indian", False):
             upstox_copy = UPSTOX_BROKER.model_copy()
-            upstox_copy.instructions = f"Sign in to Upstox Pro and search for {ticker} ({exchange}) to execute your order."
+            upstox_copy.instructions = (
+                f"Sign in to your Upstox Pro account and search for {ticker} ({exchange}) to execute your order."
+            )
             brokers = [upstox_copy]
-            msg = f"Verified Indian equity instrument: {ticker} ({exchange}). Route available via Upstox."
-        else:
-            # Customise IBKR instructions with verified ticker & exchange
+            msg = f"Verified Indian equity instrument: {ticker} ({exchange}). Preferred route: Upstox Pro."
+            recommended = upstox_copy
+
+        # RULE 2: US stocks use Interactive Brokers ONLY when verified as supported
+        elif (country == "US" or exchange in ("NASDAQ", "NYSE")) and inst.get("is_verified_us", False):
             ibkr_copy = IBKR_BROKER.model_copy()
-            ibkr_copy.instructions = f"Log in to IBKR Client Portal and search for {ticker} ({exchange}) to place your order."
+            ibkr_copy.instructions = (
+                f"Log in to the IBKR Client Portal and search for {ticker} ({exchange}) to review real-time quote depth and execute your order."
+            )
             brokers = [ibkr_copy]
-            msg = f"Verified International equity instrument: {ticker} ({exchange}). Route available via Interactive Brokers (IBKR)."
+            msg = f"Verified US equity instrument: {ticker} ({exchange}). Preferred route: Interactive Brokers (IBKR)."
+            recommended = ibkr_copy
+
+        # RULE 3: Other international stocks MUST NOT silently route to IBKR
+        else:
+            return CompanyTradingRoute(
+                status="unsupported",
+                is_tradable=False,
+                company=company,
+                ticker=ticker,
+                exchange=exchange,
+                country=country,
+                isin=inst.get("isin"),
+                upstox_instrument_key=None,
+                brokers=[],
+                recommended_broker=None,
+                message="Trading destination not verified or currently unavailable. International equity without verified broker coverage.",
+                disclaimer="FIN-SENTIMENT never silently routes unsupported international stocks to a broker."
+            )
 
         return CompanyTradingRoute(
+            status="supported",
             is_tradable=True,
             company=company,
             ticker=ticker,
             exchange=exchange,
-            country=inst.get("country"),
+            country=country,
             isin=inst.get("isin"),
             upstox_instrument_key=inst.get("upstox_instrument_key"),
             brokers=brokers,
-            message=msg
+            recommended_broker=recommended,
+            message=msg,
+            disclaimer="Sentiment scores reflect news reporting tone and do not guarantee investment performance. Always perform independent diligence."
         )
 
+    def get_trading_route_by_identifiers(
+        self,
+        company: Optional[str] = None,
+        ticker: Optional[str] = None
+    ) -> CompanyTradingRoute:
+        """
+        Attempts resolution using ticker first if available, then company name, then composite string.
+        Guarantees that Indian stocks resolve to Upstox and US stocks resolve to Interactive Brokers.
+        """
+        # Try ticker first
+        if ticker and ticker.strip():
+            route = self.get_trading_route(ticker.strip())
+            if route.is_tradable:
+                return route
+
+        # Try company name
+        if company and company.strip():
+            route = self.get_trading_route(company.strip())
+            if route.is_tradable:
+                return route
+
+        # Try composite string if both exist (e.g. "Apple (AAPL)")
+        if company and ticker:
+            composite = f"{company.strip()} ({ticker.strip()})"
+            route = self.get_trading_route(composite)
+            if route.is_tradable:
+                return route
+
+        # Fallback to unsupported result
+        raw = (company or ticker or "Unknown").strip()
+        return self.get_trading_route(raw)
+
     def get_all_supported_instruments(self) -> SupportedInstrumentsResponse:
-        indian_list = [self.get_trading_route(k) for k in VERIFIED_INDIAN_INSTRUMENTS.keys()]
-        intl_list = [self.get_trading_route(k) for k in VERIFIED_INTERNATIONAL_INSTRUMENTS.keys()]
+        indian_routes = [self.get_trading_route(k) for k in VERIFIED_INDIAN_INSTRUMENTS.keys()]
+        intl_routes = [self.get_trading_route(k) for k in VERIFIED_US_INSTRUMENTS.keys()]
+        total_count = len(indian_routes) + len(intl_routes)
         return SupportedInstrumentsResponse(
-            indian_instruments=indian_list,
-            international_instruments=intl_list,
-            total_verified=len(indian_list) + len(intl_list)
+            indian_instruments=indian_routes,
+            international_instruments=intl_routes,
+            total_instruments=total_count,
+            total_verified=total_count
         )
 
     def get_broker_capabilities(self) -> BrokerCapabilitiesResponse:

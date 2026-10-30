@@ -31,6 +31,8 @@ import {
 import { api } from '../services/api';
 import { CompanySummary, Article } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
+import { TradeRoutingModal } from '../components/TradeRoutingModal';
+import { resolveVerifiedTicker } from '../utils/tickerLookup';
 
 export const CompanyAnalysisPage: React.FC = () => {
   const [companies, setCompanies] = useState<CompanySummary[]>([]);
@@ -40,6 +42,8 @@ export const CompanyAnalysisPage: React.FC = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
   const location = useLocation();
+  const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
+  const [tradeModalOpen, setTradeModalOpen] = useState(false);
 
   // Read URL query parameter if user navigated from search bar or dashboard
   useEffect(() => {
@@ -91,7 +95,7 @@ export const CompanyAnalysisPage: React.FC = () => {
   const filteredCompanyList = companies.filter(
     (c) =>
       c.company.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      c.ticker.toLowerCase().includes(searchFilter.toLowerCase())
+      (c.ticker || '').toLowerCase().includes(searchFilter.toLowerCase())
   );
 
   return (
@@ -180,12 +184,36 @@ export const CompanyAnalysisPage: React.FC = () => {
                 </div>
               </div>
 
-              {activeSummary.has_conflict && (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-medium">
-                  <GitCompareArrows className="w-4 h-4 text-amber-400" />
-                  <span>Mixed-Sentiment Polarization Detected</span>
-                </div>
-              )}
+              <div className="flex items-center gap-3 flex-wrap">
+                {activeSummary.has_conflict && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-medium">
+                    <GitCompareArrows className="w-4 h-4 text-amber-400" />
+                    <span>Mixed-Sentiment Polarization Detected</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    setSelectedTradeArticle({
+                      id: `hero-${activeSummary.company}`,
+                      canonical_id: `hero-${activeSummary.company}`,
+                      title: `${activeSummary.company} (${activeSummary.ticker}) Surveillance & Market Depth`,
+                      company: activeSummary.company,
+                      ticker: activeSummary.ticker,
+                      url: '',
+                      source: 'Securities Surveillance',
+                      published_at: new Date().toISOString(),
+                      is_duplicate: false,
+                      is_demo: false,
+                    });
+                    setTradeModalOpen(true);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
+                  title={`Trade ${activeSummary.company} via verified broker`}
+                >
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <span>Trade {activeSummary.ticker}</span>
+                </button>
+              </div>
             </div>
 
             {/* Metrics Row */}
@@ -308,15 +336,28 @@ export const CompanyAnalysisPage: React.FC = () => {
                       </h5>
                     </div>
 
-                    <a
-                      href={art.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3 py-1.5 bg-navy-800 hover:bg-navy-750 text-slate-300 hover:text-white border border-navy-700 rounded-lg text-xs font-medium flex items-center gap-1.5 self-start md:self-auto shrink-0 transition-colors"
-                    >
-                      <span>Read Original</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                    <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+                      <button
+                        onClick={() => {
+                          setSelectedTradeArticle(art);
+                          setTradeModalOpen(true);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        title={`Trade ${art.company} via verified broker`}
+                      >
+                        <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Trade</span>
+                      </button>
+                      <a
+                        href={art.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 bg-navy-800 hover:bg-navy-750 text-slate-300 hover:text-white border border-navy-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                      >
+                        <span>Read Original</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -328,6 +369,15 @@ export const CompanyAnalysisPage: React.FC = () => {
           </div>
         </div>
       ) : null}
+      {/* Broker Trade Routing Modal */}
+      <TradeRoutingModal
+        isOpen={tradeModalOpen}
+        onClose={() => {
+          setTradeModalOpen(false);
+          setSelectedTradeArticle(null);
+        }}
+        article={selectedTradeArticle}
+      />
     </div>
   );
 };

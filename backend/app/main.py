@@ -717,8 +717,7 @@ def get_trading_route(
     Resolves company/ticker to verified instrument and provides authorized broker destination:
     Upstox for Indian equities (NSE/BSE), Interactive Brokers (IBKR) for US equities (NASDAQ/NYSE).
     """
-    query = ticker or company
-    return broker_routing_service.get_trading_route(query)
+    return broker_routing_service.get_trading_route_by_identifiers(company=company, ticker=ticker)
 
 @app.get("/api/trading/supported-instruments", response_model=SupportedInstrumentsResponse)
 def get_supported_instruments():

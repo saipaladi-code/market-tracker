@@ -14,12 +14,15 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
-import { ConflictSignal } from '../types';
+import { ConflictSignal, Article } from '../types';
+import { TradeRoutingModal } from '../components/TradeRoutingModal';
 
 export const ConflictDetectorPage: React.FC = () => {
   const [conflicts, setConflicts] = useState<ConflictSignal[]>([]);
   const [loading, setLoading] = useState(true);
   const [threshold, setThreshold] = useState<number>(20); // 20% min divergence
+  const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
+  const [tradeModalOpen, setTradeModalOpen] = useState(false);
 
   const loadConflicts = async () => {
     try {
@@ -148,13 +151,37 @@ export const ConflictDetectorPage: React.FC = () => {
                       {(conf.conflict_score * 100).toFixed(0)}%
                     </span>
                   </div>
-                  <Link
-                    to={`/companies?company=${encodeURIComponent(conf.company)}`}
-                    className="px-3 py-1.5 bg-navy-800 hover:bg-navy-750 text-slate-200 rounded-lg text-xs font-semibold border border-navy-700 transition-colors flex items-center gap-1"
-                  >
-                    <span>Deep Dive</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedTradeArticle({
+                          id: `conflict-${conf.company}`,
+                          canonical_id: `conflict-${conf.company}`,
+                          title: `${conf.company} (${conf.ticker}) Narrative Divergence Conflict`,
+                          company: conf.company,
+                          ticker: conf.ticker,
+                          url: '',
+                          source: 'Sentiment Divergence Engine',
+                          published_at: new Date().toISOString(),
+                          is_duplicate: false,
+                          is_demo: false,
+                        });
+                        setTradeModalOpen(true);
+                      }}
+                      className="px-2.5 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                      title={`Trade ${conf.company} via verified broker`}
+                    >
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Trade</span>
+                    </button>
+                    <Link
+                      to={`/companies?company=${encodeURIComponent(conf.company)}`}
+                      className="px-3 py-1.5 bg-navy-800 hover:bg-navy-750 text-slate-200 rounded-lg text-xs font-semibold border border-navy-700 transition-colors flex items-center gap-1"
+                    >
+                      <span>Deep Dive</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </Link>
+                  </div>
                 </div>
               </div>
 
@@ -214,6 +241,15 @@ export const ConflictDetectorPage: React.FC = () => {
           ))}
         </div>
       )}
+      {/* Broker Trade Routing Modal */}
+      <TradeRoutingModal
+        isOpen={tradeModalOpen}
+        onClose={() => {
+          setTradeModalOpen(false);
+          setSelectedTradeArticle(null);
+        }}
+        article={selectedTradeArticle}
+      />
     </div>
   );
 };

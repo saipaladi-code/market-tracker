@@ -636,7 +636,10 @@ export const DashboardPage: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => {
-                          setSelectedTradeArticle(art);
+                          setSelectedTradeArticle({
+                            ...art,
+                            ticker: verifiedTicker || art.ticker,
+                          });
                           setTradeModalOpen(true);
                         }}
                         className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"

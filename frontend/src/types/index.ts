@@ -131,6 +131,7 @@ export interface SectorSentiment {
 export interface AlertRecord {
   id: string;
   company: string;
+  ticker?: string;
   alert_type: string;
   severity: 'low' | 'medium' | 'high';
   message: string;
@@ -169,6 +170,7 @@ export interface AssistantChatResponse {
     sentiment: string;
     confidence: number;
     company: string;
+  ticker?: string;
   }>;
   is_gemini_active: boolean;
   disclaimer: string;

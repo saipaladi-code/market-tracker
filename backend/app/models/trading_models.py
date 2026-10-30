@@ -18,6 +18,7 @@ class BrokerDestination(BaseModel):
     )
 
 class CompanyTradingRoute(BaseModel):
+    status: str = Field(default="supported", description="Routing status: 'supported' or 'unsupported'")
     is_tradable: bool = Field(..., description="True if verified instrument mapping exists for this company")
     company: str = Field(..., description="Resolved company name")
     ticker: Optional[str] = Field(default=None, description="Verified exchange ticker symbol")
@@ -26,6 +27,7 @@ class CompanyTradingRoute(BaseModel):
     isin: Optional[str] = Field(default=None, description="International Securities Identification Number if verified")
     upstox_instrument_key: Optional[str] = Field(default=None, description="Upstox instrument token (e.g. NSE_EQ|INE...)")
     brokers: List[BrokerDestination] = Field(default_factory=list, description="Verified available broker destinations")
+    recommended_broker: Optional[BrokerDestination] = Field(default=None, description="Preferred broker destination")
     message: str = Field(..., description="Human-readable routing status")
     disclaimer: str = Field(
         default="Sentiment scores reflect news reporting tone and do not guarantee investment performance. Always perform independent diligence."
@@ -34,7 +36,8 @@ class CompanyTradingRoute(BaseModel):
 class SupportedInstrumentsResponse(BaseModel):
     indian_instruments: List[CompanyTradingRoute]
     international_instruments: List[CompanyTradingRoute]
-    total_verified: int
+    total_instruments: int = Field(default=0)
+    total_verified: int = Field(default=0)
 
 class BrokerCapabilitiesResponse(BaseModel):
     brokers: List[BrokerDestination]

@@ -6,61 +6,103 @@ from app.services.broker_routing_service import broker_routing_service
 client = TestClient(app)
 
 def test_indian_stock_routing_upstox():
-    """Verifies that Indian stocks route to Upstox with verified NSE/BSE ticker."""
-    # Test by company name
-    res = client.get("/api/trading/route?company=Reliance")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["is_tradable"] is True
-    assert data["ticker"] == "RELIANCE"
-    assert data["exchange"] == "NSE"
-    assert data["country"] == "IN"
-    assert len(data["brokers"]) == 1
-    broker = data["brokers"][0]
-    assert broker["broker_id"] == "upstox"
-    assert broker["entry_url"] == "https://pro.upstox.com"
-    assert broker["is_direct_link_verified"] is False
-    assert "RELIANCE" in broker["instructions"]
+    """Verifies that all specified Indian stocks route to Upstox Pro."""
+    indian_samples = [
+        ("Reliance Industries", "RELIANCE"),
+        ("Tata Consultancy Services (TCS)", "TCS"),
+        ("TCS", "TCS"),
+        ("Tata Motors", "TATAMOTORS"),
+        ("Infosys", "INFY"),
+        ("HDFC Bank", "HDFCBANK"),
+        ("ICICI Bank", "ICICIBANK"),
+        ("State Bank of India", "SBIN"),
+        ("Bharti Airtel", "BHARTIARTL"),
+        ("Larsen & Toubro", "LT"),
+        ("Wipro", "WIPRO")
+    ]
 
-    # Test Tata Motors by alias
-    res_tata = client.get("/api/trading/route?ticker=TATAMOTORS")
-    assert res_tata.status_code == 200
-    assert res_tata.json()["is_tradable"] is True
-    assert res_tata.json()["ticker"] == "TATAMOTORS"
+    for comp_query, expected_ticker in indian_samples:
+        res = client.get("/api/trading/route", params={"company": comp_query})
+        assert res.status_code == 200, f"Failed for {comp_query}"
+        data = res.json()
+        assert data["is_tradable"] is True, f"Expected {comp_query} to be tradable"
+        assert data["ticker"] == expected_ticker, f"Expected ticker {expected_ticker} for {comp_query}, got {data['ticker']}"
+        assert data["exchange"] == "NSE"
+        assert data["country"] == "IN"
+        assert len(data["brokers"]) == 1
+        broker = data["brokers"][0]
+        assert broker["broker_id"] == "upstox", f"Expected Upstox for {comp_query}, got {broker['broker_id']}"
+        assert broker["entry_url"] == "https://pro.upstox.com"
+        assert expected_ticker in broker["instructions"]
 
-def test_international_stock_routing_ibkr():
-    """Verifies that International stocks route to Interactive Brokers with verified US ticker."""
-    res = client.get("/api/trading/route?company=Apple")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["is_tradable"] is True
-    assert data["ticker"] == "AAPL"
-    assert data["exchange"] == "NASDAQ"
-    assert data["country"] == "US"
-    assert len(data["brokers"]) == 1
-    broker = data["brokers"][0]
-    assert broker["broker_id"] == "ibkr"
-    assert broker["entry_url"] == "https://www.interactivebrokers.com/portal/"
-    assert broker["is_direct_link_verified"] is False
-    assert "AAPL" in broker["instructions"]
+def test_international_us_stock_routing_ibkr():
+    """Verifies that verified US stocks route to Interactive Brokers (IBKR)."""
+    us_samples = [
+        ("Apple (AAPL)", "AAPL"),
+        ("Apple", "AAPL"),
+        ("Microsoft (MSFT)", "MSFT"),
+        ("Microsoft", "MSFT"),
+        ("Tesla (TSLA)", "TSLA"),
+        ("Tesla", "TSLA"),
+        ("Amazon (AMZN)", "AMZN"),
+        ("NVIDIA (NVDA)", "NVDA"),
+        ("Nvidia", "NVDA"),
+        ("Alphabet (GOOGL)", "GOOGL"),
+        ("Meta", "META"),
+        ("JPMorgan Chase", "JPM")
+    ]
 
-    # Test Nvidia
-    res_nvda = client.get("/api/trading/route?company=Nvidia")
-    assert res_nvda.status_code == 200
-    assert res_nvda.json()["ticker"] == "NVDA"
-    assert res_nvda.json()["brokers"][0]["broker_id"] == "ibkr"
+    for comp_query, expected_ticker in us_samples:
+        res = client.get("/api/trading/route", params={"company": comp_query})
+        assert res.status_code == 200, f"Failed for {comp_query}"
+        data = res.json()
+        assert data["is_tradable"] is True, f"Expected {comp_query} to be tradable"
+        assert data["ticker"] == expected_ticker
+        assert data["country"] == "US"
+        assert len(data["brokers"]) == 1
+        broker = data["brokers"][0]
+        assert broker["broker_id"] == "ibkr", f"Expected IBKR for {comp_query}, got {broker['broker_id']}"
+        assert broker["entry_url"] == "https://www.interactivebrokers.com/portal/"
+        assert expected_ticker in broker["instructions"]
 
-def test_ambiguous_and_unsupported_instruments():
-    """Verifies that ambiguous names and unsupported companies cleanly return not supported."""
-    unsupported = ["General Market", "Unknown Corp", "CryptoCoinXYZ", "asdfghjk", ""]
-    for item in unsupported:
-        res = client.get(f"/api/trading/route?company={item}")
+def test_other_international_stocks_not_routed_to_ibkr():
+    """Verifies other international and unsupported stocks are NOT silently routed to IBKR."""
+    unsupported_samples = [
+        "Bavarian Nordic",
+        "Novo Nordisk",
+        "ASML",
+        "Toyota Motor",
+        "Tencent",
+        "Unknown International Corp",
+        "General Market",
+        "Macro Economy",
+        ""
+    ]
+
+    for item in unsupported_samples:
+        res = client.get("/api/trading/route", params={"company": item})
         assert res.status_code == 200
         data = res.json()
-        assert data["is_tradable"] is False
-        assert data["ticker"] is None
-        assert data["brokers"] == []
-        assert "not currently supported" in data["message"].lower()
+        assert data["is_tradable"] is False, f"Expected {item} to NOT be tradable"
+        assert data["brokers"] == [], f"Expected 0 brokers for {item}, but got {data['brokers']}"
+        assert data.get("recommended_broker") is None
+        assert "not verified" in data["message"].lower() or "not currently supported" in data["message"].lower()
+
+def test_composite_ticker_and_company_parameters():
+    """Verifies resolution when both company and ticker are passed separately."""
+    res = client.get("/api/trading/route", params={"company": "Tata Consultancy Services", "ticker": "TCS"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["is_tradable"] is True
+    assert data["ticker"] == "TCS"
+    assert data["brokers"][0]["broker_id"] == "upstox"
+
+    res_us = client.get("/api/trading/route", params={"company": "Apple Inc", "ticker": "AAPL"})
+    assert res_us.status_code == 200
+    data_us = res_us.json()
+    assert data_us["is_tradable"] is True
+    assert data_us["ticker"] == "AAPL"
+    assert data_us["brokers"][0]["broker_id"] == "ibkr"
 
 def test_supported_instruments_endpoint():
     """Verifies listing of all verified Indian and International instruments."""
