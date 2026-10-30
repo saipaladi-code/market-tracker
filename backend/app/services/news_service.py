@@ -24,29 +24,99 @@ from app.services.deduplication_service import deduplication_service, generate_c
 logger = logging.getLogger("news_service")
 
 # Supported companies and associated keyword / ticker patterns
+# Covers verified Indian Equities (NSE/BSE) and US Equities (NASDAQ/NYSE)
 SUPPORTED_COMPANIES = {
-    "Apple": ["AAPL", "apple", "iphone", "tim cook"],
+    # Indian Equities (Upstox Pro preferred)
+    "Reliance Industries": ["RELIANCE", "reliance industries", "reliance", "mukesh ambani", "jio", "ril"],
+    "Tata Consultancy Services": ["TCS", "tata consultancy services", "tata consultancy", "tcs ltd"],
+    "Tata Motors": ["TATAMOTORS", "tata motors", "tatamotors", "jlr", "jaguar land rover"],
+    "Infosys": ["INFY", "infosys", "salil parekh"],
+    "HDFC Bank": ["HDFCBANK", "hdfc bank", "hdfc", "hdfcbank"],
+    "ICICI Bank": ["ICICIBANK", "icici bank", "icici", "icicibank"],
+    "State Bank of India": ["SBIN", "state bank of india", "sbi", "sbin"],
+    "Bharti Airtel": ["BHARTIARTL", "bharti airtel", "airtel", "bhartiartl"],
+    "Larsen & Toubro": ["LT", "larsen & toubro", "l&t", "larsen and toubro"],
+    "Wipro": ["WIPRO", "wipro"],
+
+    # US Equities (Interactive Brokers preferred)
+    "Apple": ["AAPL", "apple", "iphone", "tim cook", "apple inc"],
     "Microsoft": ["MSFT", "microsoft", "azure", "satya nadella"],
     "Nvidia": ["NVDA", "nvidia", "jensen huang", "gpu", "blackwell"],
     "Tesla": ["TSLA", "tesla", "elon musk", "robotaxi", "cybertruck"],
     "Alphabet": ["GOOGL", "GOOG", "google", "alphabet", "sundar pichai", "gemini"],
-    "Amazon": ["AMZN", "amazon", "aws", "andy jassy"],
+    "Amazon": ["AMZN", "amazon", "aws", "andy jassy", "amazon.com"],
+    "Meta Platforms": ["META", "meta platforms", "meta", "facebook", "mark zuckerberg"],
     "JPMorgan Chase": ["JPM", "jpmorgan", "jamie dimon", "chase bank"],
     "Pfizer": ["PFE", "pfizer", "bourla", "oncology"],
     "ExxonMobil": ["XOM", "exxon", "mobil", "permian basin"],
-    "Reliance": ["RELIANCE", "reliance", "mukesh ambani", "jio"],
-    "Tata Motors": ["TATAMOTORS", "tata motors", "tatamotors"],
-    "TCS": ["TCS", "tata consultancy", "tcs"],
-    "Infosys": ["INFY", "infosys", "salil parekh"],
-    "HDFC Bank": ["HDFCBANK", "hdfc bank", "hdfc"],
-    "ICICI Bank": ["ICICIBANK", "icici bank", "icici"],
-    "State Bank of India": ["SBIN", "state bank of india", "sbi"],
+}
+
+COMPANY_TICKER_MAP = {
+    "Reliance Industries": "RELIANCE",
+    "Tata Consultancy Services": "TCS",
+    "Tata Motors": "TATAMOTORS",
+    "Infosys": "INFY",
+    "HDFC Bank": "HDFCBANK",
+    "ICICI Bank": "ICICIBANK",
+    "State Bank of India": "SBIN",
+    "Bharti Airtel": "BHARTIARTL",
+    "Larsen & Toubro": "LT",
+    "Wipro": "WIPRO",
+    "Apple": "AAPL",
+    "Microsoft": "MSFT",
+    "Nvidia": "NVDA",
+    "Tesla": "TSLA",
+    "Alphabet": "GOOGL",
+    "Amazon": "AMZN",
+    "Meta Platforms": "META",
+    "JPMorgan Chase": "JPM",
+    "Pfizer": "PFE",
+    "ExxonMobil": "XOM",
 }
 
 # Fast case-insensitive alias lookup mapping ticker and lowercase names to canonical company name
 COMPANY_ALIAS_LOOKUP = {
+    # Indian aliases
+    "reliance": "Reliance Industries",
+    "reliance industries": "Reliance Industries",
+    "reliance industries limited": "Reliance Industries",
+    "reliance industries ltd": "Reliance Industries",
+    "ril": "Reliance Industries",
+    "jio": "Reliance Industries",
+    "tcs": "Tata Consultancy Services",
+    "tata consultancy": "Tata Consultancy Services",
+    "tata consultancy services": "Tata Consultancy Services",
+    "tatamotors": "Tata Motors",
+    "tata motors": "Tata Motors",
+    "tata motors limited": "Tata Motors",
+    "tata motors ltd": "Tata Motors",
+    "infosys": "Infosys",
+    "infy": "Infosys",
+    "infosys limited": "Infosys",
+    "hdfc bank": "HDFC Bank",
+    "hdfc": "HDFC Bank",
+    "hdfcbank": "HDFC Bank",
+    "icici bank": "ICICI Bank",
+    "icici": "ICICI Bank",
+    "icicibank": "ICICI Bank",
+    "state bank of india": "State Bank of India",
+    "sbi": "State Bank of India",
+    "sbin": "State Bank of India",
+    "state bank": "State Bank of India",
+    "bharti airtel": "Bharti Airtel",
+    "airtel": "Bharti Airtel",
+    "bhartiartl": "Bharti Airtel",
+    "larsen & toubro": "Larsen & Toubro",
+    "larsen and toubro": "Larsen & Toubro",
+    "l&t": "Larsen & Toubro",
+    "lt": "Larsen & Toubro",
+    "wipro": "Wipro",
+
+    # US aliases
     "apple": "Apple",
     "aapl": "Apple",
+    "apple inc": "Apple",
+    "apple inc.": "Apple",
     "nvidia": "Nvidia",
     "nvda": "Nvidia",
     "tesla": "Tesla",
@@ -59,29 +129,19 @@ COMPANY_ALIAS_LOOKUP = {
     "googl": "Alphabet",
     "amazon": "Amazon",
     "amzn": "Amazon",
+    "amazon.com": "Amazon",
+    "meta": "Meta Platforms",
+    "meta platforms": "Meta Platforms",
+    "facebook": "Meta Platforms",
     "jpmorgan chase": "JPMorgan Chase",
     "jpmorgan": "JPMorgan Chase",
     "jpm": "JPMorgan Chase",
+    "chase": "JPMorgan Chase",
     "pfizer": "Pfizer",
     "pfe": "Pfizer",
     "exxonmobil": "ExxonMobil",
     "exxon": "ExxonMobil",
     "xom": "ExxonMobil",
-    "reliance": "Reliance",
-    "ril": "Reliance",
-    "tata motors": "Tata Motors",
-    "tatamotors": "Tata Motors",
-    "tcs": "TCS",
-    "infosys": "Infosys",
-    "infy": "Infosys",
-    "hdfc bank": "HDFC Bank",
-    "hdfc": "HDFC Bank",
-    "hdfcbank": "HDFC Bank",
-    "icici bank": "ICICI Bank",
-    "icicibank": "ICICI Bank",
-    "state bank of india": "State Bank of India",
-    "sbi": "State Bank of India",
-    "sbin": "State Bank of India",
 }
 
 def canonicalize_company(name: Optional[str]) -> Optional[str]:
@@ -340,7 +400,103 @@ CORE_COMPANY_ARTICLES = [
         "source": "World Oil",
         "url": "https://www.worldoil.com/exxonmobil-energy-outlook-report",
         "company": "ExxonMobil",
+        "ticker": "XOM",
         "published_at": "2026-10-24T12:30:00Z"
+    },
+
+    # --- Reliance Industries (NSE: RELIANCE) ---
+    {
+        "title": "Reliance Industries Q2 Net Profit Surges 23% on Robust Jio Telecom and Retail Growth",
+        "description": "Mukesh Ambani-led Reliance Industries reported strong quarterly earnings driven by digital services expansion and 5G subscriber gains.",
+        "source": "The Economic Times",
+        "url": "https://economictimes.indiatimes.com/reliance-industries-q2-results-surge",
+        "company": "Reliance Industries",
+        "ticker": "RELIANCE",
+        "published_at": "2026-10-24T10:00:00Z"
+    },
+    {
+        "title": "Reliance Industries Faces Refining Headwinds as Global Petrochemical Margins Soften",
+        "description": "Lower gross refining margins across Jamnagar complex put moderate pressure on oil-to-chemicals segment earnings.",
+        "source": "Livemint",
+        "url": "https://www.livemint.com/market/reliance-industries-refining-margin-pressure",
+        "company": "Reliance Industries",
+        "ticker": "RELIANCE",
+        "published_at": "2026-10-23T15:00:00Z"
+    },
+
+    # --- Tata Consultancy Services (NSE: TCS) ---
+    {
+        "title": "Tata Consultancy Services (TCS) Secures Multi-Billion Dollar European Cloud Modernization Deal",
+        "description": "TCS signed strategic digital transformation contracts across European banking clients, driving double-digit operating margin expansion.",
+        "source": "Business Standard",
+        "url": "https://www.business-standard.com/tcs-signs-multi-billion-dollar-deal",
+        "company": "Tata Consultancy Services",
+        "ticker": "TCS",
+        "published_at": "2026-10-24T11:30:00Z"
+    },
+    {
+        "title": "TCS Cautious on Discretionary IT Spend Amid Global Macroeconomic Uncertainty",
+        "description": "Management highlighted client budget scrutiny in select banking and retail sectors while maintaining long-term pipeline optimism.",
+        "source": "CNBC-TV18",
+        "url": "https://www.cnbctv18.com/tcs-it-spending-caution",
+        "company": "Tata Consultancy Services",
+        "ticker": "TCS",
+        "published_at": "2026-10-23T16:45:00Z"
+    },
+
+    # --- Tata Motors (NSE: TATAMOTORS) ---
+    {
+        "title": "Tata Motors JLR Deliveries Jump 28% Driven by Strong Global Defender and Range Rover Demand",
+        "description": "Jaguar Land Rover order books hit record levels as commercial EV truck launches expand market share in domestic Indian markets.",
+        "source": "NDTV Profit",
+        "url": "https://www.ndtvprofit.com/tata-motors-jlr-sales-jump",
+        "company": "Tata Motors",
+        "ticker": "TATAMOTORS",
+        "published_at": "2026-10-24T09:15:00Z"
+    },
+
+    # --- Infosys (NSE: INFY) ---
+    {
+        "title": "Infosys Raises Full-Year Revenue Guidance on Record Generative AI Topaz Contracts",
+        "description": "CEO Salil Parekh announced expanded Fortune 100 enterprise AI partnerships with accelerating deal momentum and strong cash flow generation.",
+        "source": "The Hindu BusinessLine",
+        "url": "https://www.thehindubusinessline.com/infosys-guidance-hike",
+        "company": "Infosys",
+        "ticker": "INFY",
+        "published_at": "2026-10-24T08:30:00Z"
+    },
+
+    # --- HDFC Bank (NSE: HDFCBANK) ---
+    {
+        "title": "HDFC Bank Reports Stellar Deposit Growth and Improving Net Interest Margins in Q2",
+        "description": "India's largest private lender demonstrated fortress balance sheet stability and robust retail lending credit performance.",
+        "source": "Financial Express",
+        "url": "https://www.financialexpress.com/hdfc-bank-q2-deposits-surge",
+        "company": "HDFC Bank",
+        "ticker": "HDFCBANK",
+        "published_at": "2026-10-24T07:45:00Z"
+    },
+
+    # --- ICICI Bank (NSE: ICICIBANK) ---
+    {
+        "title": "ICICI Bank Posts Record Standalone Profit Driven by Healthy Loan Book Expansion and Low NPAs",
+        "description": "Private sector lender delivered consistent return on equity with gross non-performing assets dropping to multi-year lows.",
+        "source": "Moneycontrol",
+        "url": "https://www.moneycontrol.com/news/business/icici-bank-record-profit",
+        "company": "ICICI Bank",
+        "ticker": "ICICIBANK",
+        "published_at": "2026-10-24T12:15:00Z"
+    },
+
+    # --- State Bank of India (NSE: SBIN) ---
+    {
+        "title": "State Bank of India (SBI) Mobilizes Rs 10,000 Crore in Infrastructure Bonds at Benchmark Yields",
+        "description": "State Bank of India's debt offering met with 3x institutional oversubscription to fund domestic infrastructure and industrial capex.",
+        "source": "The Economic Times",
+        "url": "https://economictimes.indiatimes.com/sbi-infra-bonds-oversubscribed",
+        "company": "State Bank of India",
+        "ticker": "SBIN",
+        "published_at": "2026-10-24T06:30:00Z"
     }
 ]
 
@@ -448,32 +604,41 @@ class NewsService:
     CACHE_TTL_SECONDS = 300  # 5-minute cache to respect provider rate limits while ensuring freshness
 
     LIVE_RSS_FEEDS = [
-        # 1. Top Business and Financial Markets Overview
+        # 1. Indian Stock Markets & Tracked Bluechips (Live NSE/BSE coverage)
+        {
+            "url": "https://news.google.com/rss/search?q=Reliance+OR+%22Tata+Motors%22+OR+TCS+OR+Infosys+OR+%22HDFC+Bank%22+OR+%22ICICI+Bank%22+OR+%22State+Bank+of+India%22+stock+when:2d&hl=en-IN&gl=IN&ceid=IN:en",
+            "name": "Indian Equities Intelligence Query",
+            "default_source": "Financial News India"
+        },
+        # 2. Indian Business Top Stories
+        {
+            "url": "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-IN&gl=IN&ceid=IN:en",
+            "name": "Google Business India",
+            "default_source": "Business News India"
+        },
+        # 3. Economic Times - Markets & Stocks Live Feed
+        {
+            "url": "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms",
+            "name": "Economic Times Stocks",
+            "default_source": "The Economic Times"
+        },
+        # 4. Top US Business & Financial Markets Overview
         {
             "url": "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en",
-            "name": "Google Business Top Stories"
+            "name": "Google Business Top Stories",
+            "default_source": "Google Business"
         },
-        # 2. Dow Jones / MarketWatch Top Stories
+        # 5. Dow Jones / MarketWatch Top Stories
         {
             "url": "https://feeds.content.dowjones.io/public/rss/mw_topstories",
             "name": "MarketWatch Top Stories",
             "default_source": "MarketWatch"
         },
-        # 3. MarketWatch Real-time Headlines
-        {
-            "url": "https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines",
-            "name": "MarketWatch Real-time",
-            "default_source": "MarketWatch"
-        },
-        # 4. Live Stock Market & Corporate Earnings Headlines (within last 1 day)
-        {
-            "url": "https://news.google.com/rss/search?q=stock+market+OR+Wall+Street+OR+earnings+when:1d&hl=en-US&gl=US&ceid=US:en",
-            "name": "Market Intelligence Query"
-        },
-        # 5. Core Tracked Tech & Financial Blue-Chips (within last 1 day)
+        # 6. Core Tracked Tech & Financial Blue-Chips (within last 1 day)
         {
             "url": "https://news.google.com/rss/search?q=Apple+OR+Nvidia+OR+Tesla+OR+Microsoft+OR+Amazon+stock+when:1d&hl=en-US&gl=US&ceid=US:en",
-            "name": "Tracked Equities Query"
+            "name": "US Tracked Equities Query",
+            "default_source": "MarketWatch"
         }
     ]
 
@@ -532,31 +697,52 @@ class NewsService:
             return self._last_successful_fetch.strftime("%Y-%m-%dT%H:%M:%SZ")
         return self.get_utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    def _infer_company(self, title: str, description: Optional[str] = None) -> str:
+    def _infer_company_and_ticker(self, title: str, description: Optional[str] = None) -> Tuple[str, Optional[str]]:
         """
-        Infers the company subject of an article using strict word boundary matching.
-        Checks headline first to avoid classifying an article as company-specific merely
-        because a company name or ticker appears incidentally in a broad market summary.
+        Infers both canonical company name and verified ticker symbol.
+        1. Checks parenthetical ticker patterns in headline: e.g. '(RELIANCE)', '(TCS)', '(AAPL)', '(AMZN)'
+        2. Checks word-boundary keyword matches across supported Indian and US equities (longer phrases first)
+        3. Checks lead sentence of article description
+        Returns (canonical_company_name, ticker) or ('General Market', None).
         """
-        title_lower = (title or "").lower()
+        title_raw = title or ""
+        title_lower = title_raw.lower()
 
-        # Priority 1: Check headline with word boundaries
+        # Priority 1: Check parenthetical ticker in headline
+        paren_match = re.search(r'\(([A-Za-z0-9\.\:\-]+)\)', title_raw)
+        if paren_match:
+            candidate_ticker = paren_match.group(1).strip().upper()
+            # Invert COMPANY_TICKER_MAP for fast lookup
+            for comp, tkr in COMPANY_TICKER_MAP.items():
+                if tkr == candidate_ticker:
+                    return comp, tkr
+
+        # Priority 2: Check headline keywords (sorted by length descending for specificity)
+        sorted_pairs = []
         for company, keywords in SUPPORTED_COMPANIES.items():
             for kw in keywords:
-                pattern = r'\b' + re.escape(kw.lower()) + r'\b'
-                if re.search(pattern, title_lower):
-                    return company
+                sorted_pairs.append((len(kw), kw, company))
+        sorted_pairs.sort(key=lambda x: x[0], reverse=True)
 
-        # Priority 2: Check lead sentence of description
+        for _, kw, company in sorted_pairs:
+            pattern = r'\b' + re.escape(kw.lower()) + r'\b'
+            if re.search(pattern, title_lower):
+                return company, COMPANY_TICKER_MAP.get(company)
+
+        # Priority 3: Check lead sentence of description
         if description:
             lead_sentence = description.split('.')[0].lower()
-            for company, keywords in SUPPORTED_COMPANIES.items():
-                for kw in keywords:
-                    pattern = r'\b' + re.escape(kw.lower()) + r'\b'
-                    if re.search(pattern, lead_sentence):
-                        return company
+            for _, kw, company in sorted_pairs:
+                pattern = r'\b' + re.escape(kw.lower()) + r'\b'
+                if re.search(pattern, lead_sentence):
+                    return company, COMPANY_TICKER_MAP.get(company)
 
-        return "General Market"
+        return "General Market", None
+
+    def _infer_company(self, title: str, description: Optional[str] = None) -> str:
+        """Backward-compatible helper returning canonical company name."""
+        comp, _ = self._infer_company_and_ticker(title, description)
+        return comp
 
     def _ensure_core_company_coverage(self, existing_articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -564,6 +750,9 @@ class NewsService:
         Never runs when USE_DEMO_DATA is False.
         """
         if not settings.USE_DEMO_DATA:
+            return existing_articles
+
+        if getattr(self, "_demo_seeded", False) and len(existing_articles) > 0:
             return existing_articles
 
         existing_companies = set(
@@ -576,6 +765,7 @@ class NewsService:
         missing_companies = [c for c in tracked_companies if c not in existing_companies]
 
         if not missing_companies and len(existing_articles) > 0:
+            self._demo_seeded = True
             return existing_articles
 
         logger.info(f"Seeding demo articles for missing companies (Demo mode): {missing_companies or 'all'}...")
@@ -586,9 +776,12 @@ class NewsService:
                 art = dict(item)
                 art["id"] = f"core-{uuid.uuid4().hex[:8]}"
                 art["is_demo"] = True
+                if not art.get("ticker") and comp in COMPANY_TICKER_MAP:
+                    art["ticker"] = COMPANY_TICKER_MAP[comp]
                 articles_to_add.append(art)
 
         if not articles_to_add:
+            self._demo_seeded = True
             return existing_articles
 
         processed, _ = deduplication_service.process_articles(articles_to_add)
@@ -597,8 +790,10 @@ class NewsService:
                 article["sentiment"] = "neutral"
                 article["confidence"] = 0.5
                 article["scores"] = {"positive": 0.25, "negative": 0.25, "neutral": 0.5}
+            article.pop("_id", None)
             db.insert_one("news_articles", article)
 
+        self._demo_seeded = True
         return db.find("news_articles", limit=500)
 
     def fetch_live_rss_articles(self, query: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -665,7 +860,7 @@ class NewsService:
                         desc_el = item.find("description")
                         clean_desc = clean_html_text(desc_el.text) if desc_el is not None else ""
 
-                        matched_company = self._infer_company(clean_title, clean_desc)
+                        matched_company, matched_ticker = self._infer_company_and_ticker(clean_title, clean_desc)
                         canonical_id = generate_canonical_id(clean_title, link)
 
                         feed_items.append({
@@ -677,6 +872,7 @@ class NewsService:
                             "source": publisher,
                             "published_at": dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
                             "company": matched_company,
+                            "ticker": matched_ticker,
                             "is_demo": False
                         })
             except Exception as e:
@@ -720,7 +916,7 @@ class NewsService:
                     if not dt_utc or dt_utc > now_utc + timedelta(minutes=5):
                         continue
 
-                    matched_company = self._infer_company(title, item.get("description"))
+                    matched_company, matched_ticker = self._infer_company_and_ticker(title, item.get("description"))
                     canonical_id = generate_canonical_id(title, url_art)
 
                     raw_articles.append({
@@ -732,6 +928,7 @@ class NewsService:
                         "source": item.get("source", {}).get("name", "NewsAPI Source"),
                         "published_at": dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
                         "company": matched_company,
+                        "ticker": matched_ticker,
                         "is_demo": False
                     })
             else:
@@ -888,6 +1085,17 @@ class NewsService:
             self.ingest_live_news(force=force_refresh, query=query)
             existing_articles = db.find("news_articles", {"is_demo": False}, limit=1000, sort=[("published_at", -1)])
 
+        # Ensure all articles returned have verified ticker attached
+        for a in existing_articles:
+            if not a.get("ticker") and a.get("company"):
+                comp = a.get("company")
+                if comp in COMPANY_TICKER_MAP:
+                    a["ticker"] = COMPANY_TICKER_MAP[comp]
+                elif comp != "General Market":
+                    canon = canonicalize_company(comp)
+                    if canon and canon in COMPANY_TICKER_MAP:
+                        a["ticker"] = COMPANY_TICKER_MAP[canon]
+
         return existing_articles
 
     def query_articles(
@@ -958,23 +1166,36 @@ class NewsService:
             # 2. Company Filter (case-insensitive & ticker-aware)
             if target_company:
                 art_company = a.get("company", "")
-                art_canonical = canonicalize_company(art_company)
+                art_canonical = canonicalize_company(art_company) or art_company
+                art_ticker = (a.get("ticker") or COMPANY_TICKER_MAP.get(art_canonical) or "").upper()
+                query_clean = (company or "").strip().upper()
+                target_ticker = (COMPANY_TICKER_MAP.get(target_company) or "").upper()
 
                 direct_match = (
-                    art_canonical is not None and
-                    art_canonical.lower() == target_company.lower()
+                    art_canonical.lower() == target_company.lower() or
+                    art_company.lower() == target_company.lower()
                 )
 
-                ticker_match = False
-                if not direct_match and art_canonical:
+                ticker_match = bool(
+                    (art_ticker and (art_ticker == query_clean or art_ticker == target_ticker)) or
+                    (query_clean and query_clean in (art_ticker, art_company.upper()))
+                )
+
+                substring_match = bool(
+                    target_company.lower() in art_company.lower() or
+                    art_company.lower() in target_company.lower()
+                )
+
+                kw_match = False
+                if not (direct_match or ticker_match or substring_match) and art_canonical:
                     keywords = SUPPORTED_COMPANIES.get(art_canonical, [])
-                    ticker_match = any(
+                    kw_match = any(
                         kw.lower() == target_company.lower() or
                         kw.lower() == (company or "").strip().lower()
                         for kw in keywords
                     )
 
-                if not (direct_match or ticker_match):
+                if not (direct_match or ticker_match or substring_match or kw_match):
                     continue
 
             # 3. Sentiment Filter (independent & optional)

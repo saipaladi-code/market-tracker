@@ -23,31 +23,32 @@ import { Article, SentimentAnalysisResult } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
 import { ExplainModal } from '../components/ExplainModal';
 import { TradeRoutingModal } from '../components/TradeRoutingModal';
-import { resolveVerifiedTicker } from '../utils/tickerLookup';
+import { resolveVerifiedTicker, resolveVerifiedInstrument } from '../utils/tickerLookup';
 import { getCanonicalSentimentResult } from '../utils/canonicalSentiment';
 import { useTranslation } from 'react-i18next';
 
 const COMPANIES = [
   { label: 'All Companies', value: 'All Companies' },
-  { label: 'Apple (AAPL)', value: 'Apple' },
-  { label: 'Nvidia (NVDA)', value: 'Nvidia' },
-  { label: 'Tesla (TSLA)', value: 'Tesla' },
-  { label: 'Microsoft (MSFT)', value: 'Microsoft' },
-  { label: 'Alphabet (GOOGL)', value: 'Alphabet' },
-  { label: 'Amazon (AMZN)', value: 'Amazon' },
-  { label: 'JPMorgan Chase (JPM)', value: 'JPMorgan Chase' },
-  { label: 'Pfizer (PFE)', value: 'Pfizer' },
-  { label: 'ExxonMobil (XOM)', value: 'ExxonMobil' },
-  { label: 'Reliance (RELIANCE)', value: 'Reliance' },
+  { label: 'Reliance Industries (RELIANCE)', value: 'Reliance Industries' },
+  { label: 'Tata Consultancy Services (TCS)', value: 'Tata Consultancy Services' },
   { label: 'Tata Motors (TATAMOTORS)', value: 'Tata Motors' },
-  { label: 'TCS (TCS)', value: 'TCS' },
   { label: 'Infosys (INFY)', value: 'Infosys' },
   { label: 'HDFC Bank (HDFCBANK)', value: 'HDFC Bank' },
   { label: 'ICICI Bank (ICICIBANK)', value: 'ICICI Bank' },
-  { label: 'SBI (SBIN)', value: 'SBIN' },
+  { label: 'State Bank of India (SBIN)', value: 'State Bank of India' },
   { label: 'Bharti Airtel (BHARTIARTL)', value: 'Bharti Airtel' },
   { label: 'L&T (LT)', value: 'Larsen & Toubro' },
   { label: 'Wipro (WIPRO)', value: 'Wipro' },
+  { label: 'Apple (AAPL)', value: 'Apple' },
+  { label: 'Microsoft (MSFT)', value: 'Microsoft' },
+  { label: 'Amazon (AMZN)', value: 'Amazon' },
+  { label: 'Tesla (TSLA)', value: 'Tesla' },
+  { label: 'Nvidia (NVDA)', value: 'Nvidia' },
+  { label: 'Alphabet (GOOGL)', value: 'Alphabet' },
+  { label: 'Meta Platforms (META)', value: 'Meta Platforms' },
+  { label: 'JPMorgan Chase (JPM)', value: 'JPMorgan Chase' },
+  { label: 'Pfizer (PFE)', value: 'Pfizer' },
+  { label: 'ExxonMobil (XOM)', value: 'ExxonMobil' },
 ];
 
 const SENTIMENTS = [
@@ -448,7 +449,10 @@ export const NewsExplorerPage: React.FC = () => {
             const tr = translations[art.id];
             const isTranslated = tr && tr.isTranslated && tr.text;
             const headlineText = isTranslated ? tr.text : art.title;
-            const verifiedTicker = resolveVerifiedTicker(art.company, art.ticker);
+            const verifiedInst = resolveVerifiedInstrument(art.company, art.ticker);
+            const verifiedTicker = verifiedInst?.ticker || resolveVerifiedTicker(art.company, art.ticker);
+            const isTradable = Boolean(verifiedInst);
+            const brokerTag = verifiedInst?.preferredBroker === 'upstox' ? 'Upstox' : 'IBKR';
 
             return (
               <div
@@ -522,21 +526,31 @@ export const NewsExplorerPage: React.FC = () => {
                       </button>
                     )}
 
-                    {/* Trade Button */}
-                    <button
-                      onClick={() => {
-                        setSelectedTradeArticle({
-                          ...art,
-                          ticker: verifiedTicker || art.ticker,
-                        });
-                        setTradeModalOpen(true);
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                      title={`Trade ${art.company} via verified broker`}
-                    >
-                      <TrendingUp className="w-3 h-3 text-emerald-400" />
-                      <span>Trade</span>
-                    </button>
+                    {/* Trade Button (only shown for verified tradable instruments) */}
+                    {isTradable ? (
+                      <button
+                        onClick={() => {
+                          setSelectedTradeArticle({
+                            ...art,
+                            company: verifiedInst?.company || art.company,
+                            ticker: verifiedTicker || art.ticker,
+                          });
+                          setTradeModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        title={`Trade ${verifiedInst?.company || art.company} via ${verifiedInst?.brokerName || 'broker'}`}
+                      >
+                        <TrendingUp className="w-3 h-3 text-emerald-400" />
+                        <span>Trade ({brokerTag})</span>
+                      </button>
+                    ) : (
+                      <span
+                        className="px-2 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-navy-800/60 border border-navy-750"
+                        title="Macroeconomic / general market news"
+                      >
+                        Market Context
+                      </span>
+                    )}
 
                     {/* Explain Button */}
                     <button

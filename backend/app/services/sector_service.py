@@ -2,6 +2,22 @@ from typing import List, Dict, Any
 
 # Standard sector mapping for key monitored companies
 COMPANY_SECTORS = {
+    # Indian Equities
+    "Reliance Industries": "Energy",
+    "Reliance": "Energy",
+    "Tata Consultancy Services": "Technology",
+    "TCS": "Technology",
+    "Tata Motors": "Consumer Cyclical",
+    "Infosys": "Technology",
+    "HDFC Bank": "Financials",
+    "ICICI Bank": "Financials",
+    "State Bank of India": "Financials",
+    "SBI": "Financials",
+    "Bharti Airtel": "Communication Services",
+    "Larsen & Toubro": "Industrials",
+    "Wipro": "Technology",
+
+    # US Equities
     "Apple": "Technology",
     "Microsoft": "Technology",
     "Alphabet": "Technology",
@@ -9,6 +25,7 @@ COMPANY_SECTORS = {
     "Nvidia": "Technology",
     "Amazon": "Consumer Cyclical",
     "Tesla": "Consumer Cyclical",
+    "Meta Platforms": "Communication Services",
     "Meta": "Communication Services",
     "JPMorgan Chase": "Financials",
     "Goldman Sachs": "Financials",
@@ -20,7 +37,7 @@ COMPANY_SECTORS = {
     "Chevron": "Energy",
 }
 
-SECTORS = ["Technology", "Financials", "Consumer Cyclical", "Healthcare", "Communication Services", "Energy"]
+SECTORS = ["Technology", "Financials", "Consumer Cyclical", "Healthcare", "Communication Services", "Energy", "Industrials"]
 
 class SectorService:
     @staticmethod

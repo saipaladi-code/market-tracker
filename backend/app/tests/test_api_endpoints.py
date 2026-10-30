@@ -179,7 +179,8 @@ def test_news_refresh_endpoints_support_get_and_post():
     token = auth_res.json()["token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    with patch.object(news_service, "fetch_articles", return_value=[{"title": "Test news", "is_demo": False}]):
+    with patch.object(news_service, "fetch_articles", return_value=[{"title": "Test news", "is_demo": False}]), \
+         patch.object(news_service, "ingest_live_news", return_value=[]):
         # Test POST /api/news/refresh
         res_post = client.post("/api/news/refresh", headers=headers)
         assert res_post.status_code == 200

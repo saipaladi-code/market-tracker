@@ -32,7 +32,7 @@ import { api } from '../services/api';
 import { CompanySummary, Article } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
 import { TradeRoutingModal } from '../components/TradeRoutingModal';
-import { resolveVerifiedTicker } from '../utils/tickerLookup';
+import { resolveVerifiedTicker, resolveVerifiedInstrument } from '../utils/tickerLookup';
 
 export const CompanyAnalysisPage: React.FC = () => {
   const [companies, setCompanies] = useState<CompanySummary[]>([]);
@@ -191,28 +191,34 @@ export const CompanyAnalysisPage: React.FC = () => {
                     <span>Mixed-Sentiment Polarization Detected</span>
                   </div>
                 )}
-                <button
-                  onClick={() => {
-                    setSelectedTradeArticle({
-                      id: `hero-${activeSummary.company}`,
-                      canonical_id: `hero-${activeSummary.company}`,
-                      title: `${activeSummary.company} (${activeSummary.ticker}) Surveillance & Market Depth`,
-                      company: activeSummary.company,
-                      ticker: activeSummary.ticker,
-                      url: '',
-                      source: 'Securities Surveillance',
-                      published_at: new Date().toISOString(),
-                      is_duplicate: false,
-                      is_demo: false,
-                    });
-                    setTradeModalOpen(true);
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
-                  title={`Trade ${activeSummary.company} via verified broker`}
-                >
-                  <TrendingUp className="w-4 h-4 text-emerald-400" />
-                  <span>Trade {activeSummary.ticker}</span>
-                </button>
+                {(() => {
+                  const heroInst = resolveVerifiedInstrument(activeSummary.company, activeSummary.ticker);
+                  const heroBroker = heroInst?.preferredBroker === 'upstox' ? 'Upstox' : 'IBKR';
+                  return (
+                    <button
+                      onClick={() => {
+                        setSelectedTradeArticle({
+                          id: `hero-${activeSummary.company}`,
+                          canonical_id: `hero-${activeSummary.company}`,
+                          title: `${heroInst?.company || activeSummary.company} (${heroInst?.ticker || activeSummary.ticker}) Surveillance & Market Depth`,
+                          company: heroInst?.company || activeSummary.company,
+                          ticker: heroInst?.ticker || activeSummary.ticker,
+                          url: '',
+                          source: 'Securities Surveillance',
+                          published_at: new Date().toISOString(),
+                          is_duplicate: false,
+                          is_demo: false,
+                        });
+                        setTradeModalOpen(true);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
+                      title={`Trade ${heroInst?.company || activeSummary.company} via ${heroInst?.brokerName || 'broker'}`}
+                    >
+                      <TrendingUp className="w-4 h-4 text-emerald-400" />
+                      <span>Trade {heroInst?.ticker || activeSummary.ticker} ({heroBroker})</span>
+                    </button>
+                  );
+                })()}
               </div>
             </div>
 
@@ -337,17 +343,27 @@ export const CompanyAnalysisPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
-                      <button
-                        onClick={() => {
-                          setSelectedTradeArticle(art);
-                          setTradeModalOpen(true);
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                        title={`Trade ${art.company} via verified broker`}
-                      >
-                        <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Trade</span>
-                      </button>
+                      {(() => {
+                        const hlInst = resolveVerifiedInstrument(art.company, art.ticker) || resolveVerifiedInstrument(activeSummary.company, activeSummary.ticker);
+                        const hlBroker = hlInst?.preferredBroker === 'upstox' ? 'Upstox' : 'IBKR';
+                        return (
+                          <button
+                            onClick={() => {
+                              setSelectedTradeArticle({
+                                ...art,
+                                company: hlInst?.company || art.company || activeSummary.company,
+                                ticker: hlInst?.ticker || art.ticker || activeSummary.ticker,
+                              });
+                              setTradeModalOpen(true);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                            title={`Trade ${hlInst?.company || art.company} via ${hlInst?.brokerName || 'broker'}`}
+                          >
+                            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Trade ({hlBroker})</span>
+                          </button>
+                        );
+                      })()}
                       <a
                         href={art.url}
                         target="_blank"

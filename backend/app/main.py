@@ -25,7 +25,7 @@ from app.services.auth_dependencies import (
 )
 from app.services.finbert_service import finbert_service
 from app.services.headline_validator import HeadlineValidationError, assert_valid_financial_headline
-from app.services.news_service import news_service, SUPPORTED_COMPANIES, canonicalize_company
+from app.services.news_service import news_service, SUPPORTED_COMPANIES, COMPANY_TICKER_MAP, canonicalize_company
 from app.services.deduplication_service import deduplication_service
 from app.services.conflict_service import conflict_service
 from app.services.sector_service import sector_service
@@ -478,9 +478,13 @@ def get_companies(current_user: dict = Depends(get_current_user)):
 
     company_stats = {}
     for company_name, kws in SUPPORTED_COMPANIES.items():
-        ticker = kws[0]
+        ticker = COMPANY_TICKER_MAP.get(company_name, kws[0])
         sector = sector_service.get_sector_for_company(company_name)
-        comp_arts = [a for a in articles if a.get("company") == company_name and not a.get("is_duplicate")]
+        comp_arts = [
+            a for a in articles 
+            if (canonicalize_company(a.get("company")) or a.get("company", "")).lower() == company_name.lower()
+            and not a.get("is_duplicate")
+        ]
         total = len(comp_arts)
 
         pos = sum(1 for a in comp_arts if (a.get("sentiment") or "").lower() == "positive")
@@ -526,10 +530,16 @@ def get_company_sentiment_detail(company: str = Path(...), current_user: dict = 
 
     if not comp_arts:
         # Check partial match
-        comp_arts = [a for a in articles if target_comp.lower() in a.get("company", "").lower()]
+        comp_arts = [a for a in articles if target_comp.lower() in (a.get("company") or "").lower()]
 
     clean_arts = [a for a in comp_arts if not a.get("is_duplicate")]
     total = len(clean_arts)
+
+    # Enrich ticker on each headline returned
+    resolved_ticker = COMPANY_TICKER_MAP.get(target_comp)
+    for a in clean_arts:
+        if not a.get("ticker"):
+            a["ticker"] = resolved_ticker or broker_routing_service.get_trading_route(target_comp).ticker
 
     pos = sum(1 for a in clean_arts if (a.get("sentiment") or "").lower() == "positive")
     neg = sum(1 for a in clean_arts if (a.get("sentiment") or "").lower() == "negative")

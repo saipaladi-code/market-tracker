@@ -41,7 +41,7 @@ import { DashboardStats, Article } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
 import { BackendConfigModal } from '../components/BackendConfigModal';
 import { TradeRoutingModal } from '../components/TradeRoutingModal';
-import { resolveVerifiedTicker } from '../utils/tickerLookup';
+import { resolveVerifiedTicker, resolveVerifiedInstrument } from '../utils/tickerLookup';
 import { MOCK_DASHBOARD_STATS, MOCK_ARTICLES, MOCK_HISTORY } from '../services/mockData';
 
 const COLORS = {
@@ -605,7 +605,10 @@ export const DashboardPage: React.FC = () => {
             </div>
           ) : (
             recentNews.map((art) => {
-              const verifiedTicker = resolveVerifiedTicker(art.company, art.ticker);
+              const verifiedInst = resolveVerifiedInstrument(art.company, art.ticker);
+              const verifiedTicker = verifiedInst?.ticker || resolveVerifiedTicker(art.company, art.ticker);
+              const isTradable = Boolean(verifiedInst);
+              const brokerTag = verifiedInst?.preferredBroker === 'upstox' ? 'Upstox' : 'IBKR';
 
               return (
                 <div
@@ -634,20 +637,27 @@ export const DashboardPage: React.FC = () => {
                   <div className="pt-2 border-t border-navy-800/80 flex items-center justify-between text-[11px] text-slate-400 gap-2">
                     <span className="truncate max-w-[110px]">{art.source}</span>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          setSelectedTradeArticle({
-                            ...art,
-                            ticker: verifiedTicker || art.ticker,
-                          });
-                          setTradeModalOpen(true);
-                        }}
-                        className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                        title={`Trade ${art.company} via verified broker`}
-                      >
-                        <TrendingUp className="w-3 h-3 text-emerald-400" />
-                        <span>Trade</span>
-                      </button>
+                      {isTradable ? (
+                        <button
+                          onClick={() => {
+                            setSelectedTradeArticle({
+                              ...art,
+                              company: verifiedInst?.company || art.company,
+                              ticker: verifiedTicker || art.ticker,
+                            });
+                            setTradeModalOpen(true);
+                          }}
+                          className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          title={`Trade ${verifiedInst?.company || art.company} via ${verifiedInst?.brokerName || 'broker'}`}
+                        >
+                          <TrendingUp className="w-3 h-3 text-emerald-400" />
+                          <span>Trade ({brokerTag})</span>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-mono text-slate-500 px-1.5 py-0.5 bg-navy-850 rounded border border-navy-750">
+                          Market News
+                        </span>
+                      )}
                       <a
                         href={art.url}
                         target="_blank"
