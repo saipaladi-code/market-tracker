@@ -14,6 +14,26 @@ export const LoginPage: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [warmupNotice, setWarmupNotice] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    let t1: any;
+    let t2: any;
+    if (loading) {
+      t1 = setTimeout(() => {
+        setWarmupNotice('Connecting to secure cloud server (waking up container)...');
+      }, 3500);
+      t2 = setTimeout(() => {
+        setWarmupNotice('Render container is spinning up (free-tier cold start). Almost ready...');
+      }, 12000);
+    } else {
+      setWarmupNotice(null);
+    }
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [loading]);
 
   // Extract redirect query parameter if provided
   const queryParams = new URLSearchParams(location.search);
@@ -47,7 +67,12 @@ export const LoginPage: React.FC = () => {
       await login(email.trim(), password, rememberMe);
       navigate(redirectTarget, { replace: true });
     } catch (err: any) {
-      setFormError(err.message || 'Authentication failed. Please verify your credentials.');
+      const msg = err?.message || '';
+      if (msg.toLowerCase().includes('timeout') || msg.toLowerCase().includes('aborted') || msg.toLowerCase().includes('cold start')) {
+        setFormError('Cloud server is waking up from idle sleep. Please click "Sign In to Terminal" again now that the container is warm, or click 1-Click Demo below.');
+      } else {
+        setFormError(msg || 'Authentication failed. Please verify your credentials.');
+      }
     } finally {
       setLoading(false);
     }
@@ -88,6 +113,14 @@ export const LoginPage: React.FC = () => {
               <span>TLS / SHA-256</span>
             </div>
           </div>
+
+          {/* Warmup Notification */}
+          {warmupNotice && (
+            <div className="mb-4 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center gap-2.5 text-xs text-cyan-300 animate-pulse">
+              <Loader2 className="w-4 h-4 text-cyan-400 shrink-0 animate-spin" />
+              <div className="flex-1 leading-relaxed">{warmupNotice}</div>
+            </div>
+          )}
 
           {/* Error Banner */}
           {formError && (

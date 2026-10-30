@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '../types';
-import { api } from '../services/api';
+import { api, getStoredUser, setStoredUser, getStoredAuthToken } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -16,18 +16,41 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const initialUser = getStoredUser();
+  const hasToken = !!getStoredAuthToken();
+  const [user, setUser] = useState<User | null>(hasToken ? initialUser : null);
+  // Only show full-screen loader if there is a token but no cached user profile
+  const [isLoading, setIsLoading] = useState<boolean>(hasToken && !initialUser);
   const [error, setError] = useState<string | null>(null);
 
   const checkSession = async () => {
+    const token = getStoredAuthToken();
+    if (!token) {
+      setUser(null);
+      setStoredUser(null);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      setIsLoading(true);
+      if (!initialUser) {
+        setIsLoading(true);
+      }
       setError(null);
       const currentUser = await api.getMe();
       setUser(currentUser);
-    } catch {
-      setUser(null);
+      setStoredUser(currentUser);
+    } catch (err: any) {
+      // If server explicitly returned 401 Unauthorized, token has expired
+      if (err?.response?.status === 401) {
+        setUser(null);
+        setStoredUser(null);
+        api.setAuthToken(null);
+      } else {
+        // Cold start, network latency, or mobile hotspot lag:
+        // KEEP existing stored user so analyst session is preserved without interruption
+        console.warn('Session verification deferred (offline / sleeping backend):', err?.message);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -39,6 +62,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Listen for unauthorized 401 events from the API client (expired session)
     const unsubscribe = api.subscribeUnauthorized(() => {
       setUser(null);
+      setStoredUser(null);
       api.setAuthToken(null);
     });
 
@@ -52,6 +76,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const res = await api.login({ email, password, remember_me: rememberMe });
       setUser(res.user);
+      setStoredUser(res.user);
       api.setAuthToken(res.token);
     } catch (err: any) {
       const msg =
@@ -68,6 +93,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const res = await api.demoLogin();
       setUser(res.user);
+      setStoredUser(res.user);
       api.setAuthToken(res.token);
     } catch (err: any) {
       const msg =
@@ -84,6 +110,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const res = await api.register({ full_name: fullName, email, password });
       setUser(res.user);
+      setStoredUser(res.user);
       api.setAuthToken(res.token);
     } catch (err: any) {
       const msg =
@@ -102,6 +129,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.warn('Server logout error:', err);
     } finally {
       setUser(null);
+      setStoredUser(null);
       api.setAuthToken(null);
     }
   };

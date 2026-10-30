@@ -56,14 +56,33 @@ export function getStoredApiUrl(): string {
 }
 
 const AUTH_TOKEN_KEY = 'FIN_SENTIMENT_AUTH_TOKEN';
+const USER_PROFILE_KEY = 'FIN_SENTIMENT_USER_PROFILE';
 const CACHE_NEWS_KEY = 'FIN_SENTIMENT_CACHED_NEWS';
 
-function getStoredAuthToken(): string | null {
+export function getStoredAuthToken(): string | null {
   try {
     return localStorage.getItem(AUTH_TOKEN_KEY);
   } catch {
     return null;
   }
+}
+
+export function getStoredUser(): User | null {
+  try {
+    const raw = localStorage.getItem(USER_PROFILE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+export function setStoredUser(user: User | null): void {
+  try {
+    if (user) {
+      localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(USER_PROFILE_KEY);
+    }
+  } catch {}
 }
 
 function getStoredCachedNews(): NewsResponse | null {
@@ -86,6 +105,14 @@ function setStoredCachedNews(data: NewsResponse | null) {
 
 let inMemoryToken: string | null = getStoredAuthToken();
 let currentBaseUrl = getStoredApiUrl();
+
+// Pre-warm backend container early if on Render
+if (typeof window !== 'undefined' && currentBaseUrl.includes('onrender.com')) {
+  try {
+    fetch(`${currentBaseUrl}/health`, { mode: 'no-cors' }).catch(() => {});
+  } catch {}
+}
+
 const unauthorizedListeners: Array<() => void> = [];
 
 function notifyUnauthorized() {
@@ -100,7 +127,7 @@ function createAxiosClient(baseURL: string) {
       ...(inMemoryToken ? { Authorization: `Bearer ${inMemoryToken}` } : {}),
     },
     withCredentials: true, // Required for HttpOnly session cookie persistence across CORS
-    timeout: 25000,
+    timeout: 90000,
   });
 
   instance.interceptors.response.use(
@@ -160,6 +187,7 @@ export const api = {
         localStorage.setItem(AUTH_TOKEN_KEY, token);
       } else {
         localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(USER_PROFILE_KEY);
       }
     } catch {}
     client = createAxiosClient(currentBaseUrl);
@@ -175,35 +203,81 @@ export const api = {
 
   // Authentication API endpoints
   register: async (data: { full_name: string; email: string; password: string }): Promise<AuthResponse> => {
-    const res = await client.post<AuthResponse>('/api/auth/register', data);
-    setOfflineStatus(false);
-    if (res.data?.token) {
-      api.setAuthToken(res.data.token);
+    try {
+      const res = await client.post<AuthResponse>('/api/auth/register', data);
+      setOfflineStatus(false);
+      if (res.data?.token) {
+        api.setAuthToken(res.data.token);
+      }
+      if (res.data?.user) {
+        setStoredUser(res.data.user);
+      }
+      return res.data;
+    } catch (err: any) {
+      if (err?.code === 'ECONNABORTED' || (err?.message && err.message.toLowerCase().includes('timeout'))) {
+        throw new Error('Cloud server is waking up. Please try submitting again in a moment.');
+      }
+      throw err;
     }
-    return res.data;
   },
 
   login: async (data: { email: string; password: string; remember_me?: boolean }): Promise<AuthResponse> => {
-    const res = await client.post<AuthResponse>('/api/auth/login', data);
-    setOfflineStatus(false);
-    if (res.data?.token) {
-      api.setAuthToken(res.data.token);
+    try {
+      const res = await client.post<AuthResponse>('/api/auth/login', data);
+      setOfflineStatus(false);
+      if (res.data?.token) {
+        api.setAuthToken(res.data.token);
+      }
+      if (res.data?.user) {
+        setStoredUser(res.data.user);
+      }
+      return res.data;
+    } catch (err: any) {
+      if (err?.code === 'ECONNABORTED' || (err?.message && err.message.toLowerCase().includes('timeout'))) {
+        throw new Error('Cloud server is waking up from idle mode (cold start). Please click Sign In again in a few seconds.');
+      }
+      throw err;
     }
-    return res.data;
   },
 
   demoLogin: async (): Promise<AuthResponse> => {
-    const res = await client.post<AuthResponse>('/api/auth/demo');
-    setOfflineStatus(false);
-    if (res.data?.token) {
-      api.setAuthToken(res.data.token);
+    try {
+      const res = await client.post<AuthResponse>('/api/auth/demo');
+      setOfflineStatus(false);
+      if (res.data?.token) {
+        api.setAuthToken(res.data.token);
+      }
+      if (res.data?.user) {
+        setStoredUser(res.data.user);
+      }
+      return res.data;
+    } catch (err: any) {
+      console.warn('Remote demo login unreachable or timed out, activating instant local demo session:', err);
+      const fallbackUser: User = {
+        id: 'usr_demo_analyst',
+        email: 'demo.analyst@finsentiment.ai',
+        full_name: 'Lead Market Analyst (Demo)',
+        created_at: new Date().toISOString()
+      };
+      const fallbackToken = 'demo-session-' + Date.now();
+      api.setAuthToken(fallbackToken);
+      setStoredUser(fallbackUser);
+      setOfflineStatus(true);
+      return {
+        user: fallbackUser,
+        token: fallbackToken,
+        expires_in: 86400 * 30,
+        message: 'Instant Demo Analyst terminal activated.'
+      };
     }
-    return res.data;
   },
 
   getMe: async (): Promise<User> => {
     const res = await client.get<User>('/api/auth/me');
     setOfflineStatus(false);
+    if (res.data) {
+      setStoredUser(res.data);
+    }
     return res.data;
   },
 
