@@ -17,6 +17,7 @@ import { SectorHeatmapPage } from './pages/SectorHeatmapPage';
 import { AlertsHistoryPage } from './pages/AlertsHistoryPage';
 import { DataQualityPage } from './pages/DataQualityPage';
 import { AssistantPage } from './pages/AssistantPage';
+import { GoldSilverIntelligencePage } from './pages/GoldSilverIntelligencePage';
 import { BackendConfigModal } from './components/BackendConfigModal';
 import { api } from './services/api';
 
@@ -189,6 +190,7 @@ export function App() {
           >
             <Route path="/" element={<DashboardPage />} />
             <Route path="/analyze" element={<LiveAnalysisPage />} />
+            <Route path="/metals" element={<GoldSilverIntelligencePage />} />
             <Route path="/news" element={<NewsExplorerPage />} />
             <Route path="/companies" element={<CompanyAnalysisPage />} />
             <Route path="/conflicts" element={<ConflictDetectorPage />} />

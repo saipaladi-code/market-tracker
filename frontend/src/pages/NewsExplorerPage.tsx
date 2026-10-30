@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   SlidersHorizontal,
   Building2,
+  Languages,
   X
 } from 'lucide-react';
 import { api } from '../services/api';
@@ -21,6 +22,7 @@ import { Article, SentimentAnalysisResult } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
 import { ExplainModal } from '../components/ExplainModal';
 import { getCanonicalSentimentResult } from '../utils/canonicalSentiment';
+import { useTranslation } from 'react-i18next';
 
 const COMPANIES = [
   { label: 'All Companies', value: 'All Companies' },
@@ -57,6 +59,40 @@ export const NewsExplorerPage: React.FC = () => {
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [todayOnly, setTodayOnly] = useState<boolean>(true);
+  const { i18n, t } = useTranslation();
+  const [translations, setTranslations] = useState<Record<string, { text: string; isTranslated: boolean; loading: boolean }>>({});
+
+  const toggleArticleTranslation = async (article: Article) => {
+    const currentLang = (i18n.language || 'en').toLowerCase().split('-')[0];
+    if (currentLang === 'en') return;
+
+    const current = translations[article.id];
+    if (current && current.text) {
+      setTranslations((prev) => ({
+        ...prev,
+        [article.id]: { ...current, isTranslated: !current.isTranslated },
+      }));
+      return;
+    }
+
+    setTranslations((prev) => ({
+      ...prev,
+      [article.id]: { text: '', isTranslated: false, loading: true },
+    }));
+
+    try {
+      const res = await api.translateText(article.title, currentLang, article.id);
+      setTranslations((prev) => ({
+        ...prev,
+        [article.id]: { text: res.translated_text || article.title, isTranslated: true, loading: false },
+      }));
+    } catch {
+      setTranslations((prev) => ({
+        ...prev,
+        [article.id]: { text: article.title, isTranslated: false, loading: false },
+      }));
+    }
+  };
 
   // Explain modal state
   const [selectedExplainResult, setSelectedExplainResult] = useState<SentimentAnalysisResult | null>(null);
@@ -392,6 +428,10 @@ export const NewsExplorerPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {articles.map((art) => {
             const isDuplicate = Boolean(art.is_duplicate);
+            const tr = translations[art.id];
+            const isTranslated = tr && tr.isTranslated && tr.text;
+            const headlineText = isTranslated ? tr.text : art.title;
+
             return (
               <div
                 key={art.id}
@@ -417,7 +457,7 @@ export const NewsExplorerPage: React.FC = () => {
 
                   {/* Headline */}
                   <h3 className="text-sm font-semibold text-slate-100 line-clamp-2 leading-snug">
-                    {art.title}
+                    {headlineText}
                   </h3>
 
                   {/* Description snippet if available */}
@@ -446,6 +486,19 @@ export const NewsExplorerPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    {/* Multilingual Translation Toggle */}
+                    {(i18n.language || 'en').toLowerCase().split('-')[0] !== 'en' && (
+                      <button
+                        onClick={() => toggleArticleTranslation(art)}
+                        disabled={tr?.loading}
+                        className="px-2 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Translate headline into current language"
+                      >
+                        <Languages className="w-3 h-3 text-cyan-400" />
+                        <span>{tr?.loading ? 'Translating...' : isTranslated ? 'Original' : 'Translate'}</span>
+                      </button>
+                    )}
+
                     {/* Explain Button */}
                     <button
                       onClick={() => handleInspectAttribution(art)}

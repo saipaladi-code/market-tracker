@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { LanguageSelector } from './LanguageSelector';
+import { useTranslation } from 'react-i18next';
 import {
   RefreshCw,
   AlertCircle,
@@ -31,6 +33,7 @@ const PAGE_METADATA: Record<string, { title: string; section: string; desc: stri
   '/alerts': { title: 'Sentiment Alerts & Risk Watchlist', section: 'Risk Surveillance', desc: 'Automated warnings for negative sentiment surges' },
   '/data-quality': { title: 'System Integrity & Telemetry', section: 'Operations & QA', desc: 'FinBERT health, provider status & deduplication metrics' },
   '/assistant': { title: 'AI News Research Assistant', section: 'Conversational Intelligence', desc: 'Grounded question answering over news corpus' },
+  '/metals': { title: 'Gold & Silver Market Intelligence', section: 'Bullion & Commodity Markets', desc: 'Real-time bullion rates, COMEX quotes, Indian benchmarks & FinBERT sentiment' },
 };
 
 const TRACKED_COMPANIES = [
@@ -54,6 +57,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenBackendSettings,
 }) => {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -210,6 +214,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           <Clock className="w-3.5 h-3.5 text-blue-400" />
           <span>Synced: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : 'Live'}</span>
         </div>
+
+        {/* Global Multilingual Selector */}
+        <LanguageSelector />
 
         {/* Backend Settings Button */}
         {onOpenBackendSettings && (

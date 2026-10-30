@@ -13,3 +13,4 @@ jobs:
       - name: Ping Render Backend Health Endpoint
         run: |
           curl -s -f -m 30 https://market-tracker-c6ou.onrender.com/health || echo "Ping request executed"
+

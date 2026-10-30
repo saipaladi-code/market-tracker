@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
+  Coins,
   Cpu,
   Database,
   Globe,
@@ -21,6 +22,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 interface SidebarProps {
   modelStatus?: string;
@@ -48,28 +50,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenBackendSettings,
 }) => {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
   const navItems = [
-    { name: 'Dashboard', path: '/', icon: LayoutDashboard, badge: null },
-    { name: 'FinBERT Live Lab', path: '/analyze', icon: Sparkles, badge: 'AI' },
-    { name: 'Financial News Feed', path: '/news', icon: Newspaper, badge: null },
-    { name: 'Company Deep Dive', path: '/companies', icon: Building2, badge: null },
+    { name: 'Dashboard', path: '/', icon: LayoutDashboard, badge: null, translationKey: 'nav.dashboard' },
+    { name: 'Gold & Silver Intelligence', path: '/metals', icon: Coins, badge: 'NEW', badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30', translationKey: 'nav.goldSilver' },
+    { name: 'FinBERT Live Lab', path: '/analyze', icon: Sparkles, badge: 'AI', translationKey: 'nav.live' },
+    { name: 'Financial News Feed', path: '/news', icon: Newspaper, badge: null, translationKey: 'nav.news' },
+    { name: 'Company Deep Dive', path: '/companies', icon: Building2, badge: null, translationKey: 'nav.company' },
     {
       name: 'Sentiment Conflicts',
       path: '/conflicts',
       icon: GitCompareArrows,
       badge: activeConflictsCount > 0 ? String(activeConflictsCount) : null,
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      translationKey: 'nav.conflicts'
     },
-    { name: 'Sector Heatmap', path: '/sectors', icon: Grid3X3, badge: null },
+    { name: 'Sector Heatmap', path: '/sectors', icon: Grid3X3, badge: null, translationKey: 'nav.heatmap' },
     {
       name: 'Alerts & History',
       path: '/alerts',
       icon: BellRing,
       badge: unreadAlertsCount > 0 ? String(unreadAlertsCount) : null,
-      badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+      badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+      translationKey: 'nav.alerts'
     },
-    { name: 'Data Quality & Health', path: '/data-quality', icon: ShieldCheck, badge: null },
-    { name: 'AI News Assistant', path: '/assistant', icon: BotMessageSquare, badge: 'RAG' },
+    { name: 'Data Quality & Health', path: '/data-quality', icon: ShieldCheck, badge: null, translationKey: 'nav.quality' },
+    { name: 'AI News Assistant', path: '/assistant', icon: BotMessageSquare, badge: 'RAG', translationKey: 'nav.assistant' },
   ];
 
   const sidebarContent = (
@@ -136,7 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   
                   {!isCollapsed && (
                     <div className="flex-1 flex items-center justify-between min-w-0">
-                      <span className="truncate">{item.name}</span>
+                      <span className="truncate">{item.translationKey ? t(item.translationKey, item.name) : item.name}</span>
                       {item.badge && (
                         <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${item.badgeColor || 'bg-navy-800 text-slate-300 border-navy-700'}`}>
                           {item.badge}
@@ -148,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {/* Tooltip on collapsed state */}
                   {isCollapsed && (
                     <div className="absolute left-full ml-3 px-2.5 py-1 bg-navy-800 text-slate-100 text-xs rounded-md shadow-xl border border-navy-700 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-                      {item.name}
+                      {item.translationKey ? t(item.translationKey, item.name) : item.name}
                     </div>
                   )}
                 </>

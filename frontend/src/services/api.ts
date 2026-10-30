@@ -14,7 +14,12 @@ import {
   User,
   AuthResponse,
   ForgotPasswordResponse,
-  MessageResponse
+  MessageResponse,
+  MetalsPricesResponse,
+  MetalsNewsResponse,
+  MetalsSentimentSummary,
+  MetalsHistoryResponse,
+  TranslateResponse
 } from '../types';
 import {
   MOCK_ARTICLES,
@@ -626,6 +631,45 @@ export const api = {
   },
 
   // AI Financial Assistant
+
+  // Gold & Silver Market Intelligence
+  getMetalsPrices: async (): Promise<MetalsPricesResponse> => {
+    const res = await client.get<MetalsPricesResponse>('/api/metals/prices');
+    return res.data;
+  },
+
+  getMetalsNews: async (params?: {
+    metal?: string;
+    category?: string;
+    days?: number;
+    page?: number;
+    page_size?: number;
+    search?: string;
+  }): Promise<MetalsNewsResponse> => {
+    const res = await client.get<MetalsNewsResponse>('/api/metals/news', { params });
+    return res.data;
+  },
+
+  getMetalsSentiment: async (days = 30): Promise<MetalsSentimentSummary> => {
+    const res = await client.get<MetalsSentimentSummary>('/api/metals/sentiment', { params: { days } });
+    return res.data;
+  },
+
+  getMetalsHistory: async (days = 14): Promise<MetalsHistoryResponse> => {
+    const res = await client.get<MetalsHistoryResponse>('/api/metals/history', { params: { days } });
+    return res.data;
+  },
+
+  // Multilingual Dynamic Translation
+  translateText: async (text: string, targetLang: string, articleId?: string): Promise<TranslateResponse> => {
+    const res = await client.post<TranslateResponse>('/api/translate', {
+      text,
+      target_lang: targetLang,
+      article_id: articleId,
+    });
+    return res.data;
+  },
+
   chatAssistant: async (message: string, companyFocus?: string): Promise<AssistantChatResponse> => {
     try {
       const res = await client.post('/api/assistant/chat', { message, company_focus: companyFocus });

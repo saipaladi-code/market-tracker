@@ -198,3 +198,154 @@ export interface MessageResponse {
   message: string;
   status: string;
 }
+
+
+// Precious Metals Intelligence Types
+export interface MetalsPriceQuote {
+  metal: 'gold' | 'silver';
+  symbol: string;
+  price: number;
+  currency: string;
+  unit: string;
+  change: number;
+  change_pct: number;
+  exchange: string;
+  timestamp: string;
+  timestamp_ist: string;
+  freshness: string;
+}
+
+export interface IndiaDomesticBenchmark {
+  metal: 'gold' | 'silver';
+  price_inr: number;
+  unit: string;
+  usdinr_rate: number;
+  timestamp: string;
+  timestamp_ist: string;
+  basis: string;
+}
+
+export interface MetalsPriceCard {
+  metal: string;
+  international?: MetalsPriceQuote;
+  india_domestic?: IndiaDomesticBenchmark;
+  status: 'active' | 'delayed' | 'unconfigured';
+  provider: string;
+}
+
+export interface MetalsPricesResponse {
+  gold: MetalsPriceCard;
+  silver: MetalsPriceCard;
+  last_updated: string;
+  provider_status: string;
+  notes: string;
+}
+
+export interface MetalsArticle {
+  id: string;
+  title: string;
+  summary?: string;
+  publisher: string;
+  url: string;
+  published_at: string;
+  published_at_ist: string;
+  metal: 'Gold' | 'Silver' | 'Both';
+  category: 'India' | 'Global Markets' | 'Investment Trends';
+  sentiment: 'Positive' | 'Negative' | 'Neutral';
+  sentiment_label: 'Bullish' | 'Bearish' | 'Neutral';
+  scores: {
+    positive: number;
+    negative: number;
+    neutral: number;
+  };
+  confidence: number;
+  inference_engine: string;
+  is_fallback: boolean;
+}
+
+export interface MetalsNewsResponse {
+  articles: MetalsArticle[];
+  total_count: number;
+  page: number;
+  page_size: number;
+  active_filters: {
+    metal: string;
+    category: string;
+    days: number;
+    search: string;
+  };
+  data_freshness: string;
+  disclaimer: string;
+}
+
+export interface MetalsSentimentSummary {
+  total_articles: number;
+  gold_articles_count: number;
+  silver_articles_count: number;
+  both_articles_count: number;
+  sentiment_distribution: {
+    Bullish: number;
+    Bearish: number;
+    Neutral: number;
+  };
+  gold_sentiment: {
+    total: number;
+    bullish_count: number;
+    bearish_count: number;
+    neutral_count: number;
+    bullish_pct: number;
+    bearish_pct: number;
+    neutral_pct: number;
+    overall_sentiment: string;
+  };
+  silver_sentiment: {
+    total: number;
+    bullish_count: number;
+    bearish_count: number;
+    neutral_count: number;
+    bullish_pct: number;
+    bearish_pct: number;
+    neutral_pct: number;
+    overall_sentiment: string;
+  };
+  category_counts: {
+    India: number;
+    'Global Markets': number;
+    'Investment Trends': number;
+  };
+  last_updated: string;
+  disclaimer: string;
+}
+
+export interface MetalsHistoryPoint {
+  date: string;
+  gold_positive: number;
+  gold_negative: number;
+  gold_neutral: number;
+  silver_positive: number;
+  silver_negative: number;
+  silver_neutral: number;
+  total_volume: number;
+}
+
+export interface MetalsHistoryResponse {
+  history: MetalsHistoryPoint[];
+  timeframe: string;
+}
+
+export interface TranslateResponse {
+  original_text: string;
+  translated_text: string;
+  source_lang: string;
+  target_lang: string;
+  cached: boolean;
+  provider: string;
+  status: string;
+}
+
+export interface LanguageInfo {
+  code: string;
+  name: string;
+  native: string;
+  dir: 'ltr' | 'rtl';
+}

@@ -32,6 +32,13 @@ from app.services.sector_service import sector_service
 from app.services.alert_service import alert_service
 from app.services.gemini_service import gemini_assistant_service
 from app.services.financial_validator import validate_financial_headline, FinancialValidationError
+from app.models.metals_models import (
+    MetalsNewsResponse, MetalsPricesResponse,
+    MetalsSentimentSummary, MetalsHistoryResponse,
+    TranslateRequest, TranslateResponse
+)
+from app.services.metals_service import metals_service
+from app.services.translation_service import translation_service
 
 # Configure logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -630,6 +637,67 @@ def assistant_chat(req: AssistantChatRequest, current_user: dict = Depends(get_c
     """Conversational Financial News Assistant grounded in stored sentiment data."""
     result = gemini_assistant_service.answer_query(req.message, req.company_focus)
     return AssistantChatResponse(**result)
+
+
+
+# -------------------------------------------------------------
+# GOLD & SILVER MARKET INTELLIGENCE ENDPOINTS
+# -------------------------------------------------------------
+@app.get("/api/metals/news", response_model=MetalsNewsResponse)
+def get_metals_news(
+    metal: Optional[str] = Query(None, description="Filter metal: Gold, Silver, Both, or All"),
+    category: Optional[str] = Query(None, description="Filter category: India, Global Markets, Investment Trends, or All"),
+    days: int = Query(30, ge=1, le=90, description="Time window in days"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=50, description="Page size"),
+    search: Optional[str] = Query(None, description="Search term in headline or summary")
+):
+    """Retrieves genuine precious metals news with FinBERT sentiment classifications."""
+    return metals_service.get_news(
+        metal=metal,
+        category=category,
+        days=days,
+        page=page,
+        page_size=page_size,
+        search=search
+    )
+
+@app.get("/api/metals/prices", response_model=MetalsPricesResponse)
+def get_metals_prices():
+    """Retrieves COMEX International Futures quotes and Indian Domestic Benchmark prices."""
+    return metals_service.get_market_prices()
+
+@app.get("/api/metals/sentiment", response_model=MetalsSentimentSummary)
+def get_metals_sentiment_summary(
+    days: int = Query(30, ge=1, le=90, description="Days to summarize")
+):
+    """Returns aggregated FinBERT sentiment distribution and comparison for Gold vs Silver."""
+    return metals_service.get_sentiment_summary(days=days)
+
+@app.get("/api/metals/history", response_model=MetalsHistoryResponse)
+def get_metals_history(
+    days: int = Query(14, ge=7, le=60, description="Historical timeline days")
+):
+    """Returns daily sentiment timeline data points for Precious Metals."""
+    return metals_service.get_historical_trends(days=days)
+
+# -------------------------------------------------------------
+# MULTILINGUAL TRANSLATION ENDPOINTS
+# -------------------------------------------------------------
+@app.post("/api/translate", response_model=TranslateResponse)
+def translate_content(req: TranslateRequest):
+    """Translates financial news headlines and explanations with caching."""
+    res = translation_service.translate_text(
+        text=req.text,
+        target_lang=req.target_lang,
+        article_id=req.article_id
+    )
+    return TranslateResponse(**res)
+
+@app.get("/api/translate/languages")
+def get_translation_languages():
+    """Returns all supported languages with native names and text directions."""
+    return translation_service.get_supported_languages()
 
 if __name__ == "__main__":
     import uvicorn
