@@ -412,34 +412,56 @@ export const NewsExplorerPage: React.FC = () => {
 
       {/* Loading Skeleton */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-navy-900 border border-navy-800 rounded-2xl p-5 space-y-3 animate-pulse">
-              <div className="h-4 bg-navy-800 rounded w-1/3" />
-              <div className="h-5 bg-navy-800 rounded w-full" />
-              <div className="h-12 bg-navy-800 rounded w-full" />
-              <div className="h-4 bg-navy-800 rounded w-1/2 pt-2" />
-            </div>
-          ))}
+        <div className="space-y-4">
+          <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs font-mono">
+            <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
+            <span>Streaming financial intelligence headlines from live market feeds...</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="bg-navy-900 border border-navy-800 rounded-2xl p-5 space-y-3 animate-pulse">
+                <div className="h-4 bg-navy-800 rounded w-1/3" />
+                <div className="h-5 bg-navy-800 rounded w-full" />
+                <div className="h-12 bg-navy-800 rounded w-full" />
+                <div className="h-4 bg-navy-800 rounded w-1/2 pt-2" />
+              </div>
+            ))}
+          </div>
         </div>
       ) : articles.length === 0 ? (
         <div className="p-12 text-center bg-navy-900 border border-navy-800 rounded-2xl space-y-3">
           <Layers className="w-10 h-10 text-slate-600 mx-auto" />
           <h3 className="text-base font-semibold text-slate-200">No Articles Matched Your Filter</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            Try adjusting your search query, changing company selection, or resetting the sentiment filter.
+            {todayOnly
+              ? "No new articles match today's strict timestamp yet. Click below to view all recent verified news."
+              : "Try adjusting your search query, changing company selection, or resetting the sentiment filter."}
           </p>
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setSelectedCompany('All Companies');
-              setSelectedSentiment('All');
-              setPage(1);
-            }}
-            className="px-4 py-2 bg-navy-800 hover:bg-navy-700 text-slate-200 rounded-xl text-xs font-semibold border border-navy-700 transition-colors"
-          >
-            Reset All Filters
-          </button>
+          <div className="flex items-center justify-center gap-3">
+            {todayOnly && (
+              <button
+                onClick={() => {
+                  setTodayOnly(false);
+                  setPage(1);
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md transition-colors cursor-pointer"
+              >
+                View All Recent News
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedCompany('All Companies');
+                setSelectedSentiment('All');
+                setTodayOnly(false);
+                setPage(1);
+              }}
+              className="px-4 py-2 bg-navy-800 hover:bg-navy-700 text-slate-200 rounded-xl text-xs font-semibold border border-navy-700 transition-colors cursor-pointer"
+            >
+              Reset All Filters
+            </button>
+          </div>
         </div>
       ) : (
         /* Articles Cards Grid */

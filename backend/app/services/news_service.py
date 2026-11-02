@@ -649,6 +649,7 @@ class NewsService:
         self._last_successful_fetch: Optional[datetime] = None
         self._last_fetch_count: int = 0
         self._last_fetch_error: Optional[str] = None
+        self._is_ingesting: bool = False
         self.news_api_status = (
             "Connected (Live Financial News Feed - Reuters, Bloomberg, WSJ, MarketWatch)"
             if not settings.USE_DEMO_DATA else "Demo Mode (USE_DEMO_DATA active)"
@@ -1042,6 +1043,22 @@ class NewsService:
         logger.info(f"Ingestion cycle completed successfully. Ingested {len(processed_articles)} genuine live articles.")
         return processed_articles
 
+    def _trigger_background_ingest(self, query: Optional[str] = None):
+        """Dispatches live news scraping and FinBERT classification in background worker."""
+        if self._is_ingesting:
+            return
+        import threading
+        def worker():
+            try:
+                self._is_ingesting = True
+                self.ingest_live_news(force=False, query=query)
+            except Exception as e:
+                logger.error(f"Background live news ingestion error: {e}")
+            finally:
+                self._is_ingesting = False
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+
     def fetch_articles(self, force_refresh: bool = False, query: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Retrieves articles from database or fetches fresh articles from providers.
@@ -1082,8 +1099,12 @@ class NewsService:
 
         if should_fetch:
             self._last_fetch_time = now_utc
-            self.ingest_live_news(force=force_refresh, query=query)
-            existing_articles = db.find("news_articles", {"is_demo": False}, limit=1000, sort=[("published_at", -1)])
+            if existing_articles and not force_refresh:
+                # Non-blocking: DB has articles, so serve immediately and update in background
+                self._trigger_background_ingest(query=query)
+            else:
+                self.ingest_live_news(force=force_refresh, query=query)
+                existing_articles = db.find("news_articles", {"is_demo": False}, limit=1000, sort=[("published_at", -1)])
 
         # Ensure all articles returned have verified ticker attached
         for a in existing_articles:
@@ -1215,6 +1236,15 @@ class NewsService:
 
             filtered.append(a)
 
+        # Fallback to recent genuine articles if today's calendar date has zero articles yet
+        effective_filter_date = target_date or today_str
+        if not filtered and target_date == today_str and not query and not company and not sentiment:
+            filtered = [
+                a for a in all_articles
+                if not (not settings.USE_DEMO_DATA and a.get("is_demo", False))
+            ]
+            effective_filter_date = "Latest Ingested"
+
         # Sort filtered articles by publication timestamp descending (newest first)
         filtered.sort(
             key=lambda x: parse_publication_datetime(x.get("published_at")) or datetime.min.replace(tzinfo=timezone.utc),
@@ -1248,7 +1278,7 @@ class NewsService:
             is_demo_dataset,
             feed_status=feed_status,
             last_synced=last_synced,
-            filter_date=target_date or today_str,
+            filter_date=effective_filter_date,
             news_provider=provider_name
         )
 
