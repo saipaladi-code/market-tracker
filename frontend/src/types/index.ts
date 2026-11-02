@@ -405,3 +405,36 @@ export interface SupportedInstrumentsResponse {
     country: string;
   }>;
 }
+
+
+export interface MarketIndicator {
+  name: string;
+  symbol: string;
+  value?: string | null;
+  change?: string | null;
+  trend: 'up' | 'down' | 'neutral';
+  relevance_note: string;
+}
+
+export interface FactsVsInterpretation {
+  objective_facts: string[];
+  ai_interpretation: string;
+  risk_factors: string[];
+}
+
+export interface MarketContextData {
+  headline: string;
+  entity_type: 'company' | 'general_market' | 'commodity';
+  entity_name: string;
+  ticker?: string | null;
+  exchange?: string | null;
+  event_topic: string;
+  sentiment: string;
+  confidence: number;
+  market_relevance: string;
+  supporting_facts: string[];
+  market_indicators: MarketIndicator[];
+  facts_vs_interpretation: FactsVsInterpretation;
+  generated_at: string;
+  data_source: string;
+}

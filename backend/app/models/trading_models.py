@@ -2,7 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 class BrokerDestination(BaseModel):
-    broker_id: str = Field(..., description="Unique broker identifier, e.g. 'upstox' or 'ibkr'")
+    broker_id: str = Field(..., description="Unique broker identifier, e.g. 'upstox' or 'groww'")
     broker_name: str = Field(..., description="Official broker display name")
     country: str = Field(..., description="Operating country/region: 'IN' or 'US'")
     market_coverage: str = Field(..., description="Supported exchanges and asset classes")

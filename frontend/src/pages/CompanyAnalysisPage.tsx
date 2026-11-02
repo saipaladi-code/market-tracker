@@ -193,7 +193,7 @@ export const CompanyAnalysisPage: React.FC = () => {
                 )}
                 {(() => {
                   const heroInst = resolveVerifiedInstrument(activeSummary.company, activeSummary.ticker);
-                  const heroBroker = heroInst?.preferredBroker === 'upstox' ? 'Upstox' : 'IBKR';
+                  const heroBroker = heroInst?.preferredBroker === 'upstox' ? 'Upstox' : 'Groww';
                   return (
                     <button
                       onClick={() => {
@@ -345,7 +345,7 @@ export const CompanyAnalysisPage: React.FC = () => {
                     <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
                       {(() => {
                         const hlInst = resolveVerifiedInstrument(art.company, art.ticker) || resolveVerifiedInstrument(activeSummary.company, activeSummary.ticker);
-                        const hlBroker = hlInst?.preferredBroker === 'upstox' ? 'Upstox' : 'IBKR';
+                        const hlBroker = hlInst?.preferredBroker === 'upstox' ? 'Upstox' : 'Groww';
                         return (
                           <button
                             onClick={() => {

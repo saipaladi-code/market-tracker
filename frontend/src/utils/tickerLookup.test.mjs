@@ -52,27 +52,27 @@ const INDIAN_INSTRUMENTS = {
 const US_INSTRUMENTS = {
   apple: {
     ticker: 'AAPL',
-    actionLabel: 'Open Apple in Interactive Brokers'
+    actionLabel: 'Open Apple on Groww'
   },
   microsoft: {
     ticker: 'MSFT',
-    actionLabel: 'Open Microsoft in Interactive Brokers'
+    actionLabel: 'Open Microsoft on Groww'
   },
   tesla: {
     ticker: 'TSLA',
-    actionLabel: 'Open Tesla in Interactive Brokers'
+    actionLabel: 'Open Tesla on Groww'
   },
   amazon: {
     ticker: 'AMZN',
-    actionLabel: 'Open Amazon in Interactive Brokers'
+    actionLabel: 'Open Amazon on Groww'
   },
   nvidia: {
     ticker: 'NVDA',
-    actionLabel: 'Open Nvidia in Interactive Brokers'
+    actionLabel: 'Open Nvidia on Groww'
   },
   alphabet: {
     ticker: 'GOOGL',
-    actionLabel: 'Open Alphabet (GOOGL) in Interactive Brokers'
+    actionLabel: 'Open Alphabet (GOOGL) on Groww'
   }
 };
 
@@ -103,14 +103,14 @@ function resolveNavigation(company, ticker) {
     }
   }
 
-  // 2. Check US Instruments
+  // 2. Check US Instruments -> Groww (US Stocks)
   for (const c of candidates) {
     if (US_INSTRUMENTS[c]) {
       return {
-        broker: 'ibkr',
+        broker: 'groww',
         destinationType: 'verified_portal_with_ticker_search',
         directUrl: null,
-        portalUrl: 'https://www.interactivebrokers.com/portal/',
+        portalUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
         actionLabel: US_INSTRUMENTS[c].actionLabel,
         ticker: US_INSTRUMENTS[c].ticker
       };
@@ -151,27 +151,27 @@ const icici = resolveNavigation('ICICI Bank', null);
 assert.equal(icici.broker, 'upstox');
 assert.equal(icici.directUrl, 'https://upstox.com/stocks/icici-bank-ltd-share-price/');
 
-// US stocks MUST route to Interactive Brokers (IBKR)
+// US stocks MUST route to Groww (US Stocks)
 const apple = resolveNavigation('Apple (AAPL)', null);
-assert.equal(apple.broker, 'ibkr');
+assert.equal(apple.broker, 'groww');
 assert.equal(apple.destinationType, 'verified_portal_with_ticker_search');
-assert.equal(apple.actionLabel, 'Open Apple in Interactive Brokers');
-assert.equal(apple.portalUrl, 'https://www.interactivebrokers.com/portal/');
+assert.equal(apple.actionLabel, 'Open Apple on Groww');
+assert.equal(apple.portalUrl, 'https://groww.in/us-stocks/popular-us-stocks-and-etfs');
 
 const tesla = resolveNavigation('Tesla (TSLA)', null);
-assert.equal(tesla.broker, 'ibkr');
-assert.equal(tesla.actionLabel, 'Open Tesla in Interactive Brokers');
+assert.equal(tesla.broker, 'groww');
+assert.equal(tesla.actionLabel, 'Open Tesla on Groww');
 
 const msft = resolveNavigation('Microsoft (MSFT)', null);
-assert.equal(msft.broker, 'ibkr');
+assert.equal(msft.broker, 'groww');
 
 const amzn = resolveNavigation('Amazon (AMZN)', null);
-assert.equal(amzn.broker, 'ibkr');
+assert.equal(amzn.broker, 'groww');
 
 const nvda = resolveNavigation('NVIDIA (NVDA)', null);
-assert.equal(nvda.broker, 'ibkr');
+assert.equal(nvda.broker, 'groww');
 
-// Other international or unverified stocks MUST NOT route to IBKR
+// Other international or unverified stocks MUST NOT route to Groww
 assert.equal(resolveNavigation('Bavarian Nordic', null), null);
 assert.equal(resolveNavigation('Novo Nordisk', null), null);
 assert.equal(resolveNavigation('ASML', null), null);

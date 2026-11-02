@@ -132,7 +132,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
             <div>
               <h3 className="font-bold text-white text-sm">Verified Broker Navigation</h3>
               <p className="text-[10px] text-slate-400 font-mono">
-                Instrument Routing • Upstox (India) & IBKR (US Equities)
+                Instrument Routing • Upstox (India) & Groww (US Equities)
               </p>
             </div>
           </div>
@@ -217,7 +217,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                 </p>
               </div>
               <p className="text-[11px] text-slate-400">
-                FIN-SENTIMENT routes strictly to verified broker instruments (Upstox for Indian equities, Interactive Brokers for verified US equities).
+                FIN-SENTIMENT routes strictly to verified broker instruments (Upstox for Indian equities, Groww for verified US equities).
                 General market indexes, macroeconomic headlines, and unverified international stocks are never silently routed to a broker.
               </p>
             </div>
@@ -326,9 +326,9 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                     ) : (
                       <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
                         <li>
-                          Click <strong className="text-white">"{actionLabel}"</strong> below to open the official Interactive Brokers Client Portal.
+                          Click <strong className="text-white">"{actionLabel}"</strong> below to open the official Groww US Stocks portal.
                         </li>
-                        <li>Sign in using your authorized IBKR account credentials.</li>
+                        <li>Sign in using your authorized Groww account credentials.</li>
                         <li>
                           Search for ticker <strong className="text-emerald-400 font-mono">{route.ticker}</strong> on <strong className="text-white">{route.exchange}</strong>.
                         </li>

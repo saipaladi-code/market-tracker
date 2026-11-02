@@ -43,6 +43,10 @@ from app.models.trading_models import (
     CompanyTradingRoute, SupportedInstrumentsResponse, BrokerCapabilitiesResponse
 )
 from app.services.broker_routing_service import broker_routing_service
+from app.models.market_context_models import (
+    MarketIndicator, MarketContextResponse, MarketContextRequest
+)
+from app.services.market_context_service import market_context_service
 
 # Configure logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -428,6 +432,50 @@ def explain_article(article_id: str, current_user: dict = Depends(get_current_us
         "engine_mode": article.get("engine_mode")
     }
 
+@app.get("/api/news/{article_id}/context", response_model=MarketContextResponse)
+def get_article_market_context(
+    article_id: str,
+    headline: Optional[str] = Query(None),
+    company: Optional[str] = Query(None),
+    ticker: Optional[str] = Query(None),
+    sentiment: Optional[str] = Query("neutral"),
+    confidence: Optional[float] = Query(0.5),
+    source: Optional[str] = Query("Editorial Feed")
+):
+    """
+    Returns structured market context (macro benchmarks, sector indices, objective facts vs AI interpretation)
+    for a specific article ID or headline.
+    """
+    article = db.find_one("news_articles", {"id": article_id}) or db.find_one("news_articles", {"canonical_id": article_id})
+    if article:
+        req = MarketContextRequest(
+            headline=article.get("title") or headline or "",
+            company=article.get("company") or company,
+            ticker=article.get("ticker") or ticker,
+            sentiment=article.get("sentiment") or sentiment or "neutral",
+            confidence=float(article.get("confidence") or confidence or 0.5),
+            source=article.get("source") or source or "Editorial Feed",
+            article_id=article_id
+        )
+    else:
+        req = MarketContextRequest(
+            headline=headline or f"News Article {article_id}",
+            company=company,
+            ticker=ticker,
+            sentiment=sentiment or "neutral",
+            confidence=confidence or 0.5,
+            source=source or "Editorial Feed",
+            article_id=article_id
+        )
+    return market_context_service.generate_context(req)
+
+@app.post("/api/news/context", response_model=MarketContextResponse)
+def post_market_context(req: MarketContextRequest):
+    """
+    Computes comprehensive market context for any supplied financial news headline.
+    """
+    return market_context_service.generate_context(req)
+
 @app.post("/api/analyze", response_model=SentimentAnalysisResult)
 def analyze_headline(req: AnalyzeRequest, current_user: dict = Depends(get_current_user)):
     """Analyzes a single headline using local ProsusAI/finbert with token perturbation explanation."""
@@ -725,7 +773,7 @@ def get_trading_route(
 ):
     """
     Resolves company/ticker to verified instrument and provides authorized broker destination:
-    Upstox for Indian equities (NSE/BSE), Interactive Brokers (IBKR) for US equities (NASDAQ/NYSE).
+    Upstox for Indian equities (NSE/BSE), Groww for US equities (NASDAQ/NYSE).
     """
     return broker_routing_service.get_trading_route_by_identifiers(company=company, ticker=ticker)
 

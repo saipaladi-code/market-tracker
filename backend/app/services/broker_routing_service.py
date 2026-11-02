@@ -24,19 +24,19 @@ UPSTOX_BASE_BROKER = BrokerDestination(
     compliance_notice="Orders must be authenticated and submitted directly on Upstox. FIN-SENTIMENT never stores brokerage credentials or automates trading."
 )
 
-IBKR_BASE_BROKER = BrokerDestination(
-    broker_id="ibkr",
-    broker_name="Interactive Brokers (IBKR)",
+GROWW_BASE_BROKER = BrokerDestination(
+    broker_id="groww",
+    broker_name="Groww (US Stocks)",
     country="US",
-    market_coverage="US & Global Equities, ETFs, Options & Futures (NASDAQ, NYSE, Global)",
-    entry_url="https://www.interactivebrokers.com/portal/",
+    market_coverage="US Equities & ETFs (NASDAQ & NYSE via Groww International)",
+    entry_url="https://groww.in/us-stocks/popular-us-stocks-and-etfs",
     direct_url=None,
     destination_type="verified_portal_with_ticker_search",
     is_direct_link_verified=False,
     requires_user_login=True,
-    action_label="Open in Interactive Brokers",
-    instructions="Log in to the IBKR Client Portal and search for the ticker to review real-time market depth and execute your order.",
-    compliance_notice="IBKR trading requires individual account authorization and margin/permissions compliance. FIN-SENTIMENT does not place automated trades."
+    action_label="Open Groww US Stocks",
+    instructions="Log in to your Groww US Stocks account and search for the ticker on NASDAQ/NYSE to review real-time quote depth and execute your order.",
+    compliance_notice="Groww US Stocks trading is routed in partnership with global clearing brokerages under RBI LRS guidelines. FIN-SENTIMENT does not place automated trades or store credentials."
 )
 
 # Verified Indian Stock Instruments (NSE / BSE)
@@ -190,9 +190,9 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
 }
 
 # Verified US Stock Instruments (NASDAQ / NYSE)
-# Interactive Brokers (IBKR) is strictly routed for verified US equities.
-# Note: IBKR Client Portal requires user session login and does not support public query parameters.
-# Therefore, verified portal entry with ticker preservation is provided.
+# Groww (US Stocks) is routed for verified US equities.
+# Note: Groww US Stocks portal provides access to US-listed equities and ETFs in partnership with global clearing brokerages.
+# It does not support public deep-link query parameters for individual stock orders; verified portal entry with ticker preservation is provided.
 VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
     "tesla": {
         "company": "Tesla",
@@ -201,7 +201,7 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US88160R1014",
-        "preferred_broker": "ibkr",
+        "preferred_broker": "groww",
         "aliases": ["tesla", "tsla", "tesla inc", "tesla inc.", "tesla motors", "tesla (tsla)"]
     },
     "apple": {
@@ -211,7 +211,7 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US0378331005",
-        "preferred_broker": "ibkr",
+        "preferred_broker": "groww",
         "aliases": ["apple", "aapl", "apple inc", "apple inc.", "apple (aapl)"]
     },
     "amazon": {
@@ -221,7 +221,7 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US0231351067",
-        "preferred_broker": "ibkr",
+        "preferred_broker": "groww",
         "aliases": ["amazon", "amzn", "amazon.com", "amazon.com inc", "amazon (amzn)"]
     },
     "microsoft": {
@@ -231,7 +231,7 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US5949181045",
-        "preferred_broker": "ibkr",
+        "preferred_broker": "groww",
         "aliases": ["microsoft", "msft", "microsoft corp", "microsoft corporation", "microsoft (msft)"]
     },
     "nvidia": {
@@ -241,7 +241,7 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US67066G1040",
-        "preferred_broker": "ibkr",
+        "preferred_broker": "groww",
         "aliases": ["nvidia", "nvda", "nvidia corp", "nvidia corporation", "nvidia (nvda)"]
     },
     "alphabet_googl": {
@@ -252,7 +252,7 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "US",
         "isin": "US02079K3059",
         "share_class_note": "Alphabet Inc. Class A Common Stock (Voting). For Class C Non-Voting shares, use ticker GOOG.",
-        "preferred_broker": "ibkr",
+        "preferred_broker": "groww",
         "aliases": ["alphabet", "google", "googl", "alphabet inc", "alphabet (googl)", "google (googl)"]
     },
     "alphabet_goog": {
@@ -263,7 +263,7 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "country": "US",
         "isin": "US02079K1079",
         "share_class_note": "Alphabet Inc. Class C Capital Stock (Non-Voting). For Class A Voting shares, use ticker GOOGL.",
-        "preferred_broker": "ibkr",
+        "preferred_broker": "groww",
         "aliases": ["goog", "alphabet class c", "google class c", "alphabet (goog)", "google (goog)"]
     },
     "meta": {
@@ -273,7 +273,7 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US30303M1027",
-        "preferred_broker": "ibkr",
+        "preferred_broker": "groww",
         "aliases": ["meta", "meta platforms", "facebook", "meta platforms inc", "meta (meta)"]
     },
     "jpmorgan chase": {
@@ -283,7 +283,7 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NYSE",
         "country": "US",
         "isin": "US46625H1005",
-        "preferred_broker": "ibkr",
+        "preferred_broker": "groww",
         "aliases": ["jpmorgan chase", "jpmorgan", "jpm", "chase", "jpmorgan chase & co", "jpmorgan chase (jpm)"]
     },
     "pfizer": {
@@ -293,7 +293,7 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NYSE",
         "country": "US",
         "isin": "US7170811035",
-        "preferred_broker": "ibkr",
+        "preferred_broker": "groww",
         "aliases": ["pfizer", "pfe", "pfizer inc", "pfizer (pfe)"]
     },
     "exxonmobil": {
@@ -303,7 +303,7 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NYSE",
         "country": "US",
         "isin": "US30231G1022",
-        "preferred_broker": "ibkr",
+        "preferred_broker": "groww",
         "aliases": ["exxonmobil", "exxon", "xom", "mobil", "exxon mobil corp", "exxonmobil (xom)"]
     }
 }
@@ -323,7 +323,7 @@ class BrokerRoutingService:
             for alias in data.get("aliases", []):
                 self._alias_to_instrument[alias.lower()] = inst_record
 
-        # 2. Index US instruments (IBKR) - Only for verified US equities
+        # 2. Index US instruments (Groww) - Only for verified US equities
         for key, data in VERIFIED_US_INSTRUMENTS.items():
             inst_record = dict(data, is_indian=False, is_verified_us=True)
             self._alias_to_instrument[key.lower()] = inst_record
@@ -459,20 +459,20 @@ class BrokerRoutingService:
                 disclaimer="Sentiment scores reflect news reporting tone and do not guarantee investment performance. Always perform independent diligence."
             )
 
-        # RULE 2: US stocks use Interactive Brokers ONLY when verified as supported
+        # RULE 2: US stocks use Groww ONLY when verified as supported
         elif (country == "US" or exchange in ("NASDAQ", "NYSE")) and inst.get("is_verified_us", False):
             dest_type = "verified_portal_with_ticker_search"
-            action_label = f"Open {short_name} in Interactive Brokers"
+            action_label = f"Open {short_name} on Groww"
 
-            ibkr_broker = IBKR_BASE_BROKER.model_copy()
-            ibkr_broker.entry_url = "https://www.interactivebrokers.com/portal/"
-            ibkr_broker.direct_url = None
-            ibkr_broker.destination_type = dest_type
-            ibkr_broker.is_direct_link_verified = False
-            ibkr_broker.action_label = action_label
-            ibkr_broker.instructions = (
-                f"Interactive Brokers requires an authenticated session. Open the IBKR Client Portal, "
-                f"log in with your account, and search for {ticker} ({exchange}) to review quote depth and place your order."
+            groww_broker = GROWW_BASE_BROKER.model_copy()
+            groww_broker.entry_url = "https://groww.in/us-stocks/popular-us-stocks-and-etfs"
+            groww_broker.direct_url = None
+            groww_broker.destination_type = dest_type
+            groww_broker.is_direct_link_verified = False
+            groww_broker.action_label = action_label
+            groww_broker.instructions = (
+                f"Groww US Stocks provides access to US-listed equities. Open the official Groww US Stocks portal, "
+                f"sign in to your Groww account, and search for {ticker} ({exchange}) to review quote depth and execute your order."
             )
 
             return CompanyTradingRoute(
@@ -486,16 +486,16 @@ class BrokerRoutingService:
                 upstox_instrument_key=None,
                 destination_type=dest_type,
                 direct_url=None,
-                portal_fallback_url="https://www.interactivebrokers.com/portal/",
+                portal_fallback_url="https://groww.in/us-stocks/popular-us-stocks-and-etfs",
                 action_label=action_label,
                 share_class_note=share_class_note,
-                brokers=[ibkr_broker],
-                recommended_broker=ibkr_broker,
-                message=f"Verified US equity instrument: {ticker} ({exchange}). Official route: Interactive Brokers (IBKR).",
+                brokers=[groww_broker],
+                recommended_broker=groww_broker,
+                message=f"Verified US equity instrument: {ticker} ({exchange}). Official route: Groww (US Stocks).",
                 disclaimer="Sentiment scores reflect news reporting tone and do not guarantee investment performance. Always perform independent diligence."
             )
 
-        # RULE 3: Other international stocks MUST NOT silently route to IBKR
+        # RULE 3: Other international stocks MUST NOT silently route to Groww or any broker
         return CompanyTradingRoute(
             status="unsupported",
             is_tradable=False,
@@ -523,7 +523,7 @@ class BrokerRoutingService:
     ) -> CompanyTradingRoute:
         """
         Attempts resolution using ticker first if available, then company name, then composite string.
-        Guarantees that Indian stocks resolve to Upstox and US stocks resolve to Interactive Brokers.
+        Guarantees that Indian stocks resolve to Upstox and US stocks resolve to Groww.
         """
         # Try ticker first
         if ticker and ticker.strip():
@@ -561,7 +561,7 @@ class BrokerRoutingService:
 
     def get_broker_capabilities(self) -> BrokerCapabilitiesResponse:
         return BrokerCapabilitiesResponse(
-            brokers=[UPSTOX_BASE_BROKER, IBKR_BASE_BROKER],
+            brokers=[UPSTOX_BASE_BROKER, GROWW_BASE_BROKER],
             compliance_statement="Broker destinations are direct entries to officially documented portals. FIN-SENTIMENT does not execute trades, solicit orders, or store trading credentials."
         )
 

@@ -16,6 +16,7 @@ import {
   Building2,
   Languages,
   TrendingUp,
+  Compass,
   X
 } from 'lucide-react';
 import { api } from '../services/api';
@@ -23,6 +24,7 @@ import { Article, SentimentAnalysisResult } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
 import { ExplainModal } from '../components/ExplainModal';
 import { TradeRoutingModal } from '../components/TradeRoutingModal';
+import { MarketContextModal } from '../components/MarketContextModal';
 import { resolveVerifiedTicker, resolveVerifiedInstrument } from '../utils/tickerLookup';
 import { getCanonicalSentimentResult } from '../utils/canonicalSentiment';
 import { useTranslation } from 'react-i18next';
@@ -59,9 +61,19 @@ const SENTIMENTS = [
 ];
 
 export const NewsExplorerPage: React.FC = () => {
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  // Pre-seed from cache to eliminate cold-start loading latency
+  const getPreloadedNews = () => {
+    try {
+      const raw = sessionStorage.getItem('FIN_SENTIMENT_CACHED_NEWS') || localStorage.getItem('FIN_SENTIMENT_CACHED_NEWS');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  };
+  const preloaded = getPreloadedNews();
+
+  const [articles, setArticles] = useState<Article[]>(preloaded?.articles || []);
+  const [totalCount, setTotalCount] = useState(preloaded?.total_count || 0);
+  const [loading, setLoading] = useState<boolean>(!preloaded?.articles?.length);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompany, setSelectedCompany] = useState('All Companies');
   const [selectedSentiment, setSelectedSentiment] = useState('All');
@@ -116,6 +128,10 @@ export const NewsExplorerPage: React.FC = () => {
   // Trade routing modal state
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
+
+  // Market context modal state
+  const [selectedContextArticle, setSelectedContextArticle] = useState<Article | null>(null);
+  const [contextModalOpen, setContextModalOpen] = useState(false);
 
   const fetchNews = async () => {
     try {
@@ -474,7 +490,7 @@ export const NewsExplorerPage: React.FC = () => {
             const verifiedInst = resolveVerifiedInstrument(art.company, art.ticker);
             const verifiedTicker = verifiedInst?.ticker || resolveVerifiedTicker(art.company, art.ticker);
             const isTradable = Boolean(verifiedInst);
-            const brokerTag = verifiedInst?.preferredBroker === 'upstox' ? 'Upstox' : 'IBKR';
+            const brokerTag = verifiedInst?.preferredBroker === 'upstox' ? 'Upstox' : 'Groww';
 
             return (
               <div
@@ -548,8 +564,21 @@ export const NewsExplorerPage: React.FC = () => {
                       </button>
                     )}
 
+                    {/* Market Context Button (accessible on all cards: companies, macro, commodities) */}
+                    <button
+                      onClick={() => {
+                        setSelectedContextArticle(art);
+                        setContextModalOpen(true);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 hover:text-blue-200 border border-blue-500/25 text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Explore macroeconomic indicators and systemic market context"
+                    >
+                      <Compass className="w-3 h-3 text-blue-400" />
+                      <span>Market Context</span>
+                    </button>
+
                     {/* Trade Button (only shown for verified tradable instruments) */}
-                    {isTradable ? (
+                    {isTradable && (
                       <button
                         onClick={() => {
                           setSelectedTradeArticle({
@@ -565,13 +594,6 @@ export const NewsExplorerPage: React.FC = () => {
                         <TrendingUp className="w-3 h-3 text-emerald-400" />
                         <span>Trade ({brokerTag})</span>
                       </button>
-                    ) : (
-                      <span
-                        className="px-2 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-navy-800/60 border border-navy-750"
-                        title="Macroeconomic / general market news"
-                      >
-                        Market Context
-                      </span>
                     )}
 
                     {/* Explain Button */}
@@ -631,6 +653,20 @@ export const NewsExplorerPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Market Context Modal */}
+      <MarketContextModal
+        isOpen={contextModalOpen}
+        onClose={() => {
+          setContextModalOpen(false);
+          setSelectedContextArticle(null);
+        }}
+        article={selectedContextArticle}
+        onOpenTrade={(art) => {
+          setSelectedTradeArticle(art);
+          setTradeModalOpen(true);
+        }}
+      />
 
       {/* Broker Trade Routing Modal */}
       <TradeRoutingModal

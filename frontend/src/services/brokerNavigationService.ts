@@ -7,7 +7,7 @@ export interface BrokerNavigationQuery {
   ticker?: string;
   exchange?: string;
   country?: string;
-  preferredBrokerId?: 'upstox' | 'ibkr';
+  preferredBrokerId?: 'upstox' | 'groww';
   brokerInstrumentKey?: string;
 }
 

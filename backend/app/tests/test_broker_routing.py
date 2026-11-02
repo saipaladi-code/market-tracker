@@ -35,7 +35,7 @@ def test_indian_stock_routing_upstox_direct_navigation():
         assert data["destination_type"] == "direct_instrument"
         assert data["direct_url"] == expected_url, f"Expected {expected_url}, got {data['direct_url']}"
         assert data["portal_fallback_url"] == "https://pro.upstox.com"
-        assert f"Open " in data["action_label"]
+        assert "Open " in data["action_label"]
         assert "in Upstox" in data["action_label"]
 
         assert len(data["brokers"]) == 1
@@ -45,9 +45,9 @@ def test_indian_stock_routing_upstox_direct_navigation():
         assert broker["is_direct_link_verified"] is True
         assert expected_ticker in broker["instructions"]
 
-def test_international_us_stock_routing_ibkr_with_ticker_preservation():
+def test_international_us_stock_routing_groww_with_ticker_preservation():
     """
-    Verifies that verified US stocks route to Interactive Brokers (IBKR) with
+    Verifies that verified US stocks route to Groww (US Stocks) with
     verified_portal_with_ticker_search type, preserving ticker and exchange.
     """
     us_samples = [
@@ -73,14 +73,14 @@ def test_international_us_stock_routing_ibkr_with_ticker_preservation():
         assert data["ticker"] == expected_ticker
         assert data["country"] == "US"
         assert data["destination_type"] == "verified_portal_with_ticker_search"
-        assert data["portal_fallback_url"] == "https://www.interactivebrokers.com/portal/"
-        assert f"Open " in data["action_label"]
-        assert "in Interactive Brokers" in data["action_label"]
+        assert data["portal_fallback_url"] == "https://groww.in/us-stocks/popular-us-stocks-and-etfs"
+        assert "Open " in data["action_label"]
+        assert "on Groww" in data["action_label"]
 
         assert len(data["brokers"]) == 1
         broker = data["brokers"][0]
-        assert broker["broker_id"] == "ibkr", f"Expected IBKR for {comp_query}, got {broker['broker_id']}"
-        assert broker["entry_url"] == "https://www.interactivebrokers.com/portal/"
+        assert broker["broker_id"] == "groww", f"Expected Groww for {comp_query}, got {broker['broker_id']}"
+        assert broker["entry_url"] == "https://groww.in/us-stocks/popular-us-stocks-and-etfs"
         assert broker["is_direct_link_verified"] is False
         assert expected_ticker in broker["instructions"]
 
@@ -109,8 +109,8 @@ def test_tata_motors_instrument_verification():
     assert data["destination_type"] == "direct_instrument"
     assert data["direct_url"] == "https://upstox.com/stocks/tata-motors-limited-share-price/"
 
-def test_other_international_stocks_not_routed_to_ibkr():
-    """Verifies other international and unsupported stocks are NOT silently routed to IBKR or Upstox."""
+def test_other_international_stocks_not_routed_to_groww():
+    """Verifies other international and unsupported stocks are NOT silently routed to Groww or Upstox."""
     unsupported_samples = [
         "Bavarian Nordic",
         "Novo Nordisk",
@@ -134,8 +134,8 @@ def test_other_international_stocks_not_routed_to_ibkr():
         assert data["direct_url"] is None
         assert "not verified" in data["message"].lower() or "not currently supported" in data["message"].lower()
 
-def test_indian_stocks_never_route_to_ibkr():
-    """Verifies Indian stocks never accidentally select IBKR."""
+def test_indian_stocks_never_route_to_groww():
+    """Verifies Indian stocks never accidentally select Groww."""
     indian_tickers = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "TATAMOTORS"]
     for t in indian_tickers:
         res = client.get("/api/trading/route", params={"ticker": t})
@@ -152,7 +152,7 @@ def test_us_stocks_never_route_to_upstox():
         assert res.status_code == 200
         data = res.json()
         assert data["country"] == "US"
-        assert data["brokers"][0]["broker_id"] == "ibkr"
+        assert data["brokers"][0]["broker_id"] == "groww"
 
 def test_composite_ticker_and_company_parameters():
     """Verifies resolution when both company and ticker are passed separately."""
@@ -169,7 +169,7 @@ def test_composite_ticker_and_company_parameters():
     data_us = res_us.json()
     assert data_us["is_tradable"] is True
     assert data_us["ticker"] == "AAPL"
-    assert data_us["brokers"][0]["broker_id"] == "ibkr"
+    assert data_us["brokers"][0]["broker_id"] == "groww"
 
 def test_supported_instruments_endpoint():
     """Verifies listing of all verified Indian and International instruments."""
@@ -184,6 +184,8 @@ def test_supported_instruments_endpoint():
         assert inst["destination_type"] == "direct_instrument"
         assert inst["direct_url"] is not None
         assert "upstox.com/stocks/" in inst["direct_url"]
+    for inst in data["international_instruments"]:
+        assert inst["brokers"][0]["broker_id"] == "groww"
 
 def test_broker_capabilities_endpoint():
     """Verifies broker capabilities and compliance declarations."""
@@ -192,5 +194,5 @@ def test_broker_capabilities_endpoint():
     data = res.json()
     broker_ids = [b["broker_id"] for b in data["brokers"]]
     assert "upstox" in broker_ids
-    assert "ibkr" in broker_ids
+    assert "groww" in broker_ids
     assert "compliance_statement" in data

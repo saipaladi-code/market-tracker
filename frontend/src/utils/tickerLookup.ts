@@ -7,7 +7,7 @@ export interface VerifiedInstrumentMeta {
   exchange: string;
   country: 'IN' | 'US';
   isin?: string;
-  preferredBroker: 'upstox' | 'ibkr';
+  preferredBroker: 'upstox' | 'groww';
   brokerName: string;
   destination_type: 'direct_instrument' | 'verified_portal_with_ticker_search';
   direct_url?: string;
@@ -32,19 +32,19 @@ export const UPSTOX_BROKER_DEST: BrokerDestination = {
   compliance_notice: 'Orders must be authenticated and submitted directly on Upstox. FIN-SENTIMENT never stores brokerage credentials or automates trading.'
 };
 
-export const IBKR_BROKER_DEST: BrokerDestination = {
-  broker_id: 'ibkr',
-  broker_name: 'Interactive Brokers (IBKR)',
+export const GROWW_BROKER_DEST: BrokerDestination = {
+  broker_id: 'groww',
+  broker_name: 'Groww (US Stocks)',
   country: 'US',
-  market_coverage: 'US & Global Equities, ETFs, Options & Futures (NASDAQ, NYSE, Global)',
-  entry_url: 'https://www.interactivebrokers.com/portal/',
+  market_coverage: 'US Equities & ETFs (NASDAQ & NYSE via Groww International)',
+  entry_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
   direct_url: null,
   destination_type: 'verified_portal_with_ticker_search',
   is_direct_link_verified: false,
   requires_user_login: true,
-  action_label: 'Open in Interactive Brokers',
-  instructions: 'Log in to the IBKR Client Portal and search for the ticker to review real-time quote depth and execute your order.',
-  compliance_notice: 'IBKR trading requires individual account authorization and margin/permissions compliance. FIN-SENTIMENT does not place automated trades.'
+  action_label: 'Open Groww US Stocks',
+  instructions: 'Log in to your Groww US Stocks account and search for the ticker on NASDAQ/NYSE to review real-time quote depth and execute your order.',
+  compliance_notice: 'Groww US Stocks trading is routed in partnership with global clearing brokerages under RBI LRS guidelines. FIN-SENTIMENT does not place automated trades or store credentials.'
 };
 
 /**
@@ -205,7 +205,7 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
 };
 
 /**
- * Verified US Stocks (NASDAQ / NYSE) -> Routed to Interactive Brokers (IBKR)
+ * Verified US Stocks (NASDAQ / NYSE) -> Routed to Groww (US Stocks)
  */
 const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
   apple: {
@@ -215,12 +215,12 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US0378331005',
-    preferredBroker: 'ibkr',
-    brokerName: 'Interactive Brokers (IBKR)',
+    preferredBroker: 'groww',
+    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
-    entryUrl: 'https://www.interactivebrokers.com/portal/',
-    action_label: 'Open Apple in Interactive Brokers'
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    action_label: 'Open Apple on Groww'
   },
   microsoft: {
     company: 'Microsoft',
@@ -229,12 +229,12 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US5949181045',
-    preferredBroker: 'ibkr',
-    brokerName: 'Interactive Brokers (IBKR)',
+    preferredBroker: 'groww',
+    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
-    entryUrl: 'https://www.interactivebrokers.com/portal/',
-    action_label: 'Open Microsoft in Interactive Brokers'
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    action_label: 'Open Microsoft on Groww'
   },
   nvidia: {
     company: 'Nvidia',
@@ -243,12 +243,12 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US67066G1040',
-    preferredBroker: 'ibkr',
-    brokerName: 'Interactive Brokers (IBKR)',
+    preferredBroker: 'groww',
+    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
-    entryUrl: 'https://www.interactivebrokers.com/portal/',
-    action_label: 'Open Nvidia in Interactive Brokers'
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    action_label: 'Open Nvidia on Groww'
   },
   tesla: {
     company: 'Tesla',
@@ -257,12 +257,12 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US88160R1014',
-    preferredBroker: 'ibkr',
-    brokerName: 'Interactive Brokers (IBKR)',
+    preferredBroker: 'groww',
+    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
-    entryUrl: 'https://www.interactivebrokers.com/portal/',
-    action_label: 'Open Tesla in Interactive Brokers'
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    action_label: 'Open Tesla on Groww'
   },
   alphabet_googl: {
     company: 'Alphabet (Class A)',
@@ -271,12 +271,12 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US02079K3059',
-    preferredBroker: 'ibkr',
-    brokerName: 'Interactive Brokers (IBKR)',
+    preferredBroker: 'groww',
+    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
-    entryUrl: 'https://www.interactivebrokers.com/portal/',
-    action_label: 'Open Alphabet (GOOGL) in Interactive Brokers',
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    action_label: 'Open Alphabet (GOOGL) on Groww',
     share_class_note: 'Alphabet Inc. Class A Common Stock (Voting). For Class C Non-Voting shares, use ticker GOOG.'
   },
   alphabet_goog: {
@@ -286,12 +286,12 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US02079K1079',
-    preferredBroker: 'ibkr',
-    brokerName: 'Interactive Brokers (IBKR)',
+    preferredBroker: 'groww',
+    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
-    entryUrl: 'https://www.interactivebrokers.com/portal/',
-    action_label: 'Open Alphabet (GOOG) in Interactive Brokers',
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    action_label: 'Open Alphabet (GOOG) on Groww',
     share_class_note: 'Alphabet Inc. Class C Capital Stock (Non-Voting). For Class A Voting shares, use ticker GOOGL.'
   },
   amazon: {
@@ -301,12 +301,12 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US0231351067',
-    preferredBroker: 'ibkr',
-    brokerName: 'Interactive Brokers (IBKR)',
+    preferredBroker: 'groww',
+    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
-    entryUrl: 'https://www.interactivebrokers.com/portal/',
-    action_label: 'Open Amazon in Interactive Brokers'
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    action_label: 'Open Amazon on Groww'
   },
   'jpmorgan chase': {
     company: 'JPMorgan Chase',
@@ -315,12 +315,12 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NYSE',
     country: 'US',
     isin: 'US46625H1005',
-    preferredBroker: 'ibkr',
-    brokerName: 'Interactive Brokers (IBKR)',
+    preferredBroker: 'groww',
+    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
-    entryUrl: 'https://www.interactivebrokers.com/portal/',
-    action_label: 'Open JPMorgan Chase in Interactive Brokers'
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    action_label: 'Open JPMorgan Chase on Groww'
   },
   pfizer: {
     company: 'Pfizer',
@@ -329,12 +329,12 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NYSE',
     country: 'US',
     isin: 'US7170811035',
-    preferredBroker: 'ibkr',
-    brokerName: 'Interactive Brokers (IBKR)',
+    preferredBroker: 'groww',
+    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
-    entryUrl: 'https://www.interactivebrokers.com/portal/',
-    action_label: 'Open Pfizer in Interactive Brokers'
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    action_label: 'Open Pfizer on Groww'
   },
   exxonmobil: {
     company: 'ExxonMobil',
@@ -343,12 +343,12 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NYSE',
     country: 'US',
     isin: 'US30231G1022',
-    preferredBroker: 'ibkr',
-    brokerName: 'Interactive Brokers (IBKR)',
+    preferredBroker: 'groww',
+    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
-    entryUrl: 'https://www.interactivebrokers.com/portal/',
-    action_label: 'Open ExxonMobil in Interactive Brokers'
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    action_label: 'Open ExxonMobil on Groww'
   },
   meta: {
     company: 'Meta Platforms',
@@ -357,12 +357,12 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US30303M1027',
-    preferredBroker: 'ibkr',
-    brokerName: 'Interactive Brokers (IBKR)',
+    preferredBroker: 'groww',
+    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
-    entryUrl: 'https://www.interactivebrokers.com/portal/',
-    action_label: 'Open Meta in Interactive Brokers'
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    action_label: 'Open Meta on Groww'
   }
 };
 
@@ -583,15 +583,16 @@ export function getClientSideTradingRoute(company?: string, ticker?: string): Co
     };
   }
 
-  // Verified US Stock
-  const ibkrBroker: BrokerDestination = {
-    ...IBKR_BROKER_DEST,
-    entry_url: 'https://www.interactivebrokers.com/portal/',
+
+  // Verified US Stock -> Groww (US Stocks)
+  const growwBroker: BrokerDestination = {
+    ...GROWW_BROKER_DEST,
+    entry_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     direct_url: null,
     destination_type: 'verified_portal_with_ticker_search',
     is_direct_link_verified: false,
     action_label: inst.action_label,
-    instructions: `Interactive Brokers requires an authenticated session. Open the IBKR Client Portal, log in with your account, and search for ${inst.ticker} (${inst.exchange}) to review quote depth and place your order.`
+    instructions: `Groww provides access to US equities via partnership clearing brokerages. Open the Groww US Stocks portal, log in, and search for ${inst.ticker} (${inst.exchange}) to review live pricing and place your order.`
   };
   return {
     status: 'supported',
@@ -604,12 +605,12 @@ export function getClientSideTradingRoute(company?: string, ticker?: string): Co
     upstox_instrument_key: null,
     destination_type: 'verified_portal_with_ticker_search',
     direct_url: null,
-    portal_fallback_url: 'https://www.interactivebrokers.com/portal/',
+    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     action_label: inst.action_label,
     share_class_note: inst.share_class_note || null,
-    brokers: [ibkrBroker],
-    recommended_broker: ibkrBroker,
-    message: `Verified US equity instrument: ${inst.ticker} (${inst.exchange}). Official route: Interactive Brokers (IBKR).`,
+    brokers: [growwBroker],
+    recommended_broker: growwBroker,
+    message: `Verified US equity instrument: ${inst.ticker} (${inst.exchange}). Official route: Groww (US Stocks).`,
     disclaimer: 'Sentiment scores reflect news reporting tone and do not guarantee investment performance. Always perform independent diligence.'
   };
 }

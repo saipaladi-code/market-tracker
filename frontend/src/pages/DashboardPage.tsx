@@ -608,7 +608,7 @@ export const DashboardPage: React.FC = () => {
               const verifiedInst = resolveVerifiedInstrument(art.company, art.ticker);
               const verifiedTicker = verifiedInst?.ticker || resolveVerifiedTicker(art.company, art.ticker);
               const isTradable = Boolean(verifiedInst);
-              const brokerTag = verifiedInst?.preferredBroker === 'upstox' ? 'Upstox' : 'IBKR';
+              const brokerTag = verifiedInst?.preferredBroker === 'upstox' ? 'Upstox' : 'Groww';
 
               return (
                 <div
