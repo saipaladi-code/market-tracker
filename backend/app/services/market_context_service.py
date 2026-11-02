@@ -251,7 +251,7 @@ class MarketContextService:
                         route = broker_routing_service.get_trading_route_by_identifiers(company=key)
                         break
 
-            if route.is_tradable:
+            if route.ticker:
                 entity_type = "company"
                 entity_name = route.company
                 ticker = route.ticker

@@ -26,17 +26,17 @@ UPSTOX_BASE_BROKER = BrokerDestination(
 
 GROWW_BASE_BROKER = BrokerDestination(
     broker_id="groww",
-    broker_name="Groww (US Stocks)",
-    country="US",
-    market_coverage="US Equities & ETFs (NASDAQ & NYSE via Groww International)",
-    entry_url="https://groww.in/us-stocks/popular-us-stocks-and-etfs",
+    broker_name="Groww",
+    country="IN",
+    market_coverage="Indian Equities & Derivatives (NSE & BSE)",
+    entry_url="https://groww.in/stocks",
     direct_url=None,
-    destination_type="verified_portal_with_ticker_search",
-    is_direct_link_verified=False,
+    destination_type="direct_instrument",
+    is_direct_link_verified=True,
     requires_user_login=True,
-    action_label="Open Groww US Stocks",
-    instructions="Log in to your Groww US Stocks account and search for the ticker on NASDAQ/NYSE to review real-time quote depth and execute your order.",
-    compliance_notice="Groww US Stocks trading is routed in partnership with global clearing brokerages under RBI LRS guidelines. FIN-SENTIMENT does not place automated trades or store credentials."
+    action_label="Open on Groww",
+    instructions="Review real-time NSE market quotes, interactive TradingView charts, and execute orders directly on your Groww account.",
+    compliance_notice="FIN-SENTIMENT is an informational analytics platform. Orders must be authorized directly by the user on Groww. We never store brokerage credentials or automate trading."
 )
 
 # Verified Indian Stock Instruments (NSE / BSE)
@@ -52,6 +52,7 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "isin": "INE002A01018",
         "upstox_instrument_key": "NSE_EQ|INE002A01018",
         "upstox_direct_url": "https://upstox.com/stocks/reliance-industries-ltd-share-price/",
+        "groww_direct_url": "https://groww.in/stocks/reliance-industries-ltd",
         "preferred_broker": "upstox",
         "aliases": [
             "reliance", "reliance industries", "reliance industries limited", "reliance industries ltd",
@@ -67,6 +68,7 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "isin": "INE155A01022",
         "upstox_instrument_key": "NSE_EQ|INE155A01022",
         "upstox_direct_url": "https://upstox.com/stocks/tata-motors-limited-share-price/",
+        "groww_direct_url": "https://groww.in/stocks/tata-motors-ltd",
         "share_class_note": "Commercial vehicles & core listed equity (TATAMOTORS, NSE). Passenger vehicles division trades under TMPV.",
         "preferred_broker": "upstox",
         "aliases": [
@@ -83,6 +85,7 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "isin": "INE467B01029",
         "upstox_instrument_key": "NSE_EQ|INE467B01029",
         "upstox_direct_url": "https://upstox.com/stocks/tata-consultancy-serv-lt-share-price/",
+        "groww_direct_url": "https://groww.in/stocks/tata-consultancy-services-ltd",
         "preferred_broker": "upstox",
         "aliases": [
             "tcs", "tata consultancy services", "tata consultancy services (tcs)", "tata consultancy",
@@ -98,6 +101,7 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "isin": "INE009A01021",
         "upstox_instrument_key": "NSE_EQ|INE009A01021",
         "upstox_direct_url": "https://upstox.com/stocks/infosys-limited-share-price/",
+        "groww_direct_url": "https://groww.in/stocks/infosys-ltd",
         "preferred_broker": "upstox",
         "aliases": [
             "infosys", "infy", "infosys limited", "infosys ltd", "infosys (infy)"
@@ -112,6 +116,7 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "isin": "INE040A01034",
         "upstox_instrument_key": "NSE_EQ|INE040A01034",
         "upstox_direct_url": "https://upstox.com/stocks/hdfc-bank-ltd-share-price/",
+        "groww_direct_url": "https://groww.in/stocks/hdfc-bank-ltd",
         "preferred_broker": "upstox",
         "aliases": [
             "hdfc bank", "hdfcbank", "hdfc", "hdfc bank limited", "hdfc bank ltd", "hdfc bank (hdfcbank)"
@@ -126,6 +131,7 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "isin": "INE090A01021",
         "upstox_instrument_key": "NSE_EQ|INE090A01021",
         "upstox_direct_url": "https://upstox.com/stocks/icici-bank-ltd-share-price/",
+        "groww_direct_url": "https://groww.in/stocks/icici-bank-ltd",
         "preferred_broker": "upstox",
         "aliases": [
             "icici bank", "icicibank", "icici", "icici bank limited", "icici bank ltd", "icici bank (icicibank)"
@@ -140,6 +146,7 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "isin": "INE062A01020",
         "upstox_instrument_key": "NSE_EQ|INE062A01020",
         "upstox_direct_url": "https://upstox.com/stocks/state-bank-of-india-share-price/",
+        "groww_direct_url": "https://groww.in/stocks/state-bank-of-india",
         "preferred_broker": "upstox",
         "aliases": [
             "state bank of india", "sbi", "sbin", "state bank of india (sbin)", "state bank"
@@ -154,6 +161,7 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "isin": "INE397D01024",
         "upstox_instrument_key": "NSE_EQ|INE397D01024",
         "upstox_direct_url": "https://upstox.com/stocks/bharti-airtel-limited-share-price/",
+        "groww_direct_url": "https://groww.in/stocks/bharti-airtel-ltd",
         "preferred_broker": "upstox",
         "aliases": [
             "bharti airtel", "airtel", "bhartiartl", "bharti airtel (bhartiartl)", "bharti airtel limited"
@@ -168,6 +176,7 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "isin": "INE018A01030",
         "upstox_instrument_key": "NSE_EQ|INE018A01030",
         "upstox_direct_url": "https://upstox.com/stocks/larsen-toubro-ltd-share-price/",
+        "groww_direct_url": "https://groww.in/stocks/larsen-toubro-ltd",
         "preferred_broker": "upstox",
         "aliases": [
             "larsen & toubro", "l&t", "lt", "larsen and toubro", "larsen & toubro (lt)", "larsen & toubro limited"
@@ -182,6 +191,7 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "isin": "INE075A01022",
         "upstox_instrument_key": "NSE_EQ|INE075A01022",
         "upstox_direct_url": "https://upstox.com/stocks/wipro-ltd-share-price/",
+        "groww_direct_url": "https://groww.in/stocks/wipro-ltd",
         "preferred_broker": "upstox",
         "aliases": [
             "wipro", "wipro limited", "wipro ltd", "wipro (wipro)"
@@ -421,23 +431,30 @@ class BrokerRoutingService:
         short_name = inst.get("short_name", company)
         share_class_note = inst.get("share_class_note")
 
-        # RULE 1: Indian stocks MUST use Upstox as preferred broker
+        # RULE 1: Indian stocks route to Groww with verified stock-specific pages
         if country == "IN" or exchange in ("NSE", "BSE") or inst.get("is_indian", False):
-            upstox_direct = inst.get("upstox_direct_url")
-            has_direct = bool(upstox_direct)
+            groww_direct = inst.get("groww_direct_url") or f"https://groww.in/stocks/{self._normalize_string(short_name).replace(' ', '-')}"
+            has_direct = bool(groww_direct)
             dest_type = "direct_instrument" if has_direct else "verified_portal_with_ticker_search"
-            action_label = f"Open {short_name} in Upstox"
+            action_label = f"Open {short_name} on Groww"
 
-            upstox_broker = UPSTOX_BASE_BROKER.model_copy()
-            upstox_broker.entry_url = upstox_direct if has_direct else "https://pro.upstox.com"
-            upstox_broker.direct_url = upstox_direct
-            upstox_broker.destination_type = dest_type
-            upstox_broker.is_direct_link_verified = has_direct
-            upstox_broker.action_label = action_label
-            upstox_broker.instructions = (
-                f"Review the verified {short_name} page on Upstox with live NSE charts and fundamentals. "
-                f"To execute a trade, log in to your Upstox Pro account and search for {ticker} on {exchange}."
+            groww_broker = GROWW_BASE_BROKER.model_copy()
+            groww_broker.entry_url = groww_direct if has_direct else "https://groww.in/stocks"
+            groww_broker.direct_url = groww_direct
+            groww_broker.destination_type = dest_type
+            groww_broker.is_direct_link_verified = has_direct
+            groww_broker.action_label = action_label
+            groww_broker.instructions = (
+                f"Navigate directly to {short_name} on Groww ({ticker}) with live NSE charts, market depth, and fundamentals. "
+                f"To execute a trade, log in to your Groww account."
             )
+
+            # Upstox broker preserved in brokers list as alternative
+            upstox_direct = inst.get("upstox_direct_url")
+            upstox_broker = UPSTOX_BASE_BROKER.model_copy()
+            upstox_broker.entry_url = upstox_direct if upstox_direct else "https://pro.upstox.com"
+            upstox_broker.direct_url = upstox_direct
+            upstox_broker.action_label = f"Open {short_name} in Upstox"
 
             return CompanyTradingRoute(
                 status="supported",
@@ -449,50 +466,36 @@ class BrokerRoutingService:
                 isin=inst.get("isin"),
                 upstox_instrument_key=inst.get("upstox_instrument_key"),
                 destination_type=dest_type,
-                direct_url=upstox_direct,
-                portal_fallback_url="https://pro.upstox.com",
+                direct_url=groww_direct,
+                portal_fallback_url="https://groww.in/stocks",
                 action_label=action_label,
                 share_class_note=share_class_note,
-                brokers=[upstox_broker],
-                recommended_broker=upstox_broker,
-                message=f"Verified Indian equity instrument: {ticker} ({exchange}). Official route: Upstox Pro.",
+                brokers=[groww_broker, upstox_broker],
+                recommended_broker=groww_broker,
+                message=f"Verified Indian equity instrument: {ticker} ({exchange}). Official route: Groww direct stock page.",
                 disclaimer="Sentiment scores reflect news reporting tone and do not guarantee investment performance. Always perform independent diligence."
             )
 
-        # RULE 2: US stocks use Groww ONLY when verified as supported
+        # RULE 2: US stocks on Groww - Groww does NOT support active trading for US-listed equities
         elif (country == "US" or exchange in ("NASDAQ", "NYSE")) and inst.get("is_verified_us", False):
-            dest_type = "verified_portal_with_ticker_search"
-            action_label = f"Open {short_name} on Groww"
-
-            groww_broker = GROWW_BASE_BROKER.model_copy()
-            groww_broker.entry_url = "https://groww.in/us-stocks/popular-us-stocks-and-etfs"
-            groww_broker.direct_url = None
-            groww_broker.destination_type = dest_type
-            groww_broker.is_direct_link_verified = False
-            groww_broker.action_label = action_label
-            groww_broker.instructions = (
-                f"Groww US Stocks provides access to US-listed equities. Open the official Groww US Stocks portal, "
-                f"sign in to your Groww account, and search for {ticker} ({exchange}) to review quote depth and execute your order."
-            )
-
             return CompanyTradingRoute(
-                status="supported",
-                is_tradable=True,
+                status="unsupported",
+                is_tradable=False,
                 company=company,
                 ticker=ticker,
                 exchange=exchange,
                 country=country,
                 isin=inst.get("isin"),
                 upstox_instrument_key=None,
-                destination_type=dest_type,
+                destination_type="unsupported",
                 direct_url=None,
                 portal_fallback_url="https://groww.in/us-stocks/popular-us-stocks-and-etfs",
-                action_label=action_label,
+                action_label="US Stocks Unsupported on Groww",
                 share_class_note=share_class_note,
-                brokers=[groww_broker],
-                recommended_broker=groww_broker,
-                message=f"Verified US equity instrument: {ticker} ({exchange}). Official route: Groww (US Stocks).",
-                disclaimer="Sentiment scores reflect news reporting tone and do not guarantee investment performance. Always perform independent diligence."
+                brokers=[],
+                recommended_broker=None,
+                message=f"Groww does not currently support active trading or direct order execution for US-listed equities ({ticker} on {exchange}). US stock investing is currently unavailable through Groww.",
+                disclaimer="Groww trading is restricted to Indian equities on NSE & BSE. US-listed equities are not supported for trading."
             )
 
         # RULE 3: Other international stocks MUST NOT silently route to Groww or any broker

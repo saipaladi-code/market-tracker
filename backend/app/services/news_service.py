@@ -650,6 +650,8 @@ class NewsService:
         self._last_fetch_count: int = 0
         self._last_fetch_error: Optional[str] = None
         self._is_ingesting: bool = False
+        import threading
+        self._fetch_lock = threading.Lock()
         self.news_api_status = (
             "Connected (Live Financial News Feed - Reuters, Bloomberg, WSJ, MarketWatch)"
             if not settings.USE_DEMO_DATA else "Demo Mode (USE_DEMO_DATA active)"
@@ -1098,13 +1100,32 @@ class NewsService:
         )
 
         if should_fetch:
-            self._last_fetch_time = now_utc
-            if existing_articles and not force_refresh:
-                # Non-blocking: DB has articles, so serve immediately and update in background
-                self._trigger_background_ingest(query=query)
-            else:
-                self.ingest_live_news(force=force_refresh, query=query)
-                existing_articles = db.find("news_articles", {"is_demo": False}, limit=1000, sort=[("published_at", -1)])
+            with self._fetch_lock:
+                # Re-check under lock in case another concurrent request just completed ingestion
+                now_check = self.get_utc_now()
+                now_kol_check = self.get_kolkata_now()
+                fresh_db = db.find("news_articles", {"is_demo": False}, limit=1000, sort=[("published_at", -1)])
+                fresh_today_count = sum(
+                    1 for a in fresh_db
+                    if self.is_published_today_kolkata(a.get("published_at"), now_kol_check)
+                )
+                still_needed = (
+                    force_refresh or
+                    self._last_fetch_time is None or
+                    (now_check - self._last_fetch_time).total_seconds() > self.CACHE_TTL_SECONDS or
+                    (fresh_today_count == 0 and len(fresh_db) == 0)
+                )
+
+                if still_needed:
+                    self._last_fetch_time = now_check
+                    if fresh_db and not force_refresh:
+                        self._trigger_background_ingest(query=query)
+                        existing_articles = fresh_db
+                    else:
+                        self.ingest_live_news(force=force_refresh, query=query)
+                        existing_articles = db.find("news_articles", {"is_demo": False}, limit=1000, sort=[("published_at", -1)])
+                else:
+                    existing_articles = fresh_db
 
         # Ensure all articles returned have verified ticker attached
         for a in existing_articles:

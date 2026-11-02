@@ -34,9 +34,9 @@ function AuthenticatedLayout() {
 
   const checkHealthAndStats = async () => {
     try {
-      const [health, dashboardStats, unreadAlerts] = await Promise.allSettled([
+      // 1. Fast path: ping health and active alerts without blocking page data
+      const [health, unreadAlerts] = await Promise.allSettled([
         api.getHealth(),
-        api.getDashboardStats(),
         api.getAlerts(true),
       ]);
 
@@ -46,15 +46,22 @@ function AuthenticatedLayout() {
           setFeedStatus(health.value.news_api.feed_status);
         }
       }
-      if (dashboardStats.status === 'fulfilled') {
-        setActiveConflictsCount(dashboardStats.value.active_conflicts_count || 0);
-        if (dashboardStats.value.feed_status) {
-          setFeedStatus(dashboardStats.value.feed_status);
-        }
-      }
       if (unreadAlerts.status === 'fulfilled') {
         setUnreadAlertsCount(unreadAlerts.value.length || 0);
       }
+
+      // 2. Stagger top-level dashboard metrics slightly so initial page query gets priority network & CPU
+      setTimeout(async () => {
+        try {
+          const stats = await api.getDashboardStats();
+          setActiveConflictsCount(stats.active_conflicts_count || 0);
+          if (stats.feed_status) {
+            setFeedStatus(stats.feed_status);
+          }
+        } catch (err) {
+          console.debug('Deferred stats sync:', err);
+        }
+      }, 800);
     } catch (err) {
       console.warn('Backend sync check error:', err);
     }

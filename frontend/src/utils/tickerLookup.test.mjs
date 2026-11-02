@@ -1,78 +1,84 @@
 import assert from 'node:assert/strict';
 
-// Test ticker lookup and broker routing logic
+// Test ticker lookup and broker routing logic for Groww
 const INDIAN_INSTRUMENTS = {
   reliance: {
     ticker: 'RELIANCE',
-    url: 'https://upstox.com/stocks/reliance-industries-ltd-share-price/',
-    actionLabel: 'Open Reliance in Upstox'
+    url: 'https://groww.in/stocks/reliance-industries-ltd',
+    actionLabel: 'Open Reliance Industries on Groww'
   },
   'reliance industries': {
     ticker: 'RELIANCE',
-    url: 'https://upstox.com/stocks/reliance-industries-ltd-share-price/',
-    actionLabel: 'Open Reliance in Upstox'
+    url: 'https://groww.in/stocks/reliance-industries-ltd',
+    actionLabel: 'Open Reliance Industries on Groww'
   },
   'tata motors': {
     ticker: 'TATAMOTORS',
-    url: 'https://upstox.com/stocks/tata-motors-limited-share-price/',
-    actionLabel: 'Open Tata Motors in Upstox'
+    url: 'https://groww.in/stocks/tata-motors-ltd',
+    actionLabel: 'Open Tata Motors on Groww'
   },
   tcs: {
     ticker: 'TCS',
-    url: 'https://upstox.com/stocks/tata-consultancy-serv-lt-share-price/',
-    actionLabel: 'Open TCS in Upstox'
+    url: 'https://groww.in/stocks/tata-consultancy-services-ltd',
+    actionLabel: 'Open Tata Consultancy Services on Groww'
   },
   'tata consultancy services': {
     ticker: 'TCS',
-    url: 'https://upstox.com/stocks/tata-consultancy-serv-lt-share-price/',
-    actionLabel: 'Open TCS in Upstox'
+    url: 'https://groww.in/stocks/tata-consultancy-services-ltd',
+    actionLabel: 'Open Tata Consultancy Services on Groww'
   },
   infosys: {
     ticker: 'INFY',
-    url: 'https://upstox.com/stocks/infosys-limited-share-price/',
-    actionLabel: 'Open Infosys in Upstox'
+    url: 'https://groww.in/stocks/infosys-ltd',
+    actionLabel: 'Open Infosys on Groww'
   },
   'hdfc bank': {
     ticker: 'HDFCBANK',
-    url: 'https://upstox.com/stocks/hdfc-bank-ltd-share-price/',
-    actionLabel: 'Open HDFC Bank in Upstox'
+    url: 'https://groww.in/stocks/hdfc-bank-ltd',
+    actionLabel: 'Open HDFC Bank on Groww'
   },
   'icici bank': {
     ticker: 'ICICIBANK',
-    url: 'https://upstox.com/stocks/icici-bank-ltd-share-price/',
-    actionLabel: 'Open ICICI Bank in Upstox'
+    url: 'https://groww.in/stocks/icici-bank-ltd',
+    actionLabel: 'Open ICICI Bank on Groww'
   },
   'state bank of india': {
     ticker: 'SBIN',
-    url: 'https://upstox.com/stocks/state-bank-of-india-share-price/',
-    actionLabel: 'Open SBI in Upstox'
+    url: 'https://groww.in/stocks/state-bank-of-india',
+    actionLabel: 'Open State Bank of India on Groww'
   }
 };
 
 const US_INSTRUMENTS = {
   apple: {
     ticker: 'AAPL',
-    actionLabel: 'Open Apple on Groww'
+    isGrowwSupported: false,
+    reason: 'Groww does not support active trading for US-listed equities'
   },
   microsoft: {
     ticker: 'MSFT',
-    actionLabel: 'Open Microsoft on Groww'
+    isGrowwSupported: false,
+    reason: 'Groww does not support active trading for US-listed equities'
   },
   tesla: {
     ticker: 'TSLA',
-    actionLabel: 'Open Tesla on Groww'
+    isGrowwSupported: false,
+    reason: 'Groww does not support active trading for US-listed equities'
   },
   amazon: {
     ticker: 'AMZN',
-    actionLabel: 'Open Amazon on Groww'
+    isGrowwSupported: false,
+    reason: 'Groww does not support active trading for US-listed equities'
   },
   nvidia: {
     ticker: 'NVDA',
-    actionLabel: 'Open Nvidia on Groww'
+    isGrowwSupported: false,
+    reason: 'Groww does not support active trading for US-listed equities'
   },
   alphabet: {
     ticker: 'GOOGL',
-    actionLabel: 'Open Alphabet (GOOGL) on Groww'
+    isGrowwSupported: false,
+    reason: 'Groww does not support active trading for US-listed equities'
   }
 };
 
@@ -90,11 +96,12 @@ function resolveNavigation(company, ticker) {
 
   const candidates = [normComp, normTick, parenTicker, parenName].filter(Boolean);
 
-  // 1. Check Indian Instruments
+  // 1. Check Indian Instruments -> Routed to Groww with verified stock page
   for (const c of candidates) {
     if (INDIAN_INSTRUMENTS[c]) {
       return {
-        broker: 'upstox',
+        broker: 'groww',
+        isSupported: true,
         destinationType: 'direct_instrument',
         directUrl: INDIAN_INSTRUMENTS[c].url,
         actionLabel: INDIAN_INSTRUMENTS[c].actionLabel,
@@ -103,15 +110,16 @@ function resolveNavigation(company, ticker) {
     }
   }
 
-  // 2. Check US Instruments -> Groww (US Stocks)
+  // 2. Check US Instruments -> Groww does NOT support active trading for US stocks
   for (const c of candidates) {
     if (US_INSTRUMENTS[c]) {
       return {
         broker: 'groww',
-        destinationType: 'verified_portal_with_ticker_search',
+        isSupported: false,
+        destinationType: 'unsupported',
         directUrl: null,
         portalUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-        actionLabel: US_INSTRUMENTS[c].actionLabel,
+        actionLabel: 'US Stocks Unsupported on Groww',
         ticker: US_INSTRUMENTS[c].ticker
       };
     }
@@ -123,55 +131,64 @@ function resolveNavigation(company, ticker) {
 
 console.log('--- RUNNING TICKER & BROKER ROUTING UNIT TESTS ---');
 
-// Indian stocks MUST route to Upstox with verified direct URLs
+// Indian stocks MUST route to Groww with verified direct stock-specific URLs
 const rel = resolveNavigation('Reliance Industries', null);
-assert.equal(rel.broker, 'upstox');
+assert.equal(rel.broker, 'groww');
+assert.equal(rel.isSupported, true);
 assert.equal(rel.destinationType, 'direct_instrument');
-assert.equal(rel.directUrl, 'https://upstox.com/stocks/reliance-industries-ltd-share-price/');
-assert.equal(rel.actionLabel, 'Open Reliance in Upstox');
+assert.equal(rel.directUrl, 'https://groww.in/stocks/reliance-industries-ltd');
+assert.equal(rel.actionLabel, 'Open Reliance Industries on Groww');
 
 const tcs = resolveNavigation('Tata Consultancy Services (TCS)', null);
-assert.equal(tcs.broker, 'upstox');
-assert.equal(tcs.directUrl, 'https://upstox.com/stocks/tata-consultancy-serv-lt-share-price/');
+assert.equal(tcs.broker, 'groww');
+assert.equal(tcs.isSupported, true);
+assert.equal(tcs.directUrl, 'https://groww.in/stocks/tata-consultancy-services-ltd');
+assert.equal(tcs.actionLabel, 'Open Tata Consultancy Services on Groww');
 
 const tm = resolveNavigation('Tata Motors', null);
-assert.equal(tm.broker, 'upstox');
+assert.equal(tm.broker, 'groww');
+assert.equal(tm.isSupported, true);
 assert.equal(tm.ticker, 'TATAMOTORS');
-assert.equal(tm.directUrl, 'https://upstox.com/stocks/tata-motors-limited-share-price/');
+assert.equal(tm.directUrl, 'https://groww.in/stocks/tata-motors-ltd');
 
 const infy = resolveNavigation('Infosys', 'INFY');
-assert.equal(infy.broker, 'upstox');
-assert.equal(infy.directUrl, 'https://upstox.com/stocks/infosys-limited-share-price/');
+assert.equal(infy.broker, 'groww');
+assert.equal(infy.isSupported, true);
+assert.equal(infy.directUrl, 'https://groww.in/stocks/infosys-ltd');
+assert.equal(infy.actionLabel, 'Open Infosys on Groww');
 
 const hdfc = resolveNavigation('HDFC Bank', null);
-assert.equal(hdfc.broker, 'upstox');
-assert.equal(hdfc.directUrl, 'https://upstox.com/stocks/hdfc-bank-ltd-share-price/');
+assert.equal(hdfc.broker, 'groww');
+assert.equal(hdfc.directUrl, 'https://groww.in/stocks/hdfc-bank-ltd');
 
 const icici = resolveNavigation('ICICI Bank', null);
-assert.equal(icici.broker, 'upstox');
-assert.equal(icici.directUrl, 'https://upstox.com/stocks/icici-bank-ltd-share-price/');
+assert.equal(icici.broker, 'groww');
+assert.equal(icici.directUrl, 'https://groww.in/stocks/icici-bank-ltd');
 
-// US stocks MUST route to Groww (US Stocks)
+// US stocks MUST be clearly classified as unsupported on Groww for active trading
 const apple = resolveNavigation('Apple (AAPL)', null);
 assert.equal(apple.broker, 'groww');
-assert.equal(apple.destinationType, 'verified_portal_with_ticker_search');
-assert.equal(apple.actionLabel, 'Open Apple on Groww');
-assert.equal(apple.portalUrl, 'https://groww.in/us-stocks/popular-us-stocks-and-etfs');
+assert.equal(apple.isSupported, false);
+assert.equal(apple.destinationType, 'unsupported');
+assert.equal(apple.directUrl, null);
 
 const tesla = resolveNavigation('Tesla (TSLA)', null);
 assert.equal(tesla.broker, 'groww');
-assert.equal(tesla.actionLabel, 'Open Tesla on Groww');
+assert.equal(tesla.isSupported, false);
 
 const msft = resolveNavigation('Microsoft (MSFT)', null);
 assert.equal(msft.broker, 'groww');
+assert.equal(msft.isSupported, false);
 
 const amzn = resolveNavigation('Amazon (AMZN)', null);
 assert.equal(amzn.broker, 'groww');
+assert.equal(amzn.isSupported, false);
 
 const nvda = resolveNavigation('NVIDIA (NVDA)', null);
 assert.equal(nvda.broker, 'groww');
+assert.equal(nvda.isSupported, false);
 
-// Other international or unverified stocks MUST NOT route to Groww
+// Other international or unverified stocks MUST NOT route to arbitrary instruments
 assert.equal(resolveNavigation('Bavarian Nordic', null), null);
 assert.equal(resolveNavigation('Novo Nordisk', null), null);
 assert.equal(resolveNavigation('ASML', null), null);

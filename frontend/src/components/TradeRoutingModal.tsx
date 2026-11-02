@@ -110,15 +110,28 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
   };
 
   const isDirectInstrument = route?.destination_type === 'direct_instrument';
-  const actionLabel = selectedBroker && route
-    ? brokerNavigationService.getActionLabel(route, selectedBroker)
-    : 'Open Broker';
+  const isIndianSupported = Boolean(route && route.is_tradable && route.country === 'IN');
+  const isUSStock = Boolean(route && (route.country === 'US' || route.exchange === 'NASDAQ' || route.exchange === 'NYSE'));
 
   const primaryTargetUrl = selectedBroker && route
     ? brokerNavigationService.getDestinationUrl(route, selectedBroker, 'direct')
-    : '';
+    : (route?.direct_url || '');
 
-  const portalFallbackUrl = route?.portal_fallback_url || selectedBroker?.entry_url || '';
+  // Dynamic Dialog Title
+  let modalTitle = 'Broker Trade Routing';
+  let modalSubtitle = 'Instrument Routing & Verification';
+  if (route) {
+    if (isIndianSupported) {
+      modalTitle = `Open ${route.company} on Groww?`;
+      modalSubtitle = 'Verified Indian Equity (NSE / BSE) • Direct Stock Navigation';
+    } else if (isUSStock) {
+      modalTitle = 'US Stocks Not Supported on Groww';
+      modalSubtitle = `${route.company} (${route.ticker || 'US Equity'}) • Market Coverage Notice`;
+    } else {
+      modalTitle = 'Trading Destination Unavailable';
+      modalSubtitle = 'Macroeconomic / Unmapped Instrument';
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -126,19 +139,26 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-navy-750 flex items-center justify-between sticky top-0 bg-navy-900/95 backdrop-blur-md z-10">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              isIndianSupported 
+                ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' 
+                : isUSStock 
+                ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400'
+                : 'bg-blue-500/15 border border-blue-500/30 text-blue-400'
+            }`}>
               <TrendingUp className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-white text-sm">Verified Broker Navigation</h3>
+              <h3 className="font-bold text-white text-sm">{modalTitle}</h3>
               <p className="text-[10px] text-slate-400 font-mono">
-                Instrument Routing • Upstox (India) & Groww (US Equities)
+                {modalSubtitle}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-navy-800 transition-colors cursor-pointer"
+            title="Close dialog"
           >
             <X className="w-5 h-5" />
           </button>
@@ -146,7 +166,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
 
         {/* Content Body */}
         <div className="p-6 space-y-5 pt-0">
-          {/* Article / Sentiment Context */}
+          {/* Article Context Header */}
           <div className="p-4 rounded-xl bg-navy-950/70 border border-navy-800 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -170,7 +190,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
             <div className="p-8 text-center space-y-3">
               <RefreshCw className="w-7 h-7 text-blue-400 animate-spin mx-auto" />
               <p className="text-xs text-slate-400 font-mono">
-                Verifying exchange ticker and broker instrument catalog...
+                Verifying exchange ticker and Groww instrument catalog...
               </p>
             </div>
           )}
@@ -199,32 +219,15 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 underline font-semibold mt-1"
                 >
-                  Click here to open {selectedBroker?.broker_name} directly
+                  Click here to open Groww directly
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
             </div>
           )}
 
-          {/* Unsupported Instrument State */}
-          {!loading && route && !route.is_tradable && (
-            <div className="p-6 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-3 text-center">
-              <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
-              <div>
-                <h4 className="text-sm font-semibold text-white">Trading Destination Not Verified</h4>
-                <p className="text-xs text-amber-300/90 mt-1 max-w-md mx-auto">
-                  {route.message || 'Trading destination not verified or currently unavailable.'}
-                </p>
-              </div>
-              <p className="text-[11px] text-slate-400">
-                FIN-SENTIMENT routes strictly to verified broker instruments (Upstox for Indian equities, Groww for verified US equities).
-                General market indexes, macroeconomic headlines, and unverified international stocks are never silently routed to a broker.
-              </p>
-            </div>
-          )}
-
-          {/* Supported Tradable Instrument Details */}
-          {!loading && route && route.is_tradable && (
+          {/* CASE 1: Supported Indian Stock (Reliance, TCS, Infosys, etc.) */}
+          {!loading && route && isIndianSupported && (
             <div className="space-y-4">
               {/* Instrument Overview Card */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -245,19 +248,19 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                 <div className="p-3 rounded-lg bg-navy-950 border border-navy-800">
                   <span className="text-[10px] text-slate-400 font-mono uppercase block">Exchange</span>
                   <span className="text-sm font-bold text-emerald-400 font-mono mt-1 block">
-                    {route.exchange} ({route.country === 'IN' ? 'India' : 'US'})
+                    {route.exchange} (India)
                   </span>
                 </div>
 
                 <div className="p-3 rounded-lg bg-navy-950 border border-navy-800 col-span-2 sm:col-span-1">
-                  <span className="text-[10px] text-slate-400 font-mono uppercase block">Security ID / ISIN</span>
-                  <span className="text-xs font-mono text-slate-300 mt-1 block truncate">
-                    {route.isin || 'N/A'}
+                  <span className="text-[10px] text-slate-400 font-mono uppercase block">Broker Destination</span>
+                  <span className="text-xs font-semibold text-emerald-300 mt-1 block truncate">
+                    Groww (Direct Page)
                   </span>
                 </div>
               </div>
 
-              {/* Share class note if applicable (e.g. Alphabet GOOGL/GOOG or Tata Motors) */}
+              {/* Share class note if applicable */}
               {route.share_class_note && (
                 <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/25 flex items-start gap-2.5 text-xs text-blue-200">
                   <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
@@ -265,135 +268,176 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                 </div>
               )}
 
-              {/* Broker Selection if multiple available */}
-              {route.brokers.length > 1 && (
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-300">Select Broker Destination:</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {route.brokers.map((broker) => (
-                      <button
-                        key={broker.broker_id}
-                        onClick={() => setSelectedBroker(broker)}
-                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                          selectedBroker?.broker_id === broker.broker_id
-                            ? 'bg-blue-600/15 border-blue-500 text-white shadow-sm'
-                            : 'bg-navy-950 border-navy-800 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        <span className="font-bold text-xs block">{broker.broker_name}</span>
-                        <span className="text-[10px] text-slate-500">{broker.market_coverage}</span>
-                      </button>
-                    ))}
+              {/* Groww Confirmation Card */}
+              <div className="p-5 rounded-xl bg-gradient-to-br from-navy-950 to-navy-900 border border-emerald-500/30 space-y-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white text-sm">Groww Verified Stock Page</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30">
+                      Direct Instrument Link
+                    </span>
                   </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    You will be directed to the official {route.company} page on Groww to review real-time NSE quotes, interactive charts, and execute your trade.
+                  </p>
                 </div>
-              )}
 
-              {/* Selected Broker Action Card */}
-              {selectedBroker && (
-                <div className="p-5 rounded-xl bg-gradient-to-br from-navy-950 to-navy-900 border border-blue-500/30 space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-white text-sm">{selectedBroker.broker_name}</span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-300 font-mono border border-blue-500/30">
-                          {selectedBroker.country === 'IN' ? 'Verified Indian Broker' : 'Verified US Broker'}
-                        </span>
-                        {isDirectInstrument && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30">
-                            Direct Stock Page
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1">{selectedBroker.market_coverage}</p>
-                    </div>
+                {/* Direct URL Preview */}
+                {primaryTargetUrl && (
+                  <div className="p-2.5 rounded-lg bg-navy-900/90 border border-navy-800 text-[11px] font-mono text-slate-400 flex items-center justify-between gap-2 overflow-hidden">
+                    <span className="truncate text-emerald-400">{primaryTargetUrl}</span>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                   </div>
+                )}
 
-                  {/* Step-by-step instructions */}
-                  <div className="p-3.5 rounded-lg bg-navy-900/90 border border-navy-800 space-y-2 text-xs">
-                    <p className="font-semibold text-slate-200 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Navigation & Trading Instructions:</span>
-                    </p>
+                {/* Primary Action Buttons: Continue to Groww & Cancel */}
+                <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+                  <a
+                    href={primaryTargetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => {
+                      if (!primaryTargetUrl) {
+                        e.preventDefault();
+                        handleNavigate('direct');
+                      }
+                    }}
+                    className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 transition-all cursor-pointer text-center"
+                  >
+                    <span>Continue to Groww</span>
+                    <ArrowUpRight className="w-4 h-4" />
+                  </a>
 
-                    {isDirectInstrument ? (
-                      <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
-                        <li>
-                          Click <strong className="text-white">"{actionLabel}"</strong> below to open the official, verified {route.company} page on Upstox.
-                        </li>
-                        <li>Review real-time NSE market quotes, interactive TradingView charts, and fundamental indicators.</li>
-                        <li>To execute a trade, sign in to your Upstox Pro account and confirm your order parameters.</li>
-                      </ol>
+                  <button
+                    onClick={() => handleCopyTicker(route.ticker || '')}
+                    className="w-full sm:w-auto py-3 px-4 rounded-xl bg-navy-800 hover:bg-navy-750 text-slate-200 hover:text-white border border-navy-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    title="Copy ticker symbol to clipboard"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-400" />
+                        <span>Copied {route.ticker}!</span>
+                      </>
                     ) : (
-                      <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
-                        <li>
-                          Click <strong className="text-white">"{actionLabel}"</strong> below to open the official Groww US Stocks portal.
-                        </li>
-                        <li>Sign in using your authorized Groww account credentials.</li>
-                        <li>
-                          Search for ticker <strong className="text-emerald-400 font-mono">{route.ticker}</strong> on <strong className="text-white">{route.exchange}</strong>.
-                        </li>
-                        <li>Review real-time quote depth, set order parameters, and confirm your trade.</li>
-                      </ol>
+                      <>
+                        <Copy className="w-4 h-4 text-slate-400" />
+                        <span>Copy Ticker</span>
+                      </>
                     )}
-                  </div>
+                  </button>
 
-                  {/* Primary & Secondary Action Buttons */}
-                  <div className="space-y-2.5 pt-1">
-                    <div className="flex flex-col sm:flex-row items-center gap-3">
-                      {/* Direct primary anchor link with fallback click handler */}
-                      <a
-                        href={primaryTargetUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => {
-                          // Allow standard browser new-tab click while tracking safety
-                          if (!primaryTargetUrl) {
-                            e.preventDefault();
-                            handleNavigate('direct');
-                          }
-                        }}
-                        className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 transition-all cursor-pointer text-center"
-                      >
-                        <span>{actionLabel}</span>
-                        <ArrowUpRight className="w-4 h-4" />
-                      </a>
-
-                      <button
-                        onClick={() => handleCopyTicker(route.ticker || '')}
-                        className="w-full sm:w-auto py-3 px-4 rounded-xl bg-navy-800 hover:bg-navy-750 text-slate-200 hover:text-white border border-navy-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                        title="Copy ticker symbol to clipboard"
-                      >
-                        {copied ? (
-                          <>
-                            <Check className="w-4 h-4 text-emerald-400" />
-                            <span>Copied {route.ticker}!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-4 h-4 text-slate-400" />
-                            <span>Copy Ticker ({route.ticker})</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Secondary option if direct stock page is active */}
-                    {isDirectInstrument && portalFallbackUrl && (
-                      <div className="text-center pt-1">
-                        <a
-                          href={portalFallbackUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] text-slate-400 hover:text-blue-300 inline-flex items-center gap-1 transition-colors"
-                        >
-                          <span>Or open Upstox Pro Web Trading Portal</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    onClick={onClose}
+                    className="w-full sm:w-auto py-3 px-4 rounded-xl bg-navy-950 hover:bg-navy-800 text-slate-400 hover:text-white border border-navy-800 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
                 </div>
-              )}
+              </div>
+            </div>
+          )}
+
+          {/* CASE 2: US Stock (Apple, Amazon, Nvidia, Tesla, etc.) */}
+          {!loading && route && isUSStock && (
+            <div className="space-y-4">
+              {/* Instrument Overview Card */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="p-3 rounded-lg bg-navy-950 border border-navy-800">
+                  <span className="text-[10px] text-slate-400 font-mono uppercase block">Company</span>
+                  <span className="text-sm font-bold text-white font-mono mt-1 block truncate">
+                    {route.company}
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg bg-navy-950 border border-navy-800">
+                  <span className="text-[10px] text-slate-400 font-mono uppercase block">Symbol / Exchange</span>
+                  <span className="text-sm font-bold text-amber-400 font-mono mt-1 block">
+                    {route.ticker} • {route.exchange}
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg bg-navy-950 border border-navy-800 col-span-2 sm:col-span-1">
+                  <span className="text-[10px] text-slate-400 font-mono uppercase block">Trading Status</span>
+                  <span className="text-xs font-semibold text-rose-400 mt-1 block">
+                    Unsupported on Groww
+                  </span>
+                </div>
+              </div>
+
+              {/* Explicit Limitation Explanation */}
+              <div className="p-5 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-3">
+                <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>US Equities Order Execution Notice</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Groww does not currently support active trading or direct order execution for US-listed equities (<strong className="text-white font-mono">{route.ticker}</strong> on <strong className="text-white">{route.exchange}</strong>). Retail US stock onboarding and active trading execution have been discontinued under RBI Liberalised Remittance Scheme (LRS) regulations.
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  FIN-SENTIMENT never silently routes unsupported securities to an unrelated order book. You may view Groww's general US stock directory for informational research, but live order execution is unavailable.
+                </p>
+              </div>
+
+              {/* Action Buttons: Cancel and Optional Directory link */}
+              <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+                <button
+                  onClick={onClose}
+                  className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-colors cursor-pointer text-center"
+                >
+                  Close / Cancel
+                </button>
+
+                <a
+                  href="https://groww.in/us-stocks/popular-us-stocks-and-etfs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto py-3 px-4 rounded-xl bg-navy-800 hover:bg-navy-750 text-slate-300 hover:text-white border border-navy-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <span>Groww US Directory</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+
+                {route.ticker && (
+                  <button
+                    onClick={() => handleCopyTicker(route.ticker || '')}
+                    className="w-full sm:w-auto py-3 px-4 rounded-xl bg-navy-950 hover:bg-navy-800 text-slate-400 hover:text-white border border-navy-800 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    title="Copy ticker symbol"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy Symbol</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* CASE 3: General Market / Unsupported Company */}
+          {!loading && route && !isIndianSupported && !isUSStock && (
+            <div className="p-6 rounded-xl bg-navy-950 border border-navy-800 space-y-4 text-center">
+              <AlertCircle className="w-8 h-8 text-slate-500 mx-auto" />
+              <div>
+                <h4 className="text-sm font-semibold text-white">No Trading Destination Associated</h4>
+                <p className="text-xs text-slate-400 mt-1.5 max-w-md mx-auto leading-relaxed">
+                  This news headline covers macroeconomic developments, sector-wide indices, or an unverified instrument without an individual exchange equity association.
+                </p>
+              </div>
+              <div className="pt-2">
+                <button
+                  onClick={onClose}
+                  className="px-6 py-2.5 rounded-xl bg-navy-800 hover:bg-navy-750 text-slate-200 hover:text-white border border-navy-700 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           )}
 
@@ -404,8 +448,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
               <span>Compliance & Security Protocol</span>
             </div>
             <p className="leading-relaxed">
-              FIN-SENTIMENT is an informational AI sentiment analytics platform and is not a registered broker-dealer or investment advisor.
-              We never request or store brokerage passwords, tokens, or execute automated trades. All orders are reviewed and submitted directly by you on your authorized broker platform.
+              FIN-SENTIMENT is an informational AI sentiment analytics platform and is not a registered broker-dealer. We never request or store brokerage credentials, API tokens, or execute automated trades. All trades must be confirmed directly by you on your authorized broker.
             </p>
           </div>
         </div>

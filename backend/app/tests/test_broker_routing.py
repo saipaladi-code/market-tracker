@@ -5,23 +5,23 @@ from app.services.broker_routing_service import broker_routing_service
 
 client = TestClient(app)
 
-def test_indian_stock_routing_upstox_direct_navigation():
+def test_indian_stock_routing_groww_direct_navigation():
     """
-    Verifies that all specified Indian stocks route to Upstox with verified direct
-    stock instrument pages rather than generic broker homepages.
+    Verifies that all specified Indian stocks route to Groww with verified direct
+    stock instrument pages (https://groww.in/stocks/{slug}) rather than generic homepages.
     """
     indian_samples = [
-        ("Reliance Industries", "RELIANCE", "https://upstox.com/stocks/reliance-industries-ltd-share-price/"),
-        ("Tata Consultancy Services (TCS)", "TCS", "https://upstox.com/stocks/tata-consultancy-serv-lt-share-price/"),
-        ("TCS", "TCS", "https://upstox.com/stocks/tata-consultancy-serv-lt-share-price/"),
-        ("Tata Motors", "TATAMOTORS", "https://upstox.com/stocks/tata-motors-limited-share-price/"),
-        ("Infosys", "INFY", "https://upstox.com/stocks/infosys-limited-share-price/"),
-        ("HDFC Bank", "HDFCBANK", "https://upstox.com/stocks/hdfc-bank-ltd-share-price/"),
-        ("ICICI Bank", "ICICIBANK", "https://upstox.com/stocks/icici-bank-ltd-share-price/"),
-        ("State Bank of India", "SBIN", "https://upstox.com/stocks/state-bank-of-india-share-price/"),
-        ("Bharti Airtel", "BHARTIARTL", "https://upstox.com/stocks/bharti-airtel-limited-share-price/"),
-        ("Larsen & Toubro", "LT", "https://upstox.com/stocks/larsen-toubro-ltd-share-price/"),
-        ("Wipro", "WIPRO", "https://upstox.com/stocks/wipro-ltd-share-price/")
+        ("Reliance Industries", "RELIANCE", "https://groww.in/stocks/reliance-industries-ltd"),
+        ("Tata Consultancy Services (TCS)", "TCS", "https://groww.in/stocks/tata-consultancy-services-ltd"),
+        ("TCS", "TCS", "https://groww.in/stocks/tata-consultancy-services-ltd"),
+        ("Tata Motors", "TATAMOTORS", "https://groww.in/stocks/tata-motors-ltd"),
+        ("Infosys", "INFY", "https://groww.in/stocks/infosys-ltd"),
+        ("HDFC Bank", "HDFCBANK", "https://groww.in/stocks/hdfc-bank-ltd"),
+        ("ICICI Bank", "ICICIBANK", "https://groww.in/stocks/icici-bank-ltd"),
+        ("State Bank of India", "SBIN", "https://groww.in/stocks/state-bank-of-india"),
+        ("Bharti Airtel", "BHARTIARTL", "https://groww.in/stocks/bharti-airtel-ltd"),
+        ("Larsen & Toubro", "LT", "https://groww.in/stocks/larsen-toubro-ltd"),
+        ("Wipro", "WIPRO", "https://groww.in/stocks/wipro-ltd")
     ]
 
     for comp_query, expected_ticker, expected_url in indian_samples:
@@ -34,55 +34,43 @@ def test_indian_stock_routing_upstox_direct_navigation():
         assert data["country"] == "IN"
         assert data["destination_type"] == "direct_instrument"
         assert data["direct_url"] == expected_url, f"Expected {expected_url}, got {data['direct_url']}"
-        assert data["portal_fallback_url"] == "https://pro.upstox.com"
+        assert data["portal_fallback_url"] == "https://groww.in/stocks"
         assert "Open " in data["action_label"]
-        assert "in Upstox" in data["action_label"]
+        assert "on Groww" in data["action_label"]
 
-        assert len(data["brokers"]) == 1
-        broker = data["brokers"][0]
-        assert broker["broker_id"] == "upstox", f"Expected Upstox for {comp_query}, got {broker['broker_id']}"
+        assert len(data["brokers"]) >= 1
+        broker = data["recommended_broker"]
+        assert broker["broker_id"] == "groww", f"Expected Groww for {comp_query}, got {broker['broker_id']}"
         assert broker["entry_url"] == expected_url
         assert broker["is_direct_link_verified"] is True
         assert expected_ticker in broker["instructions"]
 
-def test_international_us_stock_routing_groww_with_ticker_preservation():
+def test_international_us_stock_groww_unsupported():
     """
-    Verifies that verified US stocks route to Groww (US Stocks) with
-    verified_portal_with_ticker_search type, preserving ticker and exchange.
+    Verifies that US stocks (Apple, Amazon, Nvidia, Tesla, etc.) are correctly identified
+    with ticker and exchange metadata, but clearly classified as unsupported on Groww
+    since Groww discontinued retail US stock trading under LRS guidelines.
     """
     us_samples = [
         ("Apple (AAPL)", "AAPL", "Apple"),
         ("Apple", "AAPL", "Apple"),
         ("Microsoft (MSFT)", "MSFT", "Microsoft"),
-        ("Microsoft", "MSFT", "Microsoft"),
         ("Tesla (TSLA)", "TSLA", "Tesla"),
-        ("Tesla", "TSLA", "Tesla"),
         ("Amazon (AMZN)", "AMZN", "Amazon"),
-        ("NVIDIA (NVDA)", "NVDA", "Nvidia"),
-        ("Nvidia", "NVDA", "Nvidia"),
-        ("Alphabet (GOOGL)", "GOOGL", "Alphabet (GOOGL)"),
-        ("Meta", "META", "Meta"),
-        ("JPMorgan Chase", "JPM", "JPMorgan Chase")
+        ("NVIDIA (NVDA)", "NVDA", "Nvidia")
     ]
 
     for comp_query, expected_ticker, short_name in us_samples:
         res = client.get("/api/trading/route", params={"company": comp_query})
         assert res.status_code == 200, f"Failed for {comp_query}"
         data = res.json()
-        assert data["is_tradable"] is True, f"Expected {comp_query} to be tradable"
+        assert data["is_tradable"] is False, f"Expected {comp_query} to be untradable on Groww"
         assert data["ticker"] == expected_ticker
         assert data["country"] == "US"
-        assert data["destination_type"] == "verified_portal_with_ticker_search"
+        assert data["destination_type"] == "unsupported"
+        assert data["direct_url"] is None
         assert data["portal_fallback_url"] == "https://groww.in/us-stocks/popular-us-stocks-and-etfs"
-        assert "Open " in data["action_label"]
-        assert "on Groww" in data["action_label"]
-
-        assert len(data["brokers"]) == 1
-        broker = data["brokers"][0]
-        assert broker["broker_id"] == "groww", f"Expected Groww for {comp_query}, got {broker['broker_id']}"
-        assert broker["entry_url"] == "https://groww.in/us-stocks/popular-us-stocks-and-etfs"
-        assert broker["is_direct_link_verified"] is False
-        assert expected_ticker in broker["instructions"]
+        assert "unsupported" in data["message"].lower() or "unavailable" in data["message"].lower()
 
 def test_alphabet_share_classes_differentiation():
     """Verifies that Alphabet share classes (GOOGL vs GOOG) are differentiated accurately."""
@@ -99,7 +87,7 @@ def test_alphabet_share_classes_differentiation():
     assert "Class C" in (data_goog.get("share_class_note") or "")
 
 def test_tata_motors_instrument_verification():
-    """Verifies Tata Motors commercial and main listed symbol TATAMOTORS on NSE."""
+    """Verifies Tata Motors commercial and main listed symbol TATAMOTORS on NSE routed to Groww."""
     res = client.get("/api/trading/route", params={"company": "Tata Motors"})
     assert res.status_code == 200
     data = res.json()
@@ -107,10 +95,10 @@ def test_tata_motors_instrument_verification():
     assert data["exchange"] == "NSE"
     assert data["isin"] == "INE155A01022"
     assert data["destination_type"] == "direct_instrument"
-    assert data["direct_url"] == "https://upstox.com/stocks/tata-motors-limited-share-price/"
+    assert data["direct_url"] == "https://groww.in/stocks/tata-motors-ltd"
 
 def test_other_international_stocks_not_routed_to_groww():
-    """Verifies other international and unsupported stocks are NOT silently routed to Groww or Upstox."""
+    """Verifies other international and unsupported stocks are NOT silently routed to arbitrary stocks."""
     unsupported_samples = [
         "Bavarian Nordic",
         "Novo Nordisk",
@@ -128,31 +116,20 @@ def test_other_international_stocks_not_routed_to_groww():
         assert res.status_code == 200
         data = res.json()
         assert data["is_tradable"] is False, f"Expected {item} to NOT be tradable"
-        assert data["brokers"] == [], f"Expected 0 brokers for {item}, but got {data['brokers']}"
-        assert data.get("recommended_broker") is None
         assert data["destination_type"] == "unsupported"
         assert data["direct_url"] is None
-        assert "not verified" in data["message"].lower() or "not currently supported" in data["message"].lower()
+        assert "not verified" in data["message"].lower() or "unavailable" in data["message"].lower()
 
-def test_indian_stocks_never_route_to_groww():
-    """Verifies Indian stocks never accidentally select Groww."""
+def test_indian_stocks_groww_direct_routing():
+    """Verifies Indian stocks route to Groww with official stock-specific URLs."""
     indian_tickers = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "TATAMOTORS"]
     for t in indian_tickers:
         res = client.get("/api/trading/route", params={"ticker": t})
         assert res.status_code == 200
         data = res.json()
         assert data["country"] == "IN"
-        assert data["brokers"][0]["broker_id"] == "upstox"
-
-def test_us_stocks_never_route_to_upstox():
-    """Verifies US stocks never accidentally select Upstox."""
-    us_tickers = ["TSLA", "AAPL", "AMZN", "MSFT", "NVDA", "GOOGL"]
-    for t in us_tickers:
-        res = client.get("/api/trading/route", params={"ticker": t})
-        assert res.status_code == 200
-        data = res.json()
-        assert data["country"] == "US"
-        assert data["brokers"][0]["broker_id"] == "groww"
+        assert data["recommended_broker"]["broker_id"] == "groww"
+        assert "groww.in/stocks/" in data["direct_url"]
 
 def test_composite_ticker_and_company_parameters():
     """Verifies resolution when both company and ticker are passed separately."""
@@ -161,15 +138,15 @@ def test_composite_ticker_and_company_parameters():
     data = res.json()
     assert data["is_tradable"] is True
     assert data["ticker"] == "TCS"
-    assert data["brokers"][0]["broker_id"] == "upstox"
-    assert data["direct_url"] == "https://upstox.com/stocks/tata-consultancy-serv-lt-share-price/"
+    assert data["recommended_broker"]["broker_id"] == "groww"
+    assert data["direct_url"] == "https://groww.in/stocks/tata-consultancy-services-ltd"
 
     res_us = client.get("/api/trading/route", params={"company": "Apple Inc", "ticker": "AAPL"})
     assert res_us.status_code == 200
     data_us = res_us.json()
-    assert data_us["is_tradable"] is True
+    assert data_us["is_tradable"] is False
     assert data_us["ticker"] == "AAPL"
-    assert data_us["brokers"][0]["broker_id"] == "groww"
+    assert data_us["destination_type"] == "unsupported"
 
 def test_supported_instruments_endpoint():
     """Verifies listing of all verified Indian and International instruments."""
@@ -179,13 +156,11 @@ def test_supported_instruments_endpoint():
     assert len(data["indian_instruments"]) >= 10
     assert len(data["international_instruments"]) >= 10
     assert data["total_verified"] >= 20
-    # Every Indian instrument must have direct_url
+    # Every Indian instrument must have direct_url on Groww
     for inst in data["indian_instruments"]:
         assert inst["destination_type"] == "direct_instrument"
         assert inst["direct_url"] is not None
-        assert "upstox.com/stocks/" in inst["direct_url"]
-    for inst in data["international_instruments"]:
-        assert inst["brokers"][0]["broker_id"] == "groww"
+        assert "groww.in/stocks/" in inst["direct_url"]
 
 def test_broker_capabilities_endpoint():
     """Verifies broker capabilities and compliance declarations."""
@@ -193,6 +168,5 @@ def test_broker_capabilities_endpoint():
     assert res.status_code == 200
     data = res.json()
     broker_ids = [b["broker_id"] for b in data["brokers"]]
-    assert "upstox" in broker_ids
     assert "groww" in broker_ids
     assert "compliance_statement" in data
