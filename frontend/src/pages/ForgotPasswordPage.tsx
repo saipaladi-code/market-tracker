@@ -107,7 +107,7 @@ export const ForgotPasswordPage: React.FC = () => {
                   className="w-full py-2.5 px-4 bg-navy-800 hover:bg-navy-750 border border-navy-700 text-slate-200 font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  <span>Return to Sign In</span>
+                  <span>Back to Login</span>
                 </Link>
               </div>
             </div>
@@ -142,10 +142,10 @@ export const ForgotPasswordPage: React.FC = () => {
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Verifying Request...</span>
+                    <span>Sending Recovery Link...</span>
                   </>
                 ) : (
-                  <span>Send Recovery Instructions</span>
+                  <span>Send Recovery Link</span>
                 )}
               </button>
 
@@ -155,7 +155,7 @@ export const ForgotPasswordPage: React.FC = () => {
                   className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Back to Sign In</span>
+                  <span>Back to Login</span>
                 </Link>
               </div>
             </form>

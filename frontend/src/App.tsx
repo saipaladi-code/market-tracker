@@ -172,19 +172,11 @@ export function App() {
           />
           <Route
             path="/forgot-password"
-            element={
-              <PublicRoute>
-                <ForgotPasswordPage />
-              </PublicRoute>
-            }
+            element={<ForgotPasswordPage />}
           />
           <Route
             path="/reset-password"
-            element={
-              <PublicRoute>
-                <ResetPasswordPage />
-              </PublicRoute>
-            }
+            element={<ResetPasswordPage />}
           />
 
           {/* Protected Application Routes */}

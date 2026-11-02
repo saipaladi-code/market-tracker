@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     MONGODB_DATABASE: str = "financial_sentiment"
     GEMINI_API_KEY: Optional[str] = None
     FRONTEND_ORIGIN: str = "http://localhost:5173"
+    PRODUCTION_FRONTEND_URL: str = "https://market-tracker-umber.vercel.app"
     USE_DEMO_DATA: bool = False
     USE_LOCAL_FINBERT: bool = False
     FINBERT_INFERENCE_URL: Optional[str] = None
@@ -51,6 +52,26 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM_EMAIL: Optional[str] = None
     SMTP_TLS: bool = True
+
+    # GoldAPI.io Configuration
+    GOLDAPI_API_KEY: Optional[str] = None
+    GOLDAPI_API_KEY1: Optional[str] = None
+    GOLDAPI_API_KEY2: Optional[str] = None
+
+    def get_goldapi_key(self) -> Optional[str]:
+        """
+        Securely collects configured GoldAPI key in priority order:
+        GOLDAPI_API_KEY, GOLDAPI_API_KEY1, GOLDAPI_API_KEY2.
+        Never logs or exposes key values.
+        """
+        for k in [
+            self.GOLDAPI_API_KEY or os.getenv("GOLDAPI_API_KEY"),
+            self.GOLDAPI_API_KEY1 or os.getenv("GOLDAPI_API_KEY1"),
+            self.GOLDAPI_API_KEY2 or os.getenv("GOLDAPI_API_KEY2")
+        ]:
+            if k and isinstance(k, str) and k.strip():
+                return k.strip()
+        return None
 
     def get_huggingface_api_keys(self) -> List[str]:
         """

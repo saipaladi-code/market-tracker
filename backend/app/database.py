@@ -175,7 +175,16 @@ class DatabaseManager:
     def update_user_password(self, user_id: str, new_password_hash: str) -> bool:
         if not self.is_storage_available():
             raise RuntimeError("Persistent database storage is unavailable.")
-        return self.update_one("users", {"id": user_id}, {"password_hash": new_password_hash, "updated_at": datetime.utcnow().isoformat() + "Z"})
+        res = self.update_one("users", {"id": user_id}, {"password_hash": new_password_hash, "updated_at": datetime.utcnow().isoformat() + "Z"})
+        if not res:
+            res = self.update_one("users", {"_id": user_id}, {"password_hash": new_password_hash, "updated_at": datetime.utcnow().isoformat() + "Z"})
+        if not res and self.is_cloud:
+            try:
+                from bson import ObjectId
+                res = self.update_one("users", {"_id": ObjectId(user_id)}, {"password_hash": new_password_hash, "updated_at": datetime.utcnow().isoformat() + "Z"})
+            except Exception:
+                pass
+        return res
 
     def get_status(self) -> Dict[str, Any]:
         return {

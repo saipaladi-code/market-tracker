@@ -17,6 +17,23 @@ export const ResetPasswordPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [countdown, setCountdown] = useState(3);
+
+  React.useEffect(() => {
+    if (success) {
+      const interval = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            navigate('/login');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [success, navigate]);
 
   // Strength validation
   const hasMinLength = newPassword.length >= 8;
@@ -50,6 +67,7 @@ export const ResetPasswordPage: React.FC = () => {
     try {
       setLoading(true);
       await api.resetPassword(token.trim(), newPassword);
+      api.setAuthToken(null);
       setSuccess(true);
     } catch (err: any) {
       setFormError(err?.response?.data?.detail || err?.message || 'Password update failed. The token may be expired or used.');
@@ -98,10 +116,10 @@ export const ResetPasswordPage: React.FC = () => {
               <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs leading-relaxed space-y-2">
                 <div className="flex items-center gap-2 font-bold text-emerald-400">
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Password Reset Completed</span>
+                  <span>Password updated successfully.</span>
                 </div>
                 <p>
-                  Your credentials have been securely updated via bcrypt. Your reset token has been permanently invalidated. You may now sign in with your new password.
+                  Your credentials have been securely updated. Redirecting to the analyst login page in {countdown}s...
                 </p>
               </div>
 
@@ -212,7 +230,7 @@ export const ResetPasswordPage: React.FC = () => {
                     <span>Updating Password...</span>
                   </>
                 ) : (
-                  <span>Reset Password</span>
+                  <span>Update Password</span>
                 )}
               </button>
 
@@ -221,7 +239,7 @@ export const ResetPasswordPage: React.FC = () => {
                   to="/login"
                   className="text-xs text-slate-400 hover:text-white transition-colors"
                 >
-                  Cancel & Return to Sign In
+                  Cancel & Return to Login
                 </Link>
               </div>
             </form>

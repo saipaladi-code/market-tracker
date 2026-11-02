@@ -31,6 +31,7 @@ class UserLoginRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr = Field(..., description="Registered account email")
+    origin: Optional[str] = Field(default=None, description="Requesting frontend origin URL")
 
     @field_validator("email")
     @classmethod

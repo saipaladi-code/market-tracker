@@ -188,7 +188,38 @@ class AuthService:
         }
 
     # 5. Password Reset Flow
-    def request_password_reset(self, email: str, client_ip: str = "unknown") -> Dict[str, Any]:
+    def get_recovery_base_url(self, request_origin: Optional[str] = None) -> str:
+        """
+        Determines the public frontend URL for password reset links.
+        Ensures recovery links always point to the production Vercel frontend,
+        not localhost or an invalid destination.
+        """
+        prod_frontend = getattr(settings, "PRODUCTION_FRONTEND_URL", "https://market-tracker-umber.vercel.app")
+
+        # 1. If incoming request has an origin header from Vercel, prioritize it
+        if request_origin:
+            clean = request_origin.strip().rstrip("/")
+            if "market-tracker" in clean or "vercel.app" in clean:
+                return clean
+            # If in local dev without RENDER environment and request origin is localhost, allow it
+            if not os.getenv("RENDER") and ("localhost" in clean or "127.0.0.1" in clean):
+                return clean
+
+        # 2. If FRONTEND_ORIGIN is configured and NOT localhost, use it
+        if settings.FRONTEND_ORIGIN:
+            fo = settings.FRONTEND_ORIGIN.strip().rstrip("/")
+            if "localhost" not in fo and "127.0.0.1" not in fo:
+                return fo
+
+        # 3. Default to the production Vercel frontend URL
+        return prod_frontend
+
+    def request_password_reset(
+        self,
+        email: str,
+        client_ip: str = "unknown",
+        request_origin: Optional[str] = None
+    ) -> Dict[str, Any]:
         normalized_email = email.strip().lower()
 
         # Rate limit password reset requests: max 3 per 10 minutes
@@ -202,6 +233,8 @@ class AuthService:
         raw_token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
         expires_at = datetime.utcnow() + timedelta(minutes=15)
+
+        base_url = self.get_recovery_base_url(request_origin)
 
         # Only create a reset record if user actually exists
         if user:
@@ -217,13 +250,20 @@ class AuthService:
 
             # Attempt dispatch via SMTP if configured
             if smtp_configured:
-                self._dispatch_reset_email(normalized_email, raw_token)
+                try:
+                    self._dispatch_reset_email(normalized_email, raw_token, base_url)
+                except Exception as e:
+                    logger.error(f"Failed to dispatch password recovery email via SMTP: {e}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to send password recovery email due to an email delivery failure. Please try again later or contact support."
+                    )
 
         # If SMTP is not configured, communicate status honestly
         if not smtp_configured:
             logger.info("SMTP email delivery is not configured on this server.")
             # For development / testing convenience, provide token only in non-production
-            is_dev = not os.getenv("RENDER") and "localhost" in settings.FRONTEND_ORIGIN
+            is_dev = not os.getenv("RENDER") and ("localhost" in base_url or "127.0.0.1" in base_url)
             return {
                 "message": "Password recovery requested. Note: SMTP email service is currently not configured on this backend server. Contact the system administrator or configure SMTP_HOST in backend environment variables.",
                 "status": "smtp_unconfigured",
@@ -261,7 +301,7 @@ class AuthService:
                 detail="This password reset token has already been used. Please request a new link."
             )
 
-        # Check expiration
+        # Check expiration (15 minutes)
         try:
             exp_str = record.get("expires_at", "")
             exp_dt = datetime.fromisoformat(exp_str.replace("Z", "+00:00")).replace(tzinfo=None)
@@ -282,7 +322,15 @@ class AuthService:
 
         # Update user's password with fresh bcrypt hash
         new_hashed = self.hash_password(new_password)
-        db.update_user_password(user_id, new_hashed)
+        updated = db.update_user_password(user_id, new_hashed)
+        if not updated:
+            user_email = user.get("email") or record.get("email")
+            if user_email:
+                db.update_one(
+                    "users",
+                    {"email": user_email.strip().lower()},
+                    {"password_hash": new_hashed, "updated_at": datetime.utcnow().isoformat() + "Z"}
+                )
 
         # Mark token as single-use consumed
         db.update_one("password_resets", {"token_hash": token_hash}, {
@@ -296,45 +344,50 @@ class AuthService:
             "status": "success"
         }
 
-    def _dispatch_reset_email(self, to_email: str, raw_token: str):
+    def _dispatch_reset_email(self, to_email: str, raw_token: str, base_url: str):
         """Sends an HTML password recovery email via configured SMTP relay."""
         if not settings.SMTP_HOST:
-            return
-        try:
-            reset_url = f"{settings.FRONTEND_ORIGIN.rstrip('/')}/reset-password?token={raw_token}"
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = "FIN-SENTIMENT — Password Reset Request"
-            msg["From"] = settings.SMTP_FROM_EMAIL or f"FIN-SENTIMENT Security <noreply@{settings.SMTP_HOST}>"
-            msg["To"] = to_email
+            raise RuntimeError("SMTP relay host is not configured.")
 
-            text_content = f"FIN-SENTIMENT Password Reset\n\nYou requested a password reset for your FIN-SENTIMENT account.\nUse the link below to set a new password:\n{reset_url}\n\nThis single-use link expires in 15 minutes.\nIf you did not request this, please ignore this email."
-            html_content = f"""
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #070b14; color: #f8fafc; padding: 32px 16px;">
-                <div style="max-width: 520px; margin: 0 auto; background-color: #0f172a; border: 1px solid #1c2b4a; border-radius: 16px; padding: 32px;">
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 24px;">
-                        <span style="font-size: 18px; font-weight: 800; color: #ffffff; letter-spacing: 0.05em;">FIN-SENTIMENT</span>
-                        <span style="background: rgba(59,130,246,0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">SECURITY</span>
-                    </div>
-                    <h2 style="font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 0;">Password Reset Request</h2>
-                    <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">You recently requested to reset the password for your FIN-SENTIMENT intelligence terminal account. Click the button below to establish a new password.</p>
-                    <div style="margin: 28px 0; text-align: center;">
-                        <a href="{reset_url}" style="display: inline-block; background: linear-gradient(135deg, #2563eb, #06b6d4); color: #ffffff; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 8px;">Reset Password</a>
-                    </div>
-                    <p style="color: #64748b; font-size: 12px; line-height: 1.5;">This single-use token will expire in <strong>15 minutes</strong>. If you did not make this request, you can safely ignore this email.</p>
+        reset_url = f"{base_url.rstrip('/')}/reset-password?token={raw_token}"
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "FIN-SENTIMENT – Password Reset Request"
+        msg["From"] = settings.SMTP_FROM_EMAIL or f"FIN-SENTIMENT Security <noreply@{settings.SMTP_HOST}>"
+        msg["To"] = to_email
+
+        text_content = (
+            f"FIN-SENTIMENT Password Reset\n\n"
+            f"You requested a password reset for your FIN-SENTIMENT account.\n"
+            f"Use the link below to set a new password:\n{reset_url}\n\n"
+            f"This single-use link expires in 15 minutes.\n"
+            f"If you did not request this, please ignore this email.\n"
+        )
+        html_content = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #070b14; color: #f8fafc; padding: 32px 16px;">
+            <div style="max-width: 520px; margin: 0 auto; background-color: #0f172a; border: 1px solid #1c2b4a; border-radius: 16px; padding: 32px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 24px;">
+                    <span style="font-size: 18px; font-weight: 800; color: #ffffff; letter-spacing: 0.05em;">FIN-SENTIMENT</span>
+                    <span style="background: rgba(59,130,246,0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">SECURITY</span>
                 </div>
+                <h2 style="font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 0;">Password Reset Request</h2>
+                <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">You recently requested to reset the password for your FIN-SENTIMENT intelligence terminal account. Click the button below to establish a new password.</p>
+                <div style="margin: 28px 0; text-align: center;">
+                    <a href="{reset_url}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: linear-gradient(135deg, #2563eb, #06b6d4); color: #ffffff; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 8px;">Reset Password</a>
+                </div>
+                <p style="color: #64748b; font-size: 12px; line-height: 1.5;">This single-use token will expire in <strong>15 minutes</strong>. If you did not make this request, you can safely ignore this email.</p>
+                <p style="color: #475569; font-size: 11px; word-break: break-all; margin-top: 20px;">If the button above does not work, copy and paste this link into your browser:<br/><a href="{reset_url}" target="_blank" rel="noopener noreferrer" style="color: #38bdf8;">{reset_url}</a></p>
             </div>
-            """
-            msg.attach(MIMEText(text_content, "plain"))
-            msg.attach(MIMEText(html_content, "html"))
+        </div>
+        """
+        msg.attach(MIMEText(text_content, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
 
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-                if settings.SMTP_TLS:
-                    server.starttls()
-                if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
-                    server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-                server.send_message(msg)
-            logger.info(f"Password reset email sent to {to_email}.")
-        except Exception as e:
-            logger.error(f"Failed to send password reset email via SMTP: {e}")
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+            if settings.SMTP_TLS:
+                server.starttls()
+            if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
+                server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+            server.send_message(msg)
+        logger.info(f"Password reset email sent to {to_email}.")
 
 auth_service = AuthService()

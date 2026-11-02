@@ -300,7 +300,11 @@ export const api = {
   },
 
   forgotPassword: async (email: string): Promise<ForgotPasswordResponse> => {
-    const res = await client.post<ForgotPasswordResponse>('/api/auth/forgot-password', { email });
+    const origin = typeof window !== 'undefined' ? window.location.origin : undefined;
+    const res = await client.post<ForgotPasswordResponse>('/api/auth/forgot-password', {
+      email,
+      origin,
+    });
     setOfflineStatus(false);
     return res.data;
   },

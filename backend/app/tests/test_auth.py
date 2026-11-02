@@ -294,3 +294,76 @@ def test_rate_limiting_on_login_brute_force():
     assert blocked_res.status_code == 429
     assert "too many" in blocked_res.json()["detail"].lower()
     assert "Retry-After" in blocked_res.headers
+
+
+def test_password_recovery_invalid_token():
+    """Verifies that an unrecorded/invalid token is rejected."""
+    res = client.post("/api/auth/reset-password", json={
+        "token": "completely_invalid_random_token_12345",
+        "new_password": "ValidPassword123!"
+    })
+    assert res.status_code == 400
+    assert "invalid password reset token" in res.json()["detail"].lower()
+
+def test_password_recovery_expired_token():
+    """Verifies that an expired recovery token (> 15 minutes old) is rejected."""
+    email = "expired.token.user@testfinancial.com"
+    auth_service.register_user("Expired User", email, "OldPassword123!")
+    
+    from secrets import token_urlsafe
+    raw_token = token_urlsafe(32)
+    import hashlib
+    thash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    
+    # Insert token that expired 5 minutes ago
+    db.insert_one("password_resets", {
+        "token_hash": thash,
+        "user_id": "exp-usr-1",
+        "email": email,
+        "expires_at": (datetime.utcnow() - timedelta(minutes=5)).isoformat() + "Z",
+        "used": False,
+        "created_at": (datetime.utcnow() - timedelta(minutes=20)).isoformat() + "Z"
+    })
+
+    res = client.post("/api/auth/reset-password", json={
+        "token": raw_token,
+        "new_password": "NewStrongPassword123!"
+    })
+    assert res.status_code == 400
+    assert "expired" in res.json()["detail"].lower()
+
+def test_password_recovery_weak_password():
+    """Verifies that weak new passwords are rejected with 422."""
+    res = client.post("/api/auth/reset-password", json={
+        "token": "valid_length_token_12345678",
+        "new_password": "weak"
+    })
+    assert res.status_code in (400, 422)
+
+def test_password_recovery_smtp_failure_handling(monkeypatch):
+    """Verifies that when email dispatch fails, the system returns 500 and does NOT show a false success."""
+    email = "smtp.fail.user@testfinancial.com"
+    auth_service.register_user("SMTP Fail User", email, "UserPassword123!")
+
+    # Simulate SMTP host being configured
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.testserver.com")
+    
+    # Simulate SMTP delivery raising an exception
+    def mock_dispatch(to_email, raw_token, base_url):
+        raise ConnectionRefusedError("SMTP Connection Refused by server")
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email", mock_dispatch)
+
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 500
+    assert "failed to send password recovery email" in res.json()["detail"].lower()
+
+def test_password_recovery_vercel_url_resolution():
+    """Verifies that recovery links resolve to the deployed Vercel frontend URL."""
+    # Test request coming from Vercel domain
+    url_vercel = auth_service.get_recovery_base_url("https://market-tracker-umber.vercel.app")
+    assert url_vercel == "https://market-tracker-umber.vercel.app"
+
+    # Test fallback to production Vercel frontend when no origin provided
+    url_default = auth_service.get_recovery_base_url(None)
+    assert "market-tracker-umber.vercel.app" in url_default

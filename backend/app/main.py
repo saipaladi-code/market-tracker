@@ -35,6 +35,7 @@ from app.services.financial_validator import validate_financial_headline, Financ
 from app.models.metals_models import (
     MetalsNewsResponse, MetalsPricesResponse,
     MetalsSentimentSummary, MetalsHistoryResponse,
+    UpdatePricesResponse, CurrencyContextResponse,
     TranslateRequest, TranslateResponse
 )
 from app.services.metals_service import metals_service
@@ -221,7 +222,8 @@ def logout_user(response: Response):
 def forgot_password(req: ForgotPasswordRequest, request: Request):
     """Initiates single-use expiring password recovery flow."""
     client_ip = request.client.host if request.client else "unknown"
-    return auth_service.request_password_reset(req.email, client_ip=client_ip)
+    origin = req.origin or request.headers.get("origin") or request.headers.get("referer")
+    return auth_service.request_password_reset(req.email, client_ip=client_ip, request_origin=origin)
 
 @app.post("/api/auth/reset-password", response_model=MessageResponse)
 def reset_password(req: ResetPasswordRequest):
@@ -726,8 +728,40 @@ def get_metals_news(
 
 @app.get("/api/metals/prices", response_model=MetalsPricesResponse)
 def get_metals_prices():
-    """Retrieves COMEX International Futures quotes and Indian Domestic Benchmark prices."""
+    """
+    Retrieves current cached precious metals prices.
+    Fast, read-only endpoint that respects provider quota and does not call GoldAPI on page load.
+    """
     return metals_service.get_market_prices()
+
+@app.post("/api/metals/prices/update", response_model=UpdatePricesResponse)
+def update_metals_prices():
+    """
+    Triggers manual retrieval of fresh gold and silver prices from GoldAPI.io.
+    Enforces a 60-second cooldown and thread safety to protect provider quota.
+    """
+    return metals_service.update_market_prices()
+
+@app.get("/api/metals/currency-context", response_model=CurrencyContextResponse)
+def get_metals_currency_context(request: Request):
+    """
+    Suggests default currency (INR for India, USD outside India) based on
+    reverse-proxy / CDN geolocation headers (e.g., Vercel, Cloudflare).
+    """
+    country = None
+    for h in ["x-vercel-ip-country", "cf-ipcountry", "x-country-code"]:
+        val = request.headers.get(h)
+        if val and len(val.strip()) == 2:
+            country = val.strip().upper()
+            break
+
+    currency = "INR" if country == "IN" else "USD"
+    return CurrencyContextResponse(
+        country=country or "UNKNOWN",
+        currency=currency,
+        detected=bool(country),
+        supported_currencies=["INR", "USD"]
+    )
 
 @app.get("/api/metals/sentiment", response_model=MetalsSentimentSummary)
 def get_metals_sentiment_summary(
