@@ -367,3 +367,78 @@ def test_password_recovery_vercel_url_resolution():
     # Test fallback to production Vercel frontend when no origin provided
     url_default = auth_service.get_recovery_base_url(None)
     assert "market-tracker-umber.vercel.app" in url_default
+
+
+# 7. SMTP Alias, Password Stripping & Telemetry Tests
+def test_smtp_configuration_aliases_and_password_cleaning(monkeypatch):
+    """Verifies that SMTP_USER, SMTP_PASS, SMTP_FROM aliases work and spaces in passwords are stripped."""
+    # Reset any overrides
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setattr(settings, "SMTP_PORT", 587)
+    monkeypatch.setattr(settings, "SMTP_USERNAME", None)
+    monkeypatch.setattr(settings, "SMTP_PASSWORD", None)
+    monkeypatch.setattr(settings, "SMTP_FROM_EMAIL", None)
+    
+    # Set aliases
+    monkeypatch.setattr(settings, "SMTP_USER", "saipaladi73@gmail.com")
+    monkeypatch.setattr(settings, "SMTP_PASS", "abcd efgh ijkl mnop")
+    monkeypatch.setattr(settings, "SMTP_FROM", None)
+
+    assert settings.smtp_host == "smtp.gmail.com"
+    assert settings.smtp_username == "saipaladi73@gmail.com"
+    # Spaces must be stripped from Google App Password
+    assert settings.smtp_password == "abcdefghijklmnop"
+    # Fallback to username for from_email
+    assert settings.smtp_from_email == "saipaladi73@gmail.com"
+    assert settings.smtp_use_tls is True
+    assert settings.smtp_use_ssl is False
+    assert settings.is_smtp_configured is True
+
+def test_smtp_ssl_port_465_detection(monkeypatch):
+    """Verifies that port 465 automatically engages SSL."""
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setattr(settings, "SMTP_PORT", 465)
+    monkeypatch.setattr(settings, "SMTP_SSL", None)
+    monkeypatch.setattr(settings, "SMTP_TLS", None)
+
+    assert settings.smtp_port == 465
+    assert settings.smtp_use_ssl is True
+    assert settings.smtp_use_tls is False
+
+def test_health_endpoint_email_telemetry(monkeypatch):
+    """Verifies that /api/health exposes safe non-sensitive email telemetry."""
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setattr(settings, "SMTP_USER", "saipaladi73@gmail.com")
+    monkeypatch.setattr(settings, "SMTP_PASS", "secretapppwd1234")
+    
+    res = client.get("/api/health")
+    assert res.status_code == 200
+    data = res.json()
+    assert "email_service" in data
+    email_status = data["email_service"]
+    assert email_status["configured"] is True
+    assert email_status["host"] == "smtp.gmail.com"
+    assert email_status["has_auth"] is True
+    assert email_status["user_configured"] is True
+    assert email_status["sender_configured"] is True
+    # Ensure sensitive password is NOT in response
+    assert "secretapppwd1234" not in str(data)
+
+def test_smtp_auth_error_diagnostic_detail(monkeypatch):
+    """Verifies that SMTP authentication failures yield an informative diagnostic message."""
+    email = "auth.fail.user@testfinancial.com"
+    auth_service.register_user("Auth Fail User", email, "UserPassword123!")
+
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setattr(settings, "SMTP_USER", "saipaladi73@gmail.com")
+    monkeypatch.setattr(settings, "SMTP_PASS", "invalidpwd")
+
+    import smtplib
+    def mock_dispatch(to_email, raw_token, base_url):
+        raise smtplib.SMTPAuthenticationError(535, b"5.7.8 Username and Password not accepted")
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email", mock_dispatch)
+
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 500
+    assert "failed to send password recovery email" in res.json()["detail"].lower()

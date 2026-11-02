@@ -179,6 +179,15 @@ def get_health():
         "gemini_assistant": {
             "active": gemini_assistant_service.is_active,
             "has_key": bool(settings.GEMINI_API_KEY)
+        },
+        "email_service": {
+            "configured": settings.is_smtp_configured,
+            "host": settings.smtp_host,
+            "port": settings.smtp_port,
+            "security": "SSL (Port 465)" if settings.smtp_use_ssl else ("STARTTLS (Port 587)" if settings.smtp_use_tls else "Plain"),
+            "has_auth": bool(settings.smtp_password),
+            "user_configured": bool(settings.smtp_username),
+            "sender_configured": bool(settings.smtp_from_email)
         }
     }
 

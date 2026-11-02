@@ -45,13 +45,103 @@ class Settings(BaseSettings):
     COOKIE_SECURE: Optional[bool] = None  # None = auto-detect
     COOKIE_SAMESITE: Optional[str] = None  # None = auto-detect ("none" for prod, "lax" for dev)
 
-    # Password Recovery (SMTP) Configuration
+    # Password Recovery (SMTP) Configuration & Flexible Aliases
     SMTP_HOST: Optional[str] = None
-    SMTP_PORT: int = 587
+    SMTP_PORT: Optional[int] = None
     SMTP_USERNAME: Optional[str] = None
+    SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
+    SMTP_PASS: Optional[str] = None
     SMTP_FROM_EMAIL: Optional[str] = None
-    SMTP_TLS: bool = True
+    SMTP_FROM: Optional[str] = None
+    SMTP_TLS: Optional[bool] = None
+    SMTP_SSL: Optional[bool] = None
+
+    @property
+    def smtp_host(self) -> Optional[str]:
+        val = self.SMTP_HOST or os.getenv("SMTP_HOST")
+        return val.strip() if val and isinstance(val, str) else None
+
+    @property
+    def smtp_port(self) -> int:
+        raw = self.SMTP_PORT or os.getenv("SMTP_PORT")
+        if raw is not None:
+            try:
+                return int(raw)
+            except (ValueError, TypeError):
+                pass
+        if self.smtp_use_ssl:
+            return 465
+        return 587
+
+    @property
+    def smtp_username(self) -> Optional[str]:
+        val = (
+            self.SMTP_USERNAME 
+            or self.SMTP_USER 
+            or os.getenv("SMTP_USERNAME") 
+            or os.getenv("SMTP_USER")
+        )
+        return val.strip() if val and isinstance(val, str) else None
+
+    @property
+    def smtp_password(self) -> Optional[str]:
+        val = (
+            self.SMTP_PASSWORD 
+            or self.SMTP_PASS 
+            or os.getenv("SMTP_PASSWORD") 
+            or os.getenv("SMTP_PASS")
+        )
+        if not val or not isinstance(val, str):
+            return None
+        cleaned = val.strip()
+        host = (self.smtp_host or "").lower()
+        if "gmail" in host or "google" in host or len(cleaned.replace(" ", "")) == 16:
+            cleaned = cleaned.replace(" ", "")
+        return cleaned
+
+    @property
+    def smtp_from_email(self) -> Optional[str]:
+        val = (
+            self.SMTP_FROM_EMAIL 
+            or self.SMTP_FROM 
+            or os.getenv("SMTP_FROM_EMAIL") 
+            or os.getenv("SMTP_FROM")
+        )
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+        # Fallback to smtp_username if configured (vital for Gmail which forbids mismatched sender)
+        return self.smtp_username
+
+    @property
+    def smtp_use_ssl(self) -> bool:
+        if self.SMTP_SSL is not None:
+            return bool(self.SMTP_SSL)
+        env_val = os.getenv("SMTP_SSL")
+        if env_val is not None:
+            return env_val.strip().lower() in ("true", "1", "yes")
+        raw_port = self.SMTP_PORT or os.getenv("SMTP_PORT")
+        if raw_port:
+            try:
+                return int(raw_port) == 465
+            except Exception:
+                pass
+        return False
+
+    @property
+    def smtp_use_tls(self) -> bool:
+        if self.smtp_use_ssl:
+            return False
+        if self.SMTP_TLS is not None:
+            return bool(self.SMTP_TLS)
+        env_val = os.getenv("SMTP_TLS")
+        if env_val is not None:
+            return env_val.strip().lower() in ("true", "1", "yes")
+        return True
+
+    @property
+    def is_smtp_configured(self) -> bool:
+        return bool(self.smtp_host)
 
     # GoldAPI.io Configuration
     GOLDAPI_API_KEY: Optional[str] = None

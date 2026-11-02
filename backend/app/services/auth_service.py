@@ -3,6 +3,7 @@ import re
 import secrets
 import hashlib
 import smtplib
+import socket
 import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -228,7 +229,7 @@ class AuthService:
         auth_rate_limiter.record_attempt(rate_key)
 
         user = db.find_user_by_email(normalized_email)
-        smtp_configured = bool(settings.SMTP_HOST)
+        smtp_configured = settings.is_smtp_configured
 
         raw_token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
@@ -252,6 +253,12 @@ class AuthService:
             if smtp_configured:
                 try:
                     self._dispatch_reset_email(normalized_email, raw_token, base_url)
+                except RuntimeError as re:
+                    logger.error(f"SMTP delivery failure: {re}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Failed to send password recovery email: {str(re)}"
+                    )
                 except Exception as e:
                     logger.error(f"Failed to dispatch password recovery email via SMTP: {e}")
                     raise HTTPException(
@@ -346,13 +353,19 @@ class AuthService:
 
     def _dispatch_reset_email(self, to_email: str, raw_token: str, base_url: str):
         """Sends an HTML password recovery email via configured SMTP relay."""
-        if not settings.SMTP_HOST:
+        host = settings.smtp_host
+        if not host:
             raise RuntimeError("SMTP relay host is not configured.")
+
+        port = settings.smtp_port
+        user = settings.smtp_username
+        password = settings.smtp_password
+        from_email = settings.smtp_from_email or (f"noreply@{host}" if host else "noreply@finsentiment.ai")
 
         reset_url = f"{base_url.rstrip('/')}/reset-password?token={raw_token}"
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "FIN-SENTIMENT – Password Reset Request"
-        msg["From"] = settings.SMTP_FROM_EMAIL or f"FIN-SENTIMENT Security <noreply@{settings.SMTP_HOST}>"
+        msg["From"] = f"FIN-SENTIMENT Security <{from_email}>"
         msg["To"] = to_email
 
         text_content = (
@@ -382,21 +395,39 @@ class AuthService:
         msg.attach(MIMEText(text_content, "plain"))
         msg.attach(MIMEText(html_content, "html"))
 
-        if settings.SMTP_PORT == 465:
-            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15)
-        else:
-            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15)
-            if settings.SMTP_TLS:
-                server.starttls()
+        use_ssl = settings.smtp_use_ssl
+        use_tls = settings.smtp_use_tls
+
+        server = None
         try:
-            if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
-                server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+            if use_ssl:
+                server = smtplib.SMTP_SSL(host, port, timeout=15)
+            else:
+                server = smtplib.SMTP(host, port, timeout=15)
+                if use_tls:
+                    server.starttls()
+
+            if user and password:
+                server.login(user, password)
             server.send_message(msg)
+            logger.info(f"Password reset email sent to {to_email} via {host}:{port}.")
+        except smtplib.SMTPAuthenticationError as auth_err:
+            logger.error(f"SMTP Authentication Error ({host}:{port}): {auth_err}. Verify 16-character Google App Password (not standard account password) with 2-Step Verification.")
+            raise RuntimeError(f"SMTP authentication failed with {host}. If using Gmail, verify that an active 16-character Google App Password is used with 2-Step Verification enabled.") from auth_err
+        except smtplib.SMTPSenderRefused as sender_err:
+            logger.error(f"SMTP Sender Refused ({from_email}): {sender_err}")
+            raise RuntimeError(f"SMTP relay rejected sender '{from_email}'. For Gmail, the sender address must match your authenticated Google account.") from sender_err
+        except (smtplib.SMTPConnectError, ConnectionRefusedError, socket.timeout) as conn_err:
+            logger.error(f"SMTP Connection Error to {host}:{port}: {conn_err}")
+            raise RuntimeError(f"Could not connect to SMTP server {host}:{port}. Check host and port configuration.") from conn_err
+        except Exception as e:
+            logger.error(f"SMTP Dispatch Error to {to_email} via {host}:{port}: {e}")
+            raise
         finally:
-            try:
-                server.quit()
-            except Exception:
-                pass
-        logger.info(f"Password reset email sent to {to_email}.")
+            if server:
+                try:
+                    server.quit()
+                except Exception:
+                    pass
 
 auth_service = AuthService()
