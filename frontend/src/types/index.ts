@@ -359,8 +359,11 @@ export interface BrokerDestination {
   country: string;
   market_coverage: string;
   entry_url: string;
+  direct_url?: string | null;
+  destination_type: 'direct_instrument' | 'verified_portal_with_ticker_search' | 'unsupported';
   is_direct_link_verified: boolean;
   requires_user_login: boolean;
+  action_label?: string | null;
   instructions: string;
   compliance_notice: string;
 }
@@ -374,6 +377,11 @@ export interface CompanyTradingRoute {
   country: string | null;
   isin?: string | null;
   upstox_instrument_key?: string | null;
+  destination_type?: 'direct_instrument' | 'verified_portal_with_ticker_search' | 'unsupported';
+  direct_url?: string | null;
+  portal_fallback_url?: string | null;
+  action_label?: string | null;
+  share_class_note?: string | null;
   brokers: BrokerDestination[];
   recommended_broker: BrokerDestination | null;
   message: string;

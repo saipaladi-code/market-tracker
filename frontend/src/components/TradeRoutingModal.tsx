@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   X,
-  ExternalLink,
   ShieldAlert,
   Check,
   Copy,
@@ -10,13 +9,14 @@ import {
   TrendingUp,
   RefreshCw,
   ArrowUpRight,
-  Globe2,
-  CheckCircle2
+  CheckCircle2,
+  ExternalLink,
+  Info,
+  Compass
 } from 'lucide-react';
 import { Article, CompanyTradingRoute, BrokerDestination } from '../types';
-import { api } from '../services/api';
 import { SentimentBadge } from './SentimentBadge';
-import { getClientSideTradingRoute } from '../utils/tickerLookup';
+import { brokerNavigationService, NavigationResult } from '../services/brokerNavigationService';
 
 interface TradeRoutingModalProps {
   isOpen: boolean;
@@ -34,6 +34,8 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [selectedBroker, setSelectedBroker] = useState<BrokerDestination | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+  const [navNotice, setNavNotice] = useState<string | null>(null);
+  const [blockedUrl, setBlockedUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen || !article) {
@@ -41,6 +43,8 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
       setSelectedBroker(null);
       setError(null);
       setCopied(false);
+      setNavNotice(null);
+      setBlockedUrl(null);
       return;
     }
 
@@ -48,31 +52,27 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
     setLoading(true);
     setError(null);
     setCopied(false);
+    setNavNotice(null);
+    setBlockedUrl(null);
 
-    // Compute client-side deterministic route immediately as instant baseline
-    const fallbackRoute = getClientSideTradingRoute(article.company, article.ticker);
-    setRoute(fallbackRoute);
-    setSelectedBroker(
-      fallbackRoute.recommended_broker ||
-      (fallbackRoute.brokers.length > 0 ? fallbackRoute.brokers[0] : null)
-    );
-
-    // Call backend API to confirm real-time broker parameters
-    api
-      .getTradingRoute(article.company, article.ticker)
-      .then((res) => {
+    brokerNavigationService
+      .resolveRoute({
+        company: article.company,
+        ticker: article.ticker,
+      })
+      .then((resolvedRoute) => {
         if (!isMounted) return;
-        setRoute(res);
+        setRoute(resolvedRoute);
         const broker =
-          res.recommended_broker ||
-          (res.brokers.length > 0 ? res.brokers[0] : null);
+          resolvedRoute.recommended_broker ||
+          (resolvedRoute.brokers.length > 0 ? resolvedRoute.brokers[0] : null);
         setSelectedBroker(broker);
         setLoading(false);
       })
       .catch((err) => {
         if (!isMounted) return;
-        console.debug('Using verified client-side fallback route:', err);
-        // Fallback already assigned
+        console.error('Failed to resolve trading route:', err);
+        setError('Unable to resolve broker routing destination at this moment.');
         setLoading(false);
       });
 
@@ -90,6 +90,36 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleNavigate = (destinationPreference: 'direct' | 'portal' = 'direct') => {
+    if (!route || !selectedBroker) return;
+    setNavNotice(null);
+    setBlockedUrl(null);
+
+    const result: NavigationResult = brokerNavigationService.openDestination(
+      route,
+      selectedBroker,
+      destinationPreference
+    );
+
+    if (result.isBlockedByPopup && result.openedUrl) {
+      setBlockedUrl(result.openedUrl);
+      setNavNotice('Pop-up window was blocked by your browser. Click the direct link below.');
+    } else if (!result.success) {
+      setError(result.message || 'Failed to navigate to broker destination.');
+    }
+  };
+
+  const isDirectInstrument = route?.destination_type === 'direct_instrument';
+  const actionLabel = selectedBroker && route
+    ? brokerNavigationService.getActionLabel(route, selectedBroker)
+    : 'Open Broker';
+
+  const primaryTargetUrl = selectedBroker && route
+    ? brokerNavigationService.getDestinationUrl(route, selectedBroker, 'direct')
+    : '';
+
+  const portalFallbackUrl = route?.portal_fallback_url || selectedBroker?.entry_url || '';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-navy-900 border border-navy-750 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl space-y-5">
@@ -100,9 +130,9 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
               <TrendingUp className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-white text-sm">Verified Broker Trading Destination</h3>
+              <h3 className="font-bold text-white text-sm">Verified Broker Navigation</h3>
               <p className="text-[10px] text-slate-400 font-mono">
-                Multi-Broker Order Routing • Upstox (India) & IBKR (US Equities)
+                Instrument Routing • Upstox (India) & IBKR (US Equities)
               </p>
             </div>
           </div>
@@ -156,6 +186,26 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
             </div>
           )}
 
+          {/* Popup Blocked Notice */}
+          {blockedUrl && (
+            <div className="p-4 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-3">
+              <Compass className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold">Browser Blocked New Tab</p>
+                <p className="text-[11px] text-amber-300/90">{navNotice}</p>
+                <a
+                  href={blockedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 underline font-semibold mt-1"
+                >
+                  Click here to open {selectedBroker?.broker_name} directly
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          )}
+
           {/* Unsupported Instrument State */}
           {!loading && route && !route.is_tradable && (
             <div className="p-6 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-3 text-center">
@@ -167,7 +217,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                 </p>
               </div>
               <p className="text-[11px] text-slate-400">
-                FIN-SENTIMENT only routes to verified broker instruments (Upstox for Indian equities, Interactive Brokers for verified US equities).
+                FIN-SENTIMENT routes strictly to verified broker instruments (Upstox for Indian equities, Interactive Brokers for verified US equities).
                 General market indexes, macroeconomic headlines, and unverified international stocks are never silently routed to a broker.
               </p>
             </div>
@@ -207,10 +257,18 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                 </div>
               </div>
 
+              {/* Share class note if applicable (e.g. Alphabet GOOGL/GOOG or Tata Motors) */}
+              {route.share_class_note && (
+                <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/25 flex items-start gap-2.5 text-xs text-blue-200">
+                  <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed text-[11px]">{route.share_class_note}</p>
+                </div>
+              )}
+
               {/* Broker Selection if multiple available */}
               {route.brokers.length > 1 && (
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-300">Select Brokerage Destination:</label>
+                  <label className="text-xs font-medium text-slate-300">Select Broker Destination:</label>
                   <div className="grid grid-cols-2 gap-2">
                     {route.brokers.map((broker) => (
                       <button
@@ -240,6 +298,11 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                         <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-300 font-mono border border-blue-500/30">
                           {selectedBroker.country === 'IN' ? 'Verified Indian Broker' : 'Verified US Broker'}
                         </span>
+                        {isDirectInstrument && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30">
+                            Direct Stock Page
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-400 mt-1">{selectedBroker.market_coverage}</p>
                     </div>
@@ -249,48 +312,85 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                   <div className="p-3.5 rounded-lg bg-navy-900/90 border border-navy-800 space-y-2 text-xs">
                     <p className="font-semibold text-slate-200 flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Trading Instructions:</span>
+                      <span>Navigation & Trading Instructions:</span>
                     </p>
-                    <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
-                      <li>
-                        Click the button below to open the official <strong className="text-white">{selectedBroker.broker_name}</strong> portal.
-                      </li>
-                      <li>Sign in using your authorized brokerage account credentials.</li>
-                      <li>
-                        Search for ticker <strong className="text-emerald-400 font-mono">{route.ticker}</strong> on <strong className="text-white">{route.exchange}</strong>.
-                      </li>
-                      <li>Review real-time quote depth, set order parameters, and confirm your trade.</li>
-                    </ol>
+
+                    {isDirectInstrument ? (
+                      <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
+                        <li>
+                          Click <strong className="text-white">"{actionLabel}"</strong> below to open the official, verified {route.company} page on Upstox.
+                        </li>
+                        <li>Review real-time NSE market quotes, interactive TradingView charts, and fundamental indicators.</li>
+                        <li>To execute a trade, sign in to your Upstox Pro account and confirm your order parameters.</li>
+                      </ol>
+                    ) : (
+                      <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
+                        <li>
+                          Click <strong className="text-white">"{actionLabel}"</strong> below to open the official Interactive Brokers Client Portal.
+                        </li>
+                        <li>Sign in using your authorized IBKR account credentials.</li>
+                        <li>
+                          Search for ticker <strong className="text-emerald-400 font-mono">{route.ticker}</strong> on <strong className="text-white">{route.exchange}</strong>.
+                        </li>
+                        <li>Review real-time quote depth, set order parameters, and confirm your trade.</li>
+                      </ol>
+                    )}
                   </div>
 
-                  {/* Primary Action Button */}
-                  <div className="pt-1 flex flex-col sm:flex-row items-center gap-3">
-                    <a
-                      href={selectedBroker.entry_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 transition-all cursor-pointer"
-                    >
-                      <span>Proceed to {selectedBroker.broker_name}</span>
-                      <ArrowUpRight className="w-4 h-4" />
-                    </a>
+                  {/* Primary & Secondary Action Buttons */}
+                  <div className="space-y-2.5 pt-1">
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
+                      {/* Direct primary anchor link with fallback click handler */}
+                      <a
+                        href={primaryTargetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => {
+                          // Allow standard browser new-tab click while tracking safety
+                          if (!primaryTargetUrl) {
+                            e.preventDefault();
+                            handleNavigate('direct');
+                          }
+                        }}
+                        className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 transition-all cursor-pointer text-center"
+                      >
+                        <span>{actionLabel}</span>
+                        <ArrowUpRight className="w-4 h-4" />
+                      </a>
 
-                    <button
-                      onClick={() => handleCopyTicker(route.ticker || '')}
-                      className="w-full sm:w-auto py-3 px-4 rounded-xl bg-navy-800 hover:bg-navy-750 text-slate-200 hover:text-white border border-navy-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                    >
-                      {copied ? (
-                        <>
-                          <Check className="w-4 h-4 text-emerald-400" />
-                          <span>Copied {route.ticker}!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-4 h-4 text-slate-400" />
-                          <span>Copy Ticker ({route.ticker})</span>
-                        </>
-                      )}
-                    </button>
+                      <button
+                        onClick={() => handleCopyTicker(route.ticker || '')}
+                        className="w-full sm:w-auto py-3 px-4 rounded-xl bg-navy-800 hover:bg-navy-750 text-slate-200 hover:text-white border border-navy-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                        title="Copy ticker symbol to clipboard"
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="w-4 h-4 text-emerald-400" />
+                            <span>Copied {route.ticker}!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 text-slate-400" />
+                            <span>Copy Ticker ({route.ticker})</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Secondary option if direct stock page is active */}
+                    {isDirectInstrument && portalFallbackUrl && (
+                      <div className="text-center pt-1">
+                        <a
+                          href={portalFallbackUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-slate-400 hover:text-blue-300 inline-flex items-center gap-1 transition-colors"
+                        >
+                          <span>Or open Upstox Pro Web Trading Portal</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -305,7 +405,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
             </div>
             <p className="leading-relaxed">
               FIN-SENTIMENT is an informational AI sentiment analytics platform and is not a registered broker-dealer or investment advisor.
-              We never request or store brokerage passwords, tokens, or execute automated trades. All trades are conducted directly on your verified brokerage account.
+              We never request or store brokerage passwords, tokens, or execute automated trades. All orders are reviewed and submitted directly by you on your authorized broker platform.
             </p>
           </div>
         </div>
