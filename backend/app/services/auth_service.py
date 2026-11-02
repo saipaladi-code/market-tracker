@@ -260,10 +260,10 @@ class AuthService:
                         detail=f"Failed to send password recovery email: {str(re)}"
                     )
                 except Exception as e:
-                    logger.error(f"Failed to dispatch password recovery email via SMTP: {e}")
+                    logger.error(f"Failed to dispatch password recovery email via SMTP: {e}", exc_info=True)
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail="Failed to send password recovery email due to an email delivery failure. Please try again later or contact support."
+                        detail=f"Failed to send password recovery email: {str(e)}"
                     )
 
         # If SMTP is not configured, communicate status honestly
@@ -395,39 +395,64 @@ class AuthService:
         msg.attach(MIMEText(text_content, "plain"))
         msg.attach(MIMEText(html_content, "html"))
 
-        use_ssl = settings.smtp_use_ssl
-        use_tls = settings.smtp_use_tls
+        # Determine connection attempts (with smart fallback between 587 STARTTLS and 465 SSL)
+        attempts = []
+        if settings.smtp_use_ssl or port == 465:
+            attempts = [(465, True), (587, False)]
+        else:
+            attempts = [(port, False), (465, True)]
 
-        server = None
-        try:
-            if use_ssl:
-                server = smtplib.SMTP_SSL(host, port, timeout=15)
-            else:
-                server = smtplib.SMTP(host, port, timeout=15)
-                if use_tls:
+        last_error = None
+        sent = False
+
+        for attempt_port, attempt_ssl in attempts:
+            server = None
+            try:
+                if attempt_ssl:
+                    server = smtplib.SMTP_SSL(host, attempt_port, timeout=10)
+                else:
+                    server = smtplib.SMTP(host, attempt_port, timeout=10)
                     server.starttls()
 
-            if user and password:
-                server.login(user, password)
-            server.send_message(msg)
-            logger.info(f"Password reset email sent to {to_email} via {host}:{port}.")
-        except smtplib.SMTPAuthenticationError as auth_err:
-            logger.error(f"SMTP Authentication Error ({host}:{port}): {auth_err}. Verify 16-character Google App Password (not standard account password) with 2-Step Verification.")
-            raise RuntimeError(f"SMTP authentication failed with {host}. If using Gmail, verify that an active 16-character Google App Password is used with 2-Step Verification enabled.") from auth_err
-        except smtplib.SMTPSenderRefused as sender_err:
-            logger.error(f"SMTP Sender Refused ({from_email}): {sender_err}")
-            raise RuntimeError(f"SMTP relay rejected sender '{from_email}'. For Gmail, the sender address must match your authenticated Google account.") from sender_err
-        except (smtplib.SMTPConnectError, ConnectionRefusedError, socket.timeout) as conn_err:
-            logger.error(f"SMTP Connection Error to {host}:{port}: {conn_err}")
-            raise RuntimeError(f"Could not connect to SMTP server {host}:{port}. Check host and port configuration.") from conn_err
-        except Exception as e:
-            logger.error(f"SMTP Dispatch Error to {to_email} via {host}:{port}: {e}")
-            raise
-        finally:
-            if server:
-                try:
-                    server.quit()
-                except Exception:
-                    pass
+                if user and password:
+                    try:
+                        server.login(user, password)
+                    except (smtplib.SMTPAuthenticationError, smtplib.SMTPServerDisconnected) as auth_err:
+                        # Gmail sends 535 BadCredentials and immediately closes connection (SMTPServerDisconnected)
+                        logger.error(f"SMTP Authentication Error ({host}:{attempt_port}) for {user}: {auth_err}")
+                        raise RuntimeError(
+                            f"Gmail SMTP authentication failed for '{user}'. "
+                            "Please verify: 1) 2-Step Verification is ON in your Google account. "
+                            "2) You configured a 16-character Google App Password (not your normal Google account password) in Render environment variables."
+                        ) from auth_err
+
+                server.send_message(msg)
+                logger.info(f"Password reset email sent to {to_email} via {host}:{attempt_port} (SSL={attempt_ssl}).")
+                sent = True
+                break
+            except RuntimeError:
+                raise
+            except smtplib.SMTPSenderRefused as sender_err:
+                logger.error(f"SMTP Sender Refused ({from_email}): {sender_err}")
+                raise RuntimeError(f"SMTP relay rejected sender '{from_email}'. For Gmail, the sender address must match your authenticated Google account.") from sender_err
+            except smtplib.SMTPRecipientsRefused as recip_err:
+                logger.error(f"SMTP Recipient Refused ({to_email}): {recip_err}")
+                raise RuntimeError(f"SMTP relay rejected recipient '{to_email}'.") from recip_err
+            except (smtplib.SMTPConnectError, ConnectionRefusedError, socket.timeout, TimeoutError, OSError) as conn_err:
+                logger.warning(f"Connection failed on {host}:{attempt_port} (SSL={attempt_ssl}): {conn_err}. Trying alternate configuration if available...")
+                last_error = conn_err
+            except Exception as e:
+                logger.error(f"SMTP error on {host}:{attempt_port}: {e}")
+                last_error = e
+            finally:
+                if server:
+                    try:
+                        server.quit()
+                    except Exception:
+                        pass
+
+        if not sent:
+            logger.error(f"Failed all SMTP connection attempts to {host}: {last_error}")
+            raise RuntimeError(f"Could not connect to SMTP server {host} on ports 587/465 ({type(last_error).__name__}: {last_error}).")
 
 auth_service = AuthService()
