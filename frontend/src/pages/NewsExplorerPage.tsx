@@ -493,54 +493,59 @@ export const NewsExplorerPage: React.FC = () => {
             const brokerTag = verifiedInst?.preferredBroker === 'upstox' ? 'Upstox' : 'Groww';
 
             return (
-              <div
+              <article
                 key={art.id}
-                className={`bg-navy-900/90 border rounded-2xl p-5 flex flex-col justify-between space-y-4 hover:border-navy-700 hover:shadow-lg transition-all duration-200 ${
+                className={`bg-navy-900/90 border rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-navy-700 hover:shadow-lg transition-all duration-200 box-border w-full min-w-0 ${
                   isDuplicate ? 'border-amber-500/30 opacity-75' : 'border-navy-750/90'
                 }`}
               >
-                <div className="space-y-3">
-                  {/* Card Header: Ticker, Duplicate tag, Sentiment Badge */}
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-xs text-white px-2 py-0.5 rounded bg-navy-800 border border-navy-700 font-mono">
-                        {art.company}
+                {/* SECTION A: Header */}
+                <div className="flex items-center justify-between gap-2 pb-3 border-b border-navy-800/60 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
+                    <span
+                      className="font-bold text-xs text-white px-2 py-0.5 rounded bg-navy-800 border border-navy-700 font-mono truncate max-w-[150px] sm:max-w-[180px]"
+                      title={art.company}
+                    >
+                      {art.company}
+                    </span>
+                    {verifiedTicker && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold shrink-0">
+                        {verifiedTicker}
                       </span>
-                      {verifiedTicker && (
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold">
-                          {verifiedTicker}
-                        </span>
-                      )}
-                      {isDuplicate && (
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                          Duplicate
-                        </span>
-                      )}
-                    </div>
+                    )}
+                    {isDuplicate && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 shrink-0">
+                        Duplicate
+                      </span>
+                    )}
+                  </div>
+                  <div className="shrink-0">
                     <SentimentBadge sentiment={art.sentiment} confidence={art.confidence} size="xs" />
                   </div>
-
-                  {/* Headline */}
-                  <h3 className="text-sm font-semibold text-slate-100 line-clamp-2 leading-snug">
-                    {headlineText}
-                  </h3>
-
-                  {/* Description snippet if available */}
-                  {art.description && (
-                    <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                      {art.description}
-                    </p>
-                  )}
                 </div>
 
-                {/* Card Footer: Metadata and XAI Explain button */}
-                <div className="pt-3 border-t border-navy-800 flex items-center justify-between text-xs text-slate-400 gap-2">
-                  <div className="min-w-0">
-                    <span className="truncate block font-medium text-slate-300">{art.source}</span>
-                    <span className="text-[10px] text-slate-500 font-mono">
+                {/* SECTION B: News Content & Metadata */}
+                <div className="py-3 flex-1 flex flex-col justify-between space-y-3 min-w-0">
+                  <div className="space-y-1.5 min-w-0">
+                    <h3 className="text-sm font-semibold text-slate-100 line-clamp-2 leading-snug break-words">
+                      {headlineText}
+                    </h3>
+                    {art.description && (
+                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed break-words">
+                        {art.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Publication Date, Time & Source */}
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-2 border-t border-navy-800/40 gap-2 min-w-0">
+                    <span className="truncate max-w-[160px] font-medium text-slate-300" title={art.source}>
+                      {art.source || 'Editorial Feed'}
+                    </span>
+                    <span className="text-[10px] text-slate-500 shrink-0 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-500 shrink-0" />
                       {art.published_at
                         ? new Date(art.published_at).toLocaleString([], {
-                            year: 'numeric',
                             month: 'short',
                             day: 'numeric',
                             hour: '2-digit',
@@ -549,35 +554,38 @@ export const NewsExplorerPage: React.FC = () => {
                         : 'Recent'}
                     </span>
                   </div>
+                </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                {/* SECTION C: Action Buttons */}
+                <div className="pt-3 border-t border-navy-800 mt-auto min-w-0 w-full">
+                  <div className="flex flex-wrap items-center gap-2 w-full">
                     {/* Multilingual Translation Toggle */}
                     {(i18n.language || 'en').toLowerCase().split('-')[0] !== 'en' && (
                       <button
                         onClick={() => toggleArticleTranslation(art)}
                         disabled={tr?.loading}
-                        className="px-2 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                        className="h-8 px-2.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 box-border"
                         title="Translate headline into current language"
                       >
-                        <Languages className="w-3 h-3 text-cyan-400" />
-                        <span>{tr?.loading ? 'Translating...' : isTranslated ? 'Original' : 'Translate'}</span>
+                        <Languages className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                        <span className="whitespace-nowrap">{tr?.loading ? 'Translating...' : isTranslated ? 'Original' : 'Translate'}</span>
                       </button>
                     )}
 
-                    {/* Market Context Button (accessible on all cards: companies, macro, commodities) */}
+                    {/* 1. Market Context Button */}
                     <button
                       onClick={() => {
                         setSelectedContextArticle(art);
                         setContextModalOpen(true);
                       }}
-                      className="px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 hover:text-blue-200 border border-blue-500/25 text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                      className="flex-1 min-w-[115px] h-8 px-2.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 hover:text-blue-200 border border-blue-500/25 text-[11px] font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer box-border"
                       title="Explore macroeconomic indicators and systemic market context"
                     >
-                      <Compass className="w-3 h-3 text-blue-400" />
-                      <span>Market Context</span>
+                      <Compass className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <span className="whitespace-nowrap">Market Context</span>
                     </button>
 
-                    {/* Trade Button (only shown for verified tradable instruments) */}
+                    {/* 2. Trade Button (when verified tradable instrument exists) */}
                     {isTradable && (
                       <button
                         onClick={() => {
@@ -588,37 +596,38 @@ export const NewsExplorerPage: React.FC = () => {
                           });
                           setTradeModalOpen(true);
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        className="flex-1 min-w-[115px] h-8 px-2.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer box-border"
                         title={`Trade ${verifiedInst?.company || art.company} via ${verifiedInst?.brokerName || 'broker'}`}
                       >
-                        <TrendingUp className="w-3 h-3 text-emerald-400" />
-                        <span>Trade ({brokerTag})</span>
+                        <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="whitespace-nowrap">Trade ({brokerTag})</span>
                       </button>
                     )}
 
-                    {/* Explain Button */}
+                    {/* 3. XAI Salience Button */}
                     <button
                       onClick={() => handleInspectAttribution(art)}
-                      className="px-2.5 py-1 rounded-lg bg-navy-800 hover:bg-navy-750 text-slate-300 hover:text-white border border-navy-700 text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                      className="flex-1 min-w-[105px] h-8 px-2.5 rounded-lg bg-navy-800 hover:bg-navy-750 text-slate-300 hover:text-white border border-navy-700 text-[11px] font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer box-border"
                       title="Inspect FinBERT token perturbation attribution"
                     >
-                      <Sparkles className="w-3 h-3 text-blue-400" />
-                      <span>XAI Salience</span>
+                      <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <span className="whitespace-nowrap">XAI Salience</span>
                     </button>
 
-                    {/* External Link */}
+                    {/* 4. External Link Icon */}
                     <a
                       href={art.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="p-1.5 rounded-lg bg-navy-800 hover:bg-navy-750 text-slate-400 hover:text-slate-200 border border-navy-700 transition-colors"
+                      className="h-8 w-8 rounded-lg bg-navy-800 hover:bg-navy-750 text-slate-400 hover:text-slate-200 border border-navy-700 transition-colors flex items-center justify-center shrink-0 cursor-pointer box-border"
                       title="Open source article in new tab"
+                      aria-label="Open source article in new tab"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                     </a>
                   </div>
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>
