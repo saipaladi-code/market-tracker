@@ -10,9 +10,12 @@ from app.services.rate_limiter import auth_rate_limiter
 client = TestClient(app)
 
 @pytest.fixture(autouse=True)
-def cleanup_test_users():
+def cleanup_test_users(monkeypatch):
     """Ensure clean test slate before and after tests."""
     client.cookies.clear()
+    monkeypatch.setattr(settings, "RESEND_API_KEY", None)
+    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", None)
+    monkeypatch.setattr(settings, "SMTP_HOST", None)
     db.delete_many("users", {"email": {"$regex": r"@testfinancial\.com"}})
     db.delete_many("password_resets", {"email": {"$regex": r"@testfinancial\.com"}})
     # Also clean local test arrays if in local mode
@@ -406,10 +409,9 @@ def test_smtp_ssl_port_465_detection(monkeypatch):
     assert settings.smtp_use_tls is False
 
 def test_health_endpoint_email_telemetry(monkeypatch):
-    """Verifies that /api/health exposes safe non-sensitive email telemetry."""
-    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.gmail.com")
-    monkeypatch.setattr(settings, "SMTP_USER", "saipaladi73@gmail.com")
-    monkeypatch.setattr(settings, "SMTP_PASS", "secretapppwd1234")
+    """Verifies that /api/health exposes safe non-sensitive email telemetry for Resend HTTPS."""
+    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_secret_live_key_9999")
+    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", "security@finsentiment.ai")
     
     res = client.get("/api/health")
     assert res.status_code == 200
@@ -417,12 +419,12 @@ def test_health_endpoint_email_telemetry(monkeypatch):
     assert "email_service" in data
     email_status = data["email_service"]
     assert email_status["configured"] is True
-    assert email_status["host"] == "smtp.gmail.com"
-    assert email_status["has_auth"] is True
-    assert email_status["user_configured"] is True
+    assert email_status["provider"] == "Resend HTTPS API"
+    assert email_status["transport"] == "HTTPS (Port 443)"
+    assert email_status["has_api_key"] is True
     assert email_status["sender_configured"] is True
-    # Ensure sensitive password is NOT in response
-    assert "secretapppwd1234" not in str(data)
+    # Ensure sensitive secret API key is NOT in response
+    assert "re_secret_live_key_9999" not in str(data)
 
 def test_smtp_auth_error_diagnostic_detail(monkeypatch):
     """Verifies that SMTP authentication failures yield an informative diagnostic message."""
@@ -442,3 +444,72 @@ def test_smtp_auth_error_diagnostic_detail(monkeypatch):
     res = client.post("/api/auth/forgot-password", json={"email": email})
     assert res.status_code == 500
     assert "failed to send password recovery email" in res.json()["detail"].lower()
+
+
+# 8. Resend HTTPS Email Dispatch Tests
+def test_resend_successful_email_dispatch(monkeypatch):
+    """Verifies that password reset email is successfully sent via Resend HTTPS API."""
+    email = "trader.resend@testfinancial.com"
+    auth_service.register_user("Resend User", email, "SecurePassword123!")
+
+    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_mock_valid_key")
+    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", "security@testfinancial.com")
+
+    dispatched_calls = []
+    def mock_resend_dispatch(to_email, raw_token, base_url):
+        dispatched_calls.append((to_email, raw_token, base_url))
+        return {"id": "re_msg_123456"}
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_resend", mock_resend_dispatch)
+
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "dispatched"
+    assert len(dispatched_calls) == 1
+    assert dispatched_calls[0][0] == email
+    # Verify token was saved in database
+    token_rec = db.find_one("password_resets", {"email": email})
+    assert token_rec is not None
+    assert token_rec["used"] is False
+
+def test_resend_missing_api_key_configuration_error(monkeypatch):
+    """Verifies that missing RESEND_API_KEY produces clear configuration error."""
+    email = "trader.nokey@testfinancial.com"
+    auth_service.register_user("No Key User", email, "SecurePassword123!")
+
+    monkeypatch.setattr(settings, "RESEND_API_KEY", None)
+    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", "security@testfinancial.com")
+
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 500
+    assert "resend_api_key" in res.json()["detail"].lower()
+
+def test_resend_missing_sender_configuration_error(monkeypatch):
+    """Verifies that missing RESEND_FROM_EMAIL produces clear sender configuration error."""
+    email = "trader.nosender@testfinancial.com"
+    auth_service.register_user("No Sender User", email, "SecurePassword123!")
+
+    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_test_key")
+    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", None)
+
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 500
+    assert "resend_from_email" in res.json()["detail"].lower()
+
+def test_resend_api_error_rejection(monkeypatch):
+    """Verifies that API errors from Resend (e.g. 403 unverified domain) are returned with details."""
+    email = "trader.apierr@testfinancial.com"
+    auth_service.register_user("API Err User", email, "SecurePassword123!")
+
+    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_test_key")
+    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", "unverified@domain.com")
+
+    def mock_dispatch_fail(to_email, raw_token, base_url):
+        raise RuntimeError("Resend API error (403): Domain not verified. Please verify domain at resend.com/domains")
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_resend", mock_dispatch_fail)
+
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 500
+    assert "domain not verified" in res.json()["detail"].lower()

@@ -45,6 +45,24 @@ class Settings(BaseSettings):
     COOKIE_SECURE: Optional[bool] = None  # None = auto-detect
     COOKIE_SAMESITE: Optional[str] = None  # None = auto-detect ("none" for prod, "lax" for dev)
 
+    # Resend HTTPS Email API Configuration
+    RESEND_API_KEY: Optional[str] = None
+    RESEND_FROM_EMAIL: Optional[str] = None
+
+    @property
+    def resend_api_key(self) -> Optional[str]:
+        val = self.RESEND_API_KEY or os.getenv("RESEND_API_KEY")
+        return val.strip() if val and isinstance(val, str) else None
+
+    @property
+    def resend_from_email(self) -> Optional[str]:
+        val = self.RESEND_FROM_EMAIL or os.getenv("RESEND_FROM_EMAIL")
+        return val.strip() if val and isinstance(val, str) else None
+
+    @property
+    def is_email_service_configured(self) -> bool:
+        return bool(self.resend_api_key and self.resend_from_email)
+
     # Password Recovery (SMTP) Configuration & Flexible Aliases
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: Optional[int] = None

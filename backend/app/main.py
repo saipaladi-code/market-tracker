@@ -181,14 +181,12 @@ def get_health():
             "has_key": bool(settings.GEMINI_API_KEY)
         },
         "email_service": {
-            "configured": settings.is_smtp_configured,
-            "host": settings.smtp_host,
-            "port": settings.smtp_port,
-            "build": "v2.1.0-dual-smtp",
-            "security": "SSL (Port 465)" if settings.smtp_use_ssl else ("STARTTLS (Port 587)" if settings.smtp_use_tls else "Plain"),
-            "has_auth": bool(settings.smtp_password),
-            "user_configured": bool(settings.smtp_username),
-            "sender_configured": bool(settings.smtp_from_email)
+            "provider": "Resend HTTPS API" if settings.resend_api_key else ("SMTP" if settings.smtp_host else "Unconfigured"),
+            "configured": settings.is_email_service_configured,
+            "has_api_key": bool(settings.resend_api_key),
+            "sender_configured": bool(settings.resend_from_email or settings.smtp_from_email),
+            "transport": "HTTPS (Port 443)" if settings.resend_api_key else "SMTP (Raw Sockets)",
+            "build": "v3.0.0-resend-https"
         }
     }
 

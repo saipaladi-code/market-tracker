@@ -1,4 +1,6 @@
 import os
+import json
+import urllib.request
 import re
 import secrets
 import hashlib
@@ -229,7 +231,7 @@ class AuthService:
         auth_rate_limiter.record_attempt(rate_key)
 
         user = db.find_user_by_email(normalized_email)
-        smtp_configured = settings.is_smtp_configured
+        is_configured = settings.is_email_service_configured
 
         raw_token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
@@ -237,7 +239,7 @@ class AuthService:
 
         base_url = self.get_recovery_base_url(request_origin)
 
-        # Only create a reset record if user actually exists
+        # Only dispatch email if user actually exists (prevents user enumeration while keeping dispatch secure)
         if user:
             reset_doc = {
                 "token_hash": token_hash,
@@ -249,17 +251,33 @@ class AuthService:
             }
             db.insert_one("password_resets", reset_doc)
 
-            # Attempt dispatch via SMTP if configured
-            if smtp_configured:
-                try:
-                    self._dispatch_reset_email(normalized_email, raw_token, base_url)
-                except RuntimeError as re:
+            # Prioritize Resend HTTPS email delivery
+            if settings.resend_api_key:
+                if not settings.resend_from_email:
                     auth_rate_limiter.reset_key(rate_key)
-                    logger.error(f"SMTP delivery failure: {re}")
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail=f"Failed to send password recovery email: {str(re)}"
+                        detail="Failed to send password recovery email: RESEND_FROM_EMAIL environment variable is missing on Render. Please configure your verified sender domain or address in Render."
                     )
+                try:
+                    self._dispatch_reset_email_resend(normalized_email, raw_token, base_url)
+                except Exception as e:
+                    auth_rate_limiter.reset_key(rate_key)
+                    logger.error(f"Failed to dispatch password recovery email via Resend HTTPS: {e}", exc_info=True)
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Failed to send password recovery email: {str(e)}"
+                    )
+            elif settings.resend_from_email:
+                auth_rate_limiter.reset_key(rate_key)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to send password recovery email: RESEND_API_KEY environment variable is missing on Render. Please configure RESEND_API_KEY and RESEND_FROM_EMAIL in your Render dashboard."
+                )
+            elif settings.is_smtp_configured:
+                # Secondary legacy SMTP fallback
+                try:
+                    self._dispatch_reset_email(normalized_email, raw_token, base_url)
                 except Exception as e:
                     auth_rate_limiter.reset_key(rate_key)
                     logger.error(f"Failed to dispatch password recovery email via SMTP: {e}", exc_info=True)
@@ -268,14 +286,13 @@ class AuthService:
                         detail=f"Failed to send password recovery email: {str(e)}"
                     )
 
-        # If SMTP is not configured, communicate status honestly
-        if not smtp_configured:
-            logger.info("SMTP email delivery is not configured on this server.")
-            # For development / testing convenience, provide token only in non-production
+        # If email service is not configured at all, communicate status honestly
+        if not is_configured:
+            logger.info("Outbound email delivery is not configured on this server.")
             is_dev = not os.getenv("RENDER") and ("localhost" in base_url or "127.0.0.1" in base_url)
             return {
-                "message": "Password recovery requested. Note: SMTP email service is currently not configured on this backend server. Contact the system administrator or configure SMTP_HOST in backend environment variables.",
-                "status": "smtp_unconfigured",
+                "message": "Password recovery requested. Note: Outbound email service is currently not configured on this backend server. Please configure RESEND_API_KEY and RESEND_FROM_EMAIL in backend environment variables.",
+                "status": "email_unconfigured",
                 "smtp_configured": False,
                 "dev_reset_token": raw_token if (is_dev and user) else None
             }
@@ -352,6 +369,115 @@ class AuthService:
             "message": "Password updated successfully. You may now sign in with your new password.",
             "status": "success"
         }
+
+    def _dispatch_reset_email_resend(self, to_email: str, raw_token: str, base_url: str) -> Dict[str, Any]:
+        """
+        Dispatches an HTML password recovery email via the Resend HTTPS API (Port 443).
+        Eliminates reliance on raw SMTP socket ports (587/465) which are blocked by cloud firewalls.
+        """
+        api_key = settings.resend_api_key
+        if not api_key:
+            raise RuntimeError("RESEND_API_KEY is not configured in backend environment variables.")
+
+        from_email = settings.resend_from_email
+        if not from_email:
+            raise RuntimeError("RESEND_FROM_EMAIL is not configured. Please specify a verified sender in Render environment variables.")
+
+        sender = from_email if ("<" in from_email and ">" in from_email) else f"FIN-SENTIMENT Security <{from_email}>"
+        reset_url = f"{base_url.rstrip('/')}/reset-password?token={raw_token}"
+
+        text_content = (
+            f"FIN-SENTIMENT Password Reset\n\n"
+            f"You requested a password reset for your FIN-SENTIMENT account.\n"
+            f"Use the link below to set a new password:\n{reset_url}\n\n"
+            f"This single-use link expires in 15 minutes.\n"
+            f"If you did not request this, please ignore this email.\n"
+        )
+        html_content = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #070b14; color: #f8fafc; padding: 32px 16px;">
+            <div style="max-width: 520px; margin: 0 auto; background-color: #0f172a; border: 1px solid #1c2b4a; border-radius: 16px; padding: 32px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 24px;">
+                    <span style="font-size: 18px; font-weight: 800; color: #ffffff; letter-spacing: 0.05em;">FIN-SENTIMENT</span>
+                    <span style="background: rgba(59,130,246,0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">SECURITY</span>
+                </div>
+                <h2 style="font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 0;">Password Reset Request</h2>
+                <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">You recently requested to reset the password for your FIN-SENTIMENT intelligence terminal account. Click the button below to establish a new password.</p>
+                <div style="margin: 28px 0; text-align: center;">
+                    <a href="{reset_url}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: linear-gradient(135deg, #2563eb, #06b6d4); color: #ffffff; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 8px;">Reset Password</a>
+                </div>
+                <p style="color: #64748b; font-size: 12px; line-height: 1.5;">This single-use token will expire in <strong>15 minutes</strong>. If you did not make this request, you can safely ignore this email.</p>
+                <p style="color: #475569; font-size: 11px; word-break: break-all; margin-top: 20px;">If the button above does not work, copy and paste this link into your browser:<br/><a href="{reset_url}" target="_blank" rel="noopener noreferrer" style="color: #38bdf8;">{reset_url}</a></p>
+            </div>
+        </div>
+        """
+
+        payload = {
+            "from": sender,
+            "to": [to_email],
+            "subject": "FIN-SENTIMENT – Password Reset Request",
+            "html": html_content,
+            "text": text_content
+        }
+
+        try:
+            import httpx
+            with httpx.Client(timeout=10.0) as client:
+                res = client.post(
+                    "https://api.resend.com/emails",
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "FIN-SENTIMENT-Auth/1.0"
+                    }
+                )
+                if res.status_code in (200, 201):
+                    res_json = res.json()
+                    logger.info(f"Password reset email accepted by Resend API (id={res_json.get('id')}) for recipient.")
+                    return res_json
+
+                try:
+                    err_json = res.json()
+                    err_detail = err_json.get("message") or str(err_json)
+                except Exception:
+                    err_detail = res.text or f"HTTP {res.status_code}"
+
+                logger.error(f"Resend HTTPS API returned error ({res.status_code}): {err_detail}")
+                raise RuntimeError(f"Resend API error ({res.status_code}): {err_detail}")
+        except ImportError:
+            req_bytes = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=req_bytes,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "FIN-SENTIMENT-Auth/1.0"
+                },
+                method="POST"
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    resp_data = json.loads(resp.read().decode("utf-8"))
+                    logger.info(f"Password reset email accepted by Resend API (id={resp_data.get('id')}) for recipient.")
+                    return resp_data
+            except urllib.error.HTTPError as he:
+                err_text = he.read().decode("utf-8", errors="replace")
+                try:
+                    err_j = json.loads(err_text)
+                    err_detail = err_j.get("message") or err_text
+                except Exception:
+                    err_detail = err_text
+                logger.error(f"Resend HTTPS API HTTPError ({he.code}): {err_detail}")
+                raise RuntimeError(f"Resend API error ({he.code}): {err_detail}") from he
+            except Exception as ue:
+                logger.error(f"Resend HTTPS API connection failure: {ue}")
+                raise RuntimeError(f"Failed to connect to Resend API: {str(ue)}") from ue
+        except RuntimeError:
+            raise
+        except Exception as e:
+            logger.error(f"Resend dispatch unexpected error: {e}")
+            raise RuntimeError(f"Resend delivery error: {str(e)}") from e
 
     def _dispatch_reset_email(self, to_email: str, raw_token: str, base_url: str):
         """Sends an HTML password recovery email via configured SMTP relay."""
