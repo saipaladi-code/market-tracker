@@ -3,7 +3,7 @@ import math
 from typing import Tuple, Optional, Dict, Any, Set
 
 MIN_HEADLINE_LENGTH = 15
-MAX_HEADLINE_LENGTH = 1000
+MAX_HEADLINE_LENGTH = 300
 
 INVALID_FINANCIAL_HEADLINE_MESSAGE = (
     "Invalid financial news headline. Please enter a relevant headline or statement "
@@ -218,7 +218,7 @@ def validate_financial_headline(text: Optional[str]) -> Tuple[str, Optional[str]
 
     char_count = len(cleaned)
 
-    # 1. Maximum length check (strictly 1,000 characters)
+    # 1. Maximum length check (strictly 300 characters)
     if char_count > MAX_HEADLINE_LENGTH:
         return (
             cleaned,

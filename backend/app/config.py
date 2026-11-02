@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     HUGGINGFACE_API_KEY_3: Optional[str] = None
     HUGGINGFACE_API_KEY_4: Optional[str] = None
     MODEL_NAME: str = "ProsusAI/finbert"
-    MAX_HEADLINE_LENGTH: int = 1000
+    MAX_HEADLINE_LENGTH: int = 300
     MIN_HEADLINE_LENGTH: int = 15
     HOST: str = "127.0.0.1"
     PORT: int = 8000

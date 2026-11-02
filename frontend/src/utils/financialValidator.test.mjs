@@ -70,20 +70,20 @@ const resValid15 = validateFinancialHeadlineClient(valid15);
 assert.strictEqual(resValid15.isValid, true);
 console.log('✓ Boundary 15 chars correctly accepted');
 
-// Max length boundary: exactly 1000 chars
+// Max length boundary: exactly 300 chars
 const base = 'Apple reports record quarterly revenue and rising operating margin. ';
-const text1000 = base.repeat(20).slice(0, 1000);
-assert.strictEqual(text1000.length, 1000);
-const res1000 = validateFinancialHeadlineClient(text1000);
-assert.strictEqual(res1000.isValid, true);
-console.log('✓ Boundary 1,000 chars correctly accepted');
+const text300 = base.repeat(10).slice(0, 300);
+assert.strictEqual(text300.length, 300);
+const res300 = validateFinancialHeadlineClient(text300);
+assert.strictEqual(res300.isValid, true);
+console.log('✓ Boundary 300 chars correctly accepted');
 
-// 1001 chars
-const text1001 = text1000 + '!';
-assert.strictEqual(text1001.length, 1001);
-const res1001 = validateFinancialHeadlineClient(text1001);
-assert.strictEqual(res1001.isValid, false);
-assert.strictEqual(res1001.errorCode, 'HEADLINE_TOO_LONG');
-console.log('✓ Boundary 1,001 chars correctly rejected as HEADLINE_TOO_LONG');
+// 301 chars
+const text301 = text300 + '!';
+assert.strictEqual(text301.length, 301);
+const res301 = validateFinancialHeadlineClient(text301);
+assert.strictEqual(res301.isValid, false);
+assert.strictEqual(res301.errorCode, 'HEADLINE_TOO_LONG');
+console.log('✓ Boundary 301 chars correctly rejected as HEADLINE_TOO_LONG');
 
 console.log('ALL FRONTEND VALIDATION TESTS PASSED SUCCESSFULLY!');

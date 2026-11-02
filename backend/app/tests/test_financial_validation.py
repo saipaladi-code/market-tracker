@@ -112,59 +112,48 @@ def test_acceptance_test_cases_via_api():
         assert data["confidence"] > 0.0
 
 
-def test_boundary_1000_characters_exact():
-    """Verify a valid financial statement containing exactly 1,000 characters is accepted."""
-    base = (
-        "Apple reports record quarterly revenue of $94.9 billion, beating analyst expectations across all product segments. "
-        "The technology company experienced surging enterprise cloud demand, resilient handset volume growth, and disciplined "
-        "operating expense execution, driving expanded gross margins and optimistic fiscal year guidance. Furthermore, corporate "
-        "leadership reiterated committed shareholder capital returns, noting aggressive stock buybacks, dividend distributions, "
-        "and sustained cash flow generation despite foreign exchange headwinds. "
-    )
-    # Construct exact 1000-character financial headline
+def test_boundary_300_characters_exact():
+    """Verify a valid financial statement containing exactly 300 characters is accepted."""
+    base = "Apple reports record quarterly revenue of $94.9 billion beating analyst expectations. "
     padding_word = " market"
-    headline_1000 = base
-    while len(headline_1000) < 1000:
-        remaining = 1000 - len(headline_1000)
+    headline_300 = base
+    while len(headline_300) < 300:
+        remaining = 300 - len(headline_300)
         if remaining >= len(padding_word):
-            headline_1000 += padding_word
+            headline_300 += padding_word
         else:
-            headline_1000 += "a" * remaining
-    assert len(headline_1000) == 1000
+            headline_300 += "a" * remaining
+    assert len(headline_300) == 300
 
     # Test direct validator
-    cleaned, code, msg = validate_financial_headline(headline_1000)
-    assert code is None, f"Expected 1000-character financial headline to pass, got {code}: {msg}"
+    cleaned, code, msg = validate_financial_headline(headline_300)
+    assert code is None, f"Expected 300-character financial headline to pass, got {code}: {msg}"
 
     # Test API
-    resp = client.post("/api/analyze", json={"text": headline_1000})
-    assert resp.status_code == 200, f"Expected 200 for 1000 chars, got {resp.status_code}: {resp.text}"
+    resp = client.post("/api/analyze", json={"text": headline_300})
+    assert resp.status_code == 200, f"Expected 200 for 300 chars, got {resp.status_code}: {resp.text}"
     assert resp.json()["sentiment"] in ("positive", "negative", "neutral")
 
 
-def test_boundary_1001_characters_rejected():
-    """Verify that a 1,001-character headline is rejected with HTTP 422 and HEADLINE_TOO_LONG."""
-    base = (
-        "Apple reports record quarterly revenue of $94.9 billion, beating analyst expectations across all product segments. "
-        "The technology company experienced surging enterprise cloud demand, resilient handset volume growth, and disciplined "
-        "operating expense execution, driving expanded gross margins and optimistic fiscal year guidance. "
-    )
-    headline_1001 = (base * 6)[:1000] + "!"
-    assert len(headline_1001.strip()) == 1001
+def test_boundary_301_characters_rejected():
+    """Verify that a 301-character headline is rejected with HTTP 422 and HEADLINE_TOO_LONG."""
+    base = "Apple reports record quarterly revenue beating expectations across all key enterprise product segments. "
+    headline_301 = (base * 4)[:300] + "!"
+    assert len(headline_301.strip()) == 301
 
     # Direct validator check
-    cleaned, code, msg = validate_financial_headline(headline_1001)
+    cleaned, code, msg = validate_financial_headline(headline_301)
     assert code == ERROR_HEADLINE_TOO_LONG
-    assert "1000-character limit" in msg
-    assert "1001 characters" in msg
+    assert "300-character limit" in msg
+    assert "301 characters" in msg
 
     # API check
-    resp = client.post("/api/analyze", json={"text": headline_1001})
+    resp = client.post("/api/analyze", json={"text": headline_301})
     assert resp.status_code == 422
     data = resp.json()
     assert data.get("error_code") == ERROR_HEADLINE_TOO_LONG
-    assert data.get("character_count") == 1001
-    assert data.get("max_length") == 1000
+    assert data.get("character_count") == 301
+    assert data.get("max_length") == 300
 
 
 def test_boundary_minimum_length():
@@ -194,7 +183,7 @@ def test_invalid_input_never_invokes_inference_engines():
          patch.object(finbert_service, "_predict_lexical") as mock_lexical, \
          patch.object(finbert_service, "_predict_gemini") as mock_gemini:
 
-        for invalid_text in ["hi", "hello", "I love pizza", "how are you", "12345", "a" * 1001]:
+        for invalid_text in ["hi", "hello", "I love pizza", "how are you", "12345", "a" * 301]:
             resp = client.post("/api/analyze", json={"text": invalid_text})
             assert resp.status_code == 422
 

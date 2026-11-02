@@ -104,7 +104,7 @@ export const LiveAnalysisPage: React.FC = () => {
       e.preventDefault();
       const truncated = prospective.slice(0, MAX_HEADLINE_LENGTH);
       setHeadline(truncated);
-      setPasteNotice('Pasted text exceeded the 1,000-character limit and was truncated.');
+      setPasteNotice('Pasted text exceeded the 300-character limit and was truncated.');
       setTimeout(() => setPasteNotice(null), 5000);
       if (error) setError(null);
     }
@@ -202,12 +202,12 @@ export const LiveAnalysisPage: React.FC = () => {
                 className={`text-[11px] font-mono font-medium transition-colors ${
                   headline.length >= MAX_HEADLINE_LENGTH
                     ? 'text-rose-400 font-bold'
-                    : headline.length >= 900
+                    : headline.length >= 270
                     ? 'text-amber-400'
                     : 'text-slate-400'
                 }`}
               >
-                ({headline.length} / {MAX_HEADLINE_LENGTH} characters)
+                ({headline.length} / {MAX_HEADLINE_LENGTH} CHARACTERS)
               </span>
             </label>
             {headline && (

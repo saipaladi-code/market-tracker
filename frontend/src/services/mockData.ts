@@ -619,7 +619,7 @@ export function simulateFinbertAnalysis(text: string): SentimentAnalysisResult {
         message: validation.message,
         character_count: validation.charCount,
         min_length: 15,
-        max_length: 1000,
+        max_length: 300,
       },
     };
     throw error;

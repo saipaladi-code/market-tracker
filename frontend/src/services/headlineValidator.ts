@@ -4,7 +4,7 @@
  */
 
 export const MIN_HEADLINE_LENGTH = 15;
-export const MAX_HEADLINE_LENGTH = 1000;
+export const MAX_HEADLINE_LENGTH = 300;
 
 export const INVALID_FINANCIAL_HEADLINE_MESSAGE =
   "Invalid financial news headline. Please enter a relevant headline or statement " +
@@ -192,7 +192,7 @@ export function validateFinancialHeadline(text: string | null | undefined): Head
     };
   }
 
-  // 1. Strict 1,000-character upper limit
+  // 1. Strict 300-character upper limit
   if (charCount > MAX_HEADLINE_LENGTH) {
     return {
       isValid: false,
