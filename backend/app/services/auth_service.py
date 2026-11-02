@@ -223,9 +223,9 @@ class AuthService:
     ) -> Dict[str, Any]:
         normalized_email = email.strip().lower()
 
-        # Rate limit password reset requests: max 3 per 10 minutes
+        # Rate limit password reset requests: allow 15 attempts per 5 minutes to prevent developer lockout
         rate_key = f"pwd_reset:{client_ip}:{normalized_email}"
-        auth_rate_limiter.check_rate_limit(rate_key, max_attempts=3, window_seconds=600, action_name="password reset")
+        auth_rate_limiter.check_rate_limit(rate_key, max_attempts=15, window_seconds=300, action_name="password reset")
         auth_rate_limiter.record_attempt(rate_key)
 
         user = db.find_user_by_email(normalized_email)
@@ -254,12 +254,14 @@ class AuthService:
                 try:
                     self._dispatch_reset_email(normalized_email, raw_token, base_url)
                 except RuntimeError as re:
+                    auth_rate_limiter.reset_key(rate_key)
                     logger.error(f"SMTP delivery failure: {re}")
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail=f"Failed to send password recovery email: {str(re)}"
                     )
                 except Exception as e:
+                    auth_rate_limiter.reset_key(rate_key)
                     logger.error(f"Failed to dispatch password recovery email via SMTP: {e}", exc_info=True)
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

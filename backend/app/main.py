@@ -184,6 +184,7 @@ def get_health():
             "configured": settings.is_smtp_configured,
             "host": settings.smtp_host,
             "port": settings.smtp_port,
+            "build": "v2.1.0-dual-smtp",
             "security": "SSL (Port 465)" if settings.smtp_use_ssl else ("STARTTLS (Port 587)" if settings.smtp_use_tls else "Plain"),
             "has_auth": bool(settings.smtp_password),
             "user_configured": bool(settings.smtp_username),
@@ -230,7 +231,13 @@ def logout_user(response: Response):
 @app.post("/api/auth/forgot-password", response_model=ForgotPasswordResponse)
 def forgot_password(req: ForgotPasswordRequest, request: Request):
     """Initiates single-use expiring password recovery flow."""
-    client_ip = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    elif request.client:
+        client_ip = request.client.host
+    else:
+        client_ip = "unknown"
     origin = req.origin or request.headers.get("origin") or request.headers.get("referer")
     return auth_service.request_password_reset(req.email, client_ip=client_ip, request_origin=origin)
 
