@@ -235,18 +235,13 @@ class AuthService:
 
         # 1. Configuration Validation: Check if Resend or SMTP email service is configured
         if not is_configured:
-            # Check for partial Resend configuration
-            if settings.resend_api_key and not settings.resend_from_email:
+            # If user explicitly configured RESEND_FROM_EMAIL but forgot RESEND_API_KEY
+            explicit_from = getattr(settings, "RESEND_FROM_EMAIL", None) or os.getenv("RESEND_FROM_EMAIL")
+            if explicit_from and not settings.resend_api_key:
                 auth_rate_limiter.reset_key(rate_key)
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to send password recovery email: RESEND_FROM_EMAIL environment variable is missing on Render. Please configure your verified sender domain or address in Render."
-                )
-            if settings.resend_from_email and not settings.resend_api_key:
-                auth_rate_limiter.reset_key(rate_key)
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to send password recovery email: RESEND_API_KEY environment variable is missing on Render. Please configure RESEND_API_KEY and RESEND_FROM_EMAIL in your Render dashboard."
+                    detail="Failed to send password recovery email: RESEND_API_KEY environment variable is missing on Render. Please configure RESEND_API_KEY in your Render dashboard."
                 )
 
             # In local dev / test environment without RENDER, allow dev token evaluation if neither is configured
