@@ -115,6 +115,12 @@ async def _warmup_background():
 @app.on_event("startup")
 async def startup_event():
     logger.info("Initializing Financial Market Sentiment Tracker API (non-blocking)...")
+    if settings.resend_api_key:
+        logger.info(f"Outbound Email: Resend HTTPS configured (sender: {settings.resend_from_email or 'NOT SET'}).")
+    elif settings.smtp_host:
+        logger.info(f"Outbound Email: Legacy SMTP configured ({settings.smtp_host}:{settings.smtp_port}).")
+    else:
+        logger.warning("Outbound Email: No email service configured (set RESEND_API_KEY and RESEND_FROM_EMAIL).")
     # Launch background warmup so Uvicorn binds to $PORT immediately
     asyncio.create_task(_warmup_background())
 
@@ -186,6 +192,7 @@ def get_health():
             "has_api_key": bool(settings.resend_api_key),
             "sender_configured": bool(settings.resend_from_email or settings.smtp_from_email),
             "transport": "HTTPS (Port 443)" if settings.resend_api_key else "SMTP (Raw Sockets)",
+            "frontend_url": settings.frontend_url,
             "build": "v3.0.0-resend-https"
         }
     }

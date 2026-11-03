@@ -69,35 +69,32 @@ export const ForgotPasswordPage: React.FC = () => {
 
           {result ? (
             <div className="space-y-4">
-              {result.smtp_configured ? (
-                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs leading-relaxed space-y-2">
-                  <div className="flex items-center gap-2 font-bold text-emerald-400">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Recovery Instructions Dispatched</span>
-                  </div>
-                  <p>{result.message}</p>
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs leading-relaxed space-y-2">
+                <div className="flex items-center gap-2 font-bold text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Request Processed</span>
                 </div>
-              ) : (
-                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs leading-relaxed space-y-2.5">
-                  <div className="flex items-center gap-2 font-bold text-amber-400">
+                <p>{result.message}</p>
+              </div>
+
+              {result.dev_reset_token && (
+                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs leading-relaxed space-y-2.5">
+                  <div className="flex items-center gap-2 font-bold text-blue-400">
                     <Info className="w-4 h-4" />
-                    <span>SMTP Relay Service Unconfigured</span>
+                    <span>Local Development Reset Link</span>
                   </div>
-                  <p className="text-slate-300 leading-normal">
-                    Email dispatch is currently unconfigured on this backend instance. To enable outbound emails in production, configure <code className="text-cyan-300 font-mono text-[11px] bg-navy-800 px-1 py-0.5 rounded">SMTP_HOST</code>, <code className="text-cyan-300 font-mono text-[11px] bg-navy-800 px-1 py-0.5 rounded">SMTP_PORT</code>, and <code className="text-cyan-300 font-mono text-[11px] bg-navy-800 px-1 py-0.5 rounded">SMTP_PASSWORD</code>.
+                  <p className="text-slate-300 text-[11px] leading-normal">
+                    In development mode, you can proceed directly to reset the password:
                   </p>
-                  {result.dev_reset_token && (
-                    <div className="pt-2 border-t border-amber-500/20">
-                      <p className="text-[11px] text-amber-200 mb-2 font-semibold">Local Development Token Generated:</p>
-                      <Link
-                        to={`/reset-password?token=${encodeURIComponent(result.dev_reset_token)}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-colors"
-                      >
-                        <KeyRound className="w-3.5 h-3.5" />
-                        <span>Proceed to Reset Password</span>
-                      </Link>
-                    </div>
-                  )}
+                  <div>
+                    <Link
+                      to={`/reset-password?token=${encodeURIComponent(result.dev_reset_token)}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-colors"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>Proceed to Reset Password</span>
+                    </Link>
+                  </div>
                 </div>
               )}
 

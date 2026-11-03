@@ -353,6 +353,27 @@ class DatabaseManager:
                 self._write_local_db(db_data)
             return updated
 
+    def update_many(self, collection_name: str, filter_dict: Dict[str, Any], update_dict: Dict[str, Any]) -> int:
+        if self.is_cloud and self.db is not None:
+            res = self.db[collection_name].update_many(filter_dict, {"$set": update_dict})
+            return res.modified_count
+        else:
+            db_data = self._read_local_db()
+            items = db_data.get(collection_name, [])
+            count = 0
+            for item in items:
+                matches = True
+                for k, v in filter_dict.items():
+                    if item.get(k) != v:
+                        matches = False
+                        break
+                if matches:
+                    item.update(update_dict)
+                    count += 1
+            if count > 0:
+                self._write_local_db(db_data)
+            return count
+
     def count(self, collection_name: str, filter_dict: Optional[Dict[str, Any]] = None) -> int:
         if self.is_cloud and self.db is not None:
             return self.db[collection_name].count_documents(filter_dict or {})

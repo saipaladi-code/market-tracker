@@ -197,7 +197,7 @@ class AuthService:
         Ensures recovery links always point to the production Vercel frontend,
         not localhost or an invalid destination.
         """
-        prod_frontend = getattr(settings, "PRODUCTION_FRONTEND_URL", "https://market-tracker-umber.vercel.app")
+        configured_url = settings.frontend_url
 
         # 1. If incoming request has an origin header from Vercel, prioritize it
         if request_origin:
@@ -208,14 +208,8 @@ class AuthService:
             if not os.getenv("RENDER") and ("localhost" in clean or "127.0.0.1" in clean):
                 return clean
 
-        # 2. If FRONTEND_ORIGIN is configured and NOT localhost, use it
-        if settings.FRONTEND_ORIGIN:
-            fo = settings.FRONTEND_ORIGIN.strip().rstrip("/")
-            if "localhost" not in fo and "127.0.0.1" not in fo:
-                return fo
-
-        # 3. Default to the production Vercel frontend URL
-        return prod_frontend
+        # 2. Default to configured production FRONTEND_URL
+        return configured_url
 
     def request_password_reset(
         self,
@@ -239,8 +233,67 @@ class AuthService:
 
         base_url = self.get_recovery_base_url(request_origin)
 
-        # Only dispatch email if user actually exists (prevents user enumeration while keeping dispatch secure)
+        # 1. Configuration Validation: Check if Resend or SMTP email service is configured
+        if not is_configured:
+            # Check for partial Resend configuration
+            if settings.resend_api_key and not settings.resend_from_email:
+                auth_rate_limiter.reset_key(rate_key)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to send password recovery email: RESEND_FROM_EMAIL environment variable is missing on Render. Please configure your verified sender domain or address in Render."
+                )
+            if settings.resend_from_email and not settings.resend_api_key:
+                auth_rate_limiter.reset_key(rate_key)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to send password recovery email: RESEND_API_KEY environment variable is missing on Render. Please configure RESEND_API_KEY and RESEND_FROM_EMAIL in your Render dashboard."
+                )
+
+            # In local dev / test environment without RENDER, allow dev token evaluation if neither is configured
+            is_dev = not os.getenv("RENDER")
+            if is_dev:
+                if user:
+                    try:
+                        db.update_many(
+                            "password_resets",
+                            {"email": normalized_email, "used": False},
+                            {"used": True, "invalidated_at": datetime.utcnow().isoformat() + "Z"}
+                        )
+                    except Exception:
+                        pass
+                    reset_doc = {
+                        "token_hash": token_hash,
+                        "user_id": user.get("id") or user.get("_id"),
+                        "email": normalized_email,
+                        "expires_at": expires_at.isoformat() + "Z",
+                        "used": False,
+                        "created_at": datetime.utcnow().isoformat() + "Z"
+                    }
+                    db.insert_one("password_resets", reset_doc)
+                return {
+                    "message": "If that email address is registered, you will receive a password reset link shortly.",
+                    "status": "email_unconfigured",
+                    "smtp_configured": False,
+                    "dev_reset_token": raw_token if user else None
+                }
+            auth_rate_limiter.reset_key(rate_key)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send password recovery email: Outbound email service is not configured on Render. Please configure RESEND_API_KEY and RESEND_FROM_EMAIL in your Render dashboard."
+            )
+
+        # 2. If user exists, invalidate previous active tokens and dispatch new recovery email
         if user:
+            # Invalidate any previous active tokens for this user account
+            try:
+                db.update_many(
+                    "password_resets",
+                    {"email": normalized_email, "used": False},
+                    {"used": True, "invalidated_at": datetime.utcnow().isoformat() + "Z"}
+                )
+            except Exception as e:
+                logger.warning(f"Could not invalidate prior reset tokens: {e}")
+
             reset_doc = {
                 "token_hash": token_hash,
                 "user_id": user.get("id") or user.get("_id"),
@@ -251,29 +304,17 @@ class AuthService:
             }
             db.insert_one("password_resets", reset_doc)
 
-            # Prioritize Resend HTTPS email delivery
+            # Primary: Resend HTTPS API
             if settings.resend_api_key:
-                if not settings.resend_from_email:
-                    auth_rate_limiter.reset_key(rate_key)
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail="Failed to send password recovery email: RESEND_FROM_EMAIL environment variable is missing on Render. Please configure your verified sender domain or address in Render."
-                    )
                 try:
                     self._dispatch_reset_email_resend(normalized_email, raw_token, base_url)
                 except Exception as e:
                     auth_rate_limiter.reset_key(rate_key)
-                    logger.error(f"Failed to dispatch password recovery email via Resend HTTPS: {e}", exc_info=True)
+                    logger.error(f"[RESEND_DISPATCH_ERROR] Failed to dispatch password recovery email via Resend HTTPS: {e}", exc_info=True)
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail=f"Failed to send password recovery email: {str(e)}"
                     )
-            elif settings.resend_from_email:
-                auth_rate_limiter.reset_key(rate_key)
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to send password recovery email: RESEND_API_KEY environment variable is missing on Render. Please configure RESEND_API_KEY and RESEND_FROM_EMAIL in your Render dashboard."
-                )
             elif settings.is_smtp_configured:
                 # Secondary legacy SMTP fallback
                 try:
@@ -286,19 +327,9 @@ class AuthService:
                         detail=f"Failed to send password recovery email: {str(e)}"
                     )
 
-        # If email service is not configured at all, communicate status honestly
-        if not is_configured:
-            logger.info("Outbound email delivery is not configured on this server.")
-            is_dev = not os.getenv("RENDER") and ("localhost" in base_url or "127.0.0.1" in base_url)
-            return {
-                "message": "Password recovery requested. Note: Outbound email service is currently not configured on this backend server. Please configure RESEND_API_KEY and RESEND_FROM_EMAIL in backend environment variables.",
-                "status": "email_unconfigured",
-                "smtp_configured": False,
-                "dev_reset_token": raw_token if (is_dev and user) else None
-            }
-
+        # 3. Always return consistent, generic response to prevent user enumeration
         return {
-            "message": "If an account with this email address exists, password reset instructions have been dispatched. Please check your inbox.",
+            "message": "If that email address is registered, you will receive a password reset link shortly.",
             "status": "dispatched",
             "smtp_configured": True,
             "dev_reset_token": None
@@ -358,13 +389,20 @@ class AuthService:
                     {"password_hash": new_hashed, "updated_at": datetime.utcnow().isoformat() + "Z"}
                 )
 
-        # Mark token as single-use consumed
+        # Mark token and any other active tokens for this user as single-use consumed
         db.update_one("password_resets", {"token_hash": token_hash}, {
             "used": True,
             "used_at": datetime.utcnow().isoformat() + "Z"
         })
+        try:
+            db.update_many("password_resets", {"user_id": user_id, "used": False}, {
+                "used": True,
+                "invalidated_at": datetime.utcnow().isoformat() + "Z"
+            })
+        except Exception:
+            pass
 
-        logger.info(f"Password successfully reset for user {user.get('email')}.")
+        logger.info("Password successfully reset for authenticated user.")
         return {
             "message": "Password updated successfully. You may now sign in with your new password.",
             "status": "success"
@@ -400,7 +438,7 @@ class AuthService:
                     <span style="font-size: 18px; font-weight: 800; color: #ffffff; letter-spacing: 0.05em;">FIN-SENTIMENT</span>
                     <span style="background: rgba(59,130,246,0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">SECURITY</span>
                 </div>
-                <h2 style="font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 0;">Password Reset Request</h2>
+                <h2 style="font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 0;">Reset your FIN-SENTIMENT password</h2>
                 <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">You recently requested to reset the password for your FIN-SENTIMENT intelligence terminal account. Click the button below to establish a new password.</p>
                 <div style="margin: 28px 0; text-align: center;">
                     <a href="{reset_url}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: linear-gradient(135deg, #2563eb, #06b6d4); color: #ffffff; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 8px;">Reset Password</a>
@@ -414,7 +452,7 @@ class AuthService:
         payload = {
             "from": sender,
             "to": [to_email],
-            "subject": "FIN-SENTIMENT – Password Reset Request",
+            "subject": "Reset your FIN-SENTIMENT password",
             "html": html_content,
             "text": text_content
         }

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     MONGODB_DATABASE: str = "financial_sentiment"
     GEMINI_API_KEY: Optional[str] = None
     FRONTEND_ORIGIN: str = "http://localhost:5173"
+    FRONTEND_URL: Optional[str] = None
     PRODUCTION_FRONTEND_URL: str = "https://market-tracker-umber.vercel.app"
     USE_DEMO_DATA: bool = False
     USE_LOCAL_FINBERT: bool = False
@@ -61,7 +62,19 @@ class Settings(BaseSettings):
 
     @property
     def is_email_service_configured(self) -> bool:
-        return bool(self.resend_api_key and self.resend_from_email)
+        return bool(self.resend_api_key and self.resend_from_email) or self.is_smtp_configured
+
+    @property
+    def frontend_url(self) -> str:
+        val = (
+            self.FRONTEND_URL 
+            or os.getenv("FRONTEND_URL") 
+            or self.PRODUCTION_FRONTEND_URL 
+            or os.getenv("PRODUCTION_FRONTEND_URL")
+        )
+        if val and isinstance(val, str) and val.strip():
+            return val.strip().rstrip("/")
+        return "https://market-tracker-umber.vercel.app"
 
     # Password Recovery (SMTP) Configuration & Flexible Aliases
     SMTP_HOST: Optional[str] = None
