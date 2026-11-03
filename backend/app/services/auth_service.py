@@ -305,10 +305,25 @@ class AuthService:
                     self._dispatch_reset_email_resend(normalized_email, raw_token, base_url)
                 except Exception as e:
                     auth_rate_limiter.reset_key(rate_key)
-                    logger.error(f"[RESEND_DISPATCH_ERROR] Failed to dispatch password recovery email via Resend HTTPS: {e}", exc_info=True)
+                    err_msg = str(e)
+                    logger.error(f"[RESEND_DISPATCH_ERROR] Failed to dispatch password recovery email via Resend HTTPS: {err_msg}", exc_info=True)
+
+                    # If Resend sandbox restricts external recipients when using onboarding@resend.dev:
+                    if "only send testing emails to your own email address" in err_msg.lower():
+                        logger.warning(
+                            f"[RESEND_SANDBOX_RESTRICTION] Recipient {normalized_email} cannot receive email via onboarding@resend.dev sandbox. "
+                            "Providing direct reset link so testing can proceed without a custom domain."
+                        )
+                        return {
+                            "message": "Resend Sandbox Mode: Outbound delivery to external email addresses is restricted until a custom domain is verified at resend.com/domains. You can test password recovery directly using the link below.",
+                            "status": "sandbox_mode",
+                            "smtp_configured": True,
+                            "dev_reset_token": raw_token
+                        }
+
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail=f"Failed to send password recovery email: {str(e)}"
+                        detail=f"Failed to send password recovery email: {err_msg}"
                     )
             elif settings.is_smtp_configured:
                 # Secondary legacy SMTP fallback
