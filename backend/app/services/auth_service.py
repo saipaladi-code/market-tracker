@@ -591,7 +591,7 @@ class AuthService:
                         f"token_generated=True, "
                         f"brevo_called=True, "
                         f"recipient={self._mask_email(to_email)}, "
-                        f"brevo_status={resp.status}, "
+                        f"brevo_status={res.status_code}, "
                         f"message_id={message_id}, "
                         f"timestamp={datetime.utcnow().isoformat()}Z"
                     )
@@ -609,7 +609,7 @@ class AuthService:
                     f"token_generated=True, "
                     f"brevo_called=True, "
                     f"recipient={self._mask_email(to_email)}, "
-                    f"brevo_status={resp.status}, "
+                    f"brevo_status={res.status_code}, "
                     f"error={err_detail}"
                 )
 
