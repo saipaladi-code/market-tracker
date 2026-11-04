@@ -487,17 +487,12 @@ def test_password_recovery_single_use_and_expiration():
 
     assert "already been used" in reuse_res.json()["detail"].lower()
 
-def test_password_recovery_generic_response_on_unknown_email():
-
-    """Ensures no user enumeration vulnerability."""
-
+def test_password_recovery_unregistered_email_rejected():
+    """Verifies that unregistered email addresses are rejected with 404 and clear message."""
+    db.delete_many("users", {"email": "nobody@testfinancial.com"})
     res = client.post("/api/auth/forgot-password", json={"email": "nobody@testfinancial.com"})
-
-    assert res.status_code == 200
-
-    # Must not reveal whether email was found or not
-
-    assert "nobody" not in res.json()["message"].lower()
+    assert res.status_code == 404
+    assert "not registered" in res.json()["detail"].lower()
 
 # 7. Rate Limiting Tests
 
@@ -980,8 +975,9 @@ def test_brevo_multiple_user_full_reset_and_login_lifecycle(monkeypatch):
     assert res_login_2.status_code == 200
 
 
-def test_brevo_non_registered_user_enumeration_protection(monkeypatch):
-    """Verifies that non-registered users return generic response without triggering Brevo."""
+def test_brevo_non_registered_user_rejected_no_dispatch(monkeypatch):
+    """Verifies that non-registered users return 404 without triggering Brevo."""
+    db.delete_many("users", {"email": "nonexistent.trader999@randomfirm.com"})
     monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-mock")
     monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "security@finsentiment.ai")
 
@@ -993,9 +989,9 @@ def test_brevo_non_registered_user_enumeration_protection(monkeypatch):
     monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_brevo)
 
     res = client.post("/api/auth/forgot-password", json={"email": "nonexistent.trader999@randomfirm.com"})
-    assert res.status_code == 200
+    assert res.status_code == 404
     assert len(dispatched) == 0
-    assert "if that email address is registered" in res.json()["message"].lower()
+    assert "not registered" in res.json()["detail"].lower()
 
 
 # ==============================================================================
@@ -1032,7 +1028,7 @@ def test_scenario_a_registered_email_brevo_recipient(monkeypatch):
 
 
 def test_scenario_b_unregistered_email_no_email_and_no_token(monkeypatch):
-    """TEST B: Unregistered email -> No email is sent, no token generated."""
+    """TEST B: Unregistered email -> Returns 404, no email is sent, no token generated."""
     email = "unregistered.bob.999@testfinancial.com"
     db.delete_many("users", {"email": email})
     db.delete_many("password_resets", {"email": email})
@@ -1048,16 +1044,36 @@ def test_scenario_b_unregistered_email_no_email_and_no_token(monkeypatch):
     monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_brevo)
 
     res = client.post("/api/auth/forgot-password", json={"email": email})
-    assert res.status_code == 200
+    assert res.status_code == 404
     # 1. No email sent through Brevo
     assert len(dispatched) == 0
     # 2. No reset token created in MongoDB
     assert db.find_one("password_resets", {"email": email}) is None
     # 3. No user created
     assert db.find_user_by_email(email) is None
-    # 4. Consistent non-enumerating message returned
-    assert "if that email address is registered" in res.json()["message"].lower()
-    assert res.json().get("dev_reset_token") is None
+    # 4. Clear not registered error returned
+    assert "not registered" in res.json()["detail"].lower()
+def test_scenario_invalid_email_formats_rejected():
+    """TEST 4: Invalid email format -> 422 with 'Please enter a valid email address.'"""
+    invalid_cases = ["sai@", "sai.gmail.com", "@gmail.com", "   ", ""]
+    for inv in invalid_cases:
+        res = client.post("/api/auth/forgot-password", json={"email": inv})
+        assert res.status_code == 422
+        assert "valid email" in res.json()["detail"].lower()
+
+
+def test_scenario_database_connection_failure(monkeypatch):
+    """TEST 7: MongoDB connection failure -> 503 Server error, not unregistered message."""
+    def mock_find_user_fail(email):
+        raise RuntimeError("MongoDB connection timeout: unable to reach replica set")
+
+    monkeypatch.setattr(db, "find_user_by_email", mock_find_user_fail)
+
+    res = client.post("/api/auth/forgot-password", json={"email": "alice.test@example.com"})
+    assert res.status_code == 503
+    assert "database service is currently unavailable" in res.json()["detail"].lower()
+    assert "not registered" not in res.json()["detail"].lower()
+
 
 
 def test_scenario_c_registered_email_different_capitalization(monkeypatch):

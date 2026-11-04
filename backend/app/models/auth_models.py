@@ -1,5 +1,8 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
+import re
+
+EMAIL_FORMAT_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
 class UserRegisterRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100, description="User's full name")
@@ -30,13 +33,16 @@ class UserLoginRequest(BaseModel):
         return str(v).strip().lower()
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr = Field(..., description="Registered account email")
+    email: str = Field(..., description="Registered account email")
     origin: Optional[str] = Field(default=None, description="Requesting frontend origin URL")
 
     @field_validator("email")
     @classmethod
-    def normalize_email(cls, v: str) -> str:
-        return str(v).strip().lower()
+    def validate_and_normalize_email(cls, v: str) -> str:
+        clean = (v or "").strip().lower()
+        if not clean or not EMAIL_FORMAT_REGEX.match(clean):
+            raise ValueError("Please enter a valid email address.")
+        return clean
 
 class ResetPasswordRequest(BaseModel):
     token: str = Field(..., min_length=10, description="Expiring single-use reset token")
@@ -57,6 +63,7 @@ class AuthResponse(BaseModel):
 class ForgotPasswordResponse(BaseModel):
     message: str
     status: str
+    title: Optional[str] = "Recovery Email Sent"
     smtp_configured: bool
     dev_reset_token: Optional[str] = None
 

@@ -193,6 +193,7 @@ export interface AuthResponse {
 export interface ForgotPasswordResponse {
   message: string;
   status: string;
+  title?: string;
   smtp_configured: boolean;
   dev_reset_token?: string;
 }

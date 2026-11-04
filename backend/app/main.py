@@ -4,6 +4,7 @@ import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Query, Path, Request, Response, Depends, BackgroundTasks
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
@@ -66,6 +67,17 @@ async def headline_validation_exception_handler(request, exc: HeadlineValidation
         status_code=422,
         content=exc.to_dict()
     )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Returns clean string detail for validation errors rather than raw Pydantic dicts."""
+    errors = exc.errors()
+    if errors:
+        msg = errors[0].get("msg", "Validation error")
+        if msg.startswith("Value error, "):
+            msg = msg[len("Value error, "):]
+        return JSONResponse(status_code=422, content={"detail": msg})
+    return JSONResponse(status_code=422, content={"detail": "Please enter a valid email address."})
 
 # CORS Configuration - support local dev, Vercel deployments, and custom domains
 origins = [

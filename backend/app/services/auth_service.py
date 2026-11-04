@@ -256,7 +256,9 @@ class AuthService:
         request_origin: Optional[str] = None
     ) -> Dict[str, Any]:
         normalized_email = (email or "").strip().lower()
-        if not normalized_email or "@" not in normalized_email:
+        import re
+        email_pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+        if not normalized_email or not email_pattern.match(normalized_email):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Please enter a valid email address.")
 
         # Rate limit password reset requests: allow 15 attempts per 5 minutes to prevent developer lockout
@@ -265,19 +267,23 @@ class AuthService:
         auth_rate_limiter.record_attempt(rate_key)
 
         # 1. DATABASE VERIFICATION: Search MongoDB users collection first
-        user = db.find_user_by_email(normalized_email)
+        try:
+            user = db.find_user_by_email(normalized_email)
+        except Exception as db_err:
+            logger.error(f"[DATABASE_ERROR] Database lookup failure during password recovery: {db_err}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database service is currently unavailable. Please try again later."
+            )
 
         # 2. IF EMAIL DOES NOT EXIST
         if not user:
             masked_email = f"{normalized_email[:2]}***@{normalized_email.split('@')[-1]}" if "@" in normalized_email else "***"
-            logger.info(f"[AUTH_DIAGNOSTIC] Password recovery requested for unregistered account ({masked_email}). No reset token generated; no email dispatched.")
-            # For public-facing security, return consistent generic response that does not reveal account existence
-            return {
-                "message": "If that email address is registered, you will receive a password reset link shortly.",
-                "status": "dispatched",
-                "smtp_configured": bool(settings.brevo_api_key),
-                "dev_reset_token": None
-            }
+            logger.info(f"[AUTH_DIAGNOSTIC] Password recovery rejected: account not found for {masked_email}. No reset token generated; no Brevo email dispatched.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="This email address is not registered with FIN-SENTIMENT. Please check your email address or create a new account."
+            )
 
         # 3. IF EMAIL EXISTS: Verify outbound email service configuration
         explicit_from = getattr(settings, "BREVO_FROM_EMAIL", None) or os.getenv("BREVO_FROM_EMAIL")
@@ -315,7 +321,8 @@ class AuthService:
                 }
                 db.insert_one("password_resets", reset_doc)
                 return {
-                    "message": "If that email address is registered, you will receive a password reset link shortly.",
+                    "title": "Recovery Email Sent (Testing Mode)",
+                    "message": "A password reset link has been sent to your registered email address. Please check your inbox and spam folder.",
                     "status": "email_unconfigured",
                     "smtp_configured": False,
                     "dev_reset_token": raw_token
@@ -380,7 +387,8 @@ class AuthService:
 
         # 7. Return success response only if Brevo accepts the email request
         return {
-            "message": "If that email address is registered, you will receive a password reset link shortly.",
+            "title": "Recovery Email Sent",
+            "message": "A password reset link has been sent to your registered email address. Please check your inbox and spam folder.",
             "status": "dispatched",
             "smtp_configured": True,
             "dev_reset_token": None
