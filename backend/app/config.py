@@ -70,7 +70,12 @@ class Settings(BaseSettings):
 
     @property
     def is_email_service_configured(self) -> bool:
-        return bool(self.brevo_api_key) or self.is_smtp_configured
+        if bool(self.brevo_api_key):
+            return True
+        # Outbound raw SMTP ports (25, 465, 587) are blocked on Render
+        if os.getenv("RENDER"):
+            return False
+        return self.is_smtp_configured
 
     @property
     def frontend_url(self) -> str:

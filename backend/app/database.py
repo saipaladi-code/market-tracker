@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pymongo import MongoClient
@@ -162,7 +163,23 @@ class DatabaseManager:
         normalized = (email or "").strip().lower()
         if not normalized:
             return None
-        return self.find_one("users", {"email": normalized})
+        # 1. Exact match on normalized lower-case email (fast indexed lookup)
+        user = self.find_one("users", {"email": normalized})
+        if user:
+            return user
+        # 2. Case-insensitive lookup fallback in case email was saved with different casing
+        if self.is_cloud and self.db is not None:
+            try:
+                regex_query = {"email": {"$regex": f"^{re.escape(normalized)}$", "$options": "i"}}
+                return self.find_one("users", regex_query)
+            except Exception as e:
+                logger.warning(f"Case-insensitive MongoDB user lookup error: {e}")
+        else:
+            db_data = self._read_local_db()
+            for u in db_data.get("users", []):
+                if (u.get("email") or "").strip().lower() == normalized:
+                    return u
+        return None
 
     def find_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         if not user_id:

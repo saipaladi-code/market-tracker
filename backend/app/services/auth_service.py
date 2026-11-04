@@ -1,6 +1,7 @@
 import os
 import json
 import urllib.request
+import urllib.parse
 import re
 import secrets
 import hashlib
@@ -21,6 +22,43 @@ from app.services.rate_limiter import auth_rate_limiter
 logger = logging.getLogger("auth")
 
 class AuthService:
+    def _mask_email(self, email: str) -> str:
+        """Masks an email for safe diagnostic logging, e.g. sa***@gmail.com."""
+        if not email or "@" not in email:
+            return "***"
+        local_part, domain = email.split("@", 1)
+        visible_chars = min(2, len(local_part))
+        return f"{local_part[:visible_chars]}***@{domain}"
+
+    def _ensure_recipient_not_blocked_in_brevo(self, email: str, api_key: str) -> bool:
+        """
+        Checks if recipient email is present on Brevo's blocked contacts list (e.g. from prior bounce).
+        If blocked, automatically clears the blocklist entry so delivery can be attempted.
+        Returns True if contact was previously blocked and was unblocked.
+        """
+        try:
+            quoted_email = urllib.parse.quote(email.strip().lower())
+            url = f"https://api.brevo.com/v3/smtp/blockedContacts/{quoted_email}"
+            headers = {"accept": "application/json", "api-key": api_key}
+            req = urllib.request.Request(url, headers=headers, method="GET")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    del_req = urllib.request.Request(url, headers=headers, method="DELETE")
+                    with urllib.request.urlopen(del_req, timeout=5) as del_resp:
+                        if del_resp.status in (200, 204):
+                            logger.warning(
+                                f"[BREVO_AUTO_UNBLOCK] Recipient {self._mask_email(email)} was found on Brevo blocklist. "
+                                "Successfully cleared blocklist entry so delivery can be retried."
+                            )
+                            return True
+        except urllib.error.HTTPError as he:
+            if he.code == 404:
+                return False
+            logger.debug(f"Brevo blockedContacts lookup HTTP status {he.code}")
+        except Exception as e:
+            logger.debug(f"Brevo blockedContacts check skipped: {e}")
+        return False
+
     def __init__(self):
         pass
 
@@ -217,125 +255,130 @@ class AuthService:
         client_ip: str = "unknown",
         request_origin: Optional[str] = None
     ) -> Dict[str, Any]:
-        normalized_email = email.strip().lower()
+        normalized_email = (email or "").strip().lower()
+        if not normalized_email or "@" not in normalized_email:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Please enter a valid email address.")
 
         # Rate limit password reset requests: allow 15 attempts per 5 minutes to prevent developer lockout
         rate_key = f"pwd_reset:{client_ip}:{normalized_email}"
         auth_rate_limiter.check_rate_limit(rate_key, max_attempts=15, window_seconds=300, action_name="password reset")
         auth_rate_limiter.record_attempt(rate_key)
 
+        # 1. DATABASE VERIFICATION: Search MongoDB users collection first
         user = db.find_user_by_email(normalized_email)
+
+        # 2. IF EMAIL DOES NOT EXIST
+        if not user:
+            masked_email = f"{normalized_email[:2]}***@{normalized_email.split('@')[-1]}" if "@" in normalized_email else "***"
+            logger.info(f"[AUTH_DIAGNOSTIC] Password recovery requested for unregistered account ({masked_email}). No reset token generated; no email dispatched.")
+            # For public-facing security, return consistent generic response that does not reveal account existence
+            return {
+                "message": "If that email address is registered, you will receive a password reset link shortly.",
+                "status": "dispatched",
+                "smtp_configured": bool(settings.brevo_api_key),
+                "dev_reset_token": None
+            }
+
+        # 3. IF EMAIL EXISTS: Verify outbound email service configuration
+        explicit_from = getattr(settings, "BREVO_FROM_EMAIL", None) or os.getenv("BREVO_FROM_EMAIL")
+        if explicit_from and not settings.brevo_api_key:
+            auth_rate_limiter.reset_key(rate_key)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send password recovery email: BREVO_API_KEY environment variable is missing on Render. Please configure BREVO_API_KEY in your Render dashboard."
+            )
         is_configured = settings.is_email_service_configured
+        is_dev = not os.getenv("RENDER")
 
-        raw_token = secrets.token_urlsafe(32)
-        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-        expires_at = datetime.utcnow() + timedelta(minutes=15)
-
-        base_url = self.get_recovery_base_url(request_origin)
-
-        # 1. Configuration Validation: Check if Brevo or SMTP email service is configured
         if not is_configured:
-            # If user explicitly configured BREVO_FROM_EMAIL but forgot BREVO_API_KEY
-            explicit_from = getattr(settings, "BREVO_FROM_EMAIL", None) or os.getenv("BREVO_FROM_EMAIL")
-            if explicit_from and not settings.brevo_api_key:
-                auth_rate_limiter.reset_key(rate_key)
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to send password recovery email: BREVO_API_KEY environment variable is missing on Render. Please configure BREVO_API_KEY in your Render dashboard."
-                )
-
-            # In local dev / test environment without RENDER, allow dev token evaluation if neither is configured
-            is_dev = not os.getenv("RENDER")
             if is_dev:
-                if user:
-                    try:
-                        db.update_many(
-                            "password_resets",
-                            {"email": normalized_email, "used": False},
-                            {"used": True, "invalidated_at": datetime.utcnow().isoformat() + "Z"}
-                        )
-                    except Exception:
-                        pass
-                    reset_doc = {
-                        "token_hash": token_hash,
-                        "user_id": user.get("id") or user.get("_id"),
-                        "email": normalized_email,
-                        "expires_at": expires_at.isoformat() + "Z",
-                        "used": False,
-                        "created_at": datetime.utcnow().isoformat() + "Z"
-                    }
-                    db.insert_one("password_resets", reset_doc)
+                # In local dev / test environment without Brevo configured, generate dev token for manual testing
+                raw_token = secrets.token_urlsafe(32)
+                token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+                expires_at = datetime.utcnow() + timedelta(minutes=15)
+                user_id = user.get("id") or user.get("_id")
+                try:
+                    db.update_many(
+                        "password_resets",
+                        {"email": normalized_email, "used": False},
+                        {"used": True, "invalidated_at": datetime.utcnow().isoformat() + "Z"}
+                    )
+                except Exception:
+                    pass
+                reset_doc = {
+                    "token_hash": token_hash,
+                    "user_id": user_id,
+                    "email": normalized_email,
+                    "expires_at": expires_at.isoformat() + "Z",
+                    "used": False,
+                    "created_at": datetime.utcnow().isoformat() + "Z"
+                }
+                db.insert_one("password_resets", reset_doc)
                 return {
                     "message": "If that email address is registered, you will receive a password reset link shortly.",
                     "status": "email_unconfigured",
                     "smtp_configured": False,
-                    "dev_reset_token": raw_token if user else None
+                    "dev_reset_token": raw_token
                 }
+
             auth_rate_limiter.reset_key(rate_key)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to send password recovery email: Outbound email service is not configured on Render. Please configure BREVO_API_KEY and BREVO_FROM_EMAIL in your Render dashboard."
+                detail="Failed to send password recovery email: BREVO_API_KEY environment variable is missing on Render. Please configure BREVO_API_KEY in your Render dashboard."
             )
 
-        if settings.brevo_api_key and not settings.brevo_from_email:
+        if not settings.brevo_from_email:
             auth_rate_limiter.reset_key(rate_key)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to send password recovery email: BREVO_FROM_EMAIL environment variable is missing on Render. Please configure your verified Brevo sender email in your Render dashboard."
             )
 
-        # 2. If user exists, invalidate previous active tokens and dispatch new recovery email
-        if user:
-            # Invalidate any previous active tokens for this user account
-            try:
-                db.update_many(
-                    "password_resets",
-                    {"email": normalized_email, "used": False},
-                    {"used": True, "invalidated_at": datetime.utcnow().isoformat() + "Z"}
-                )
-            except Exception as e:
-                logger.warning(f"Could not invalidate prior reset tokens: {e}")
+        # 4. Invalidate any previous active tokens for this user account in MongoDB
+        try:
+            db.update_many(
+                "password_resets",
+                {"email": normalized_email, "used": False},
+                {"used": True, "invalidated_at": datetime.utcnow().isoformat() + "Z"}
+            )
+        except Exception as e:
+            logger.warning(f"Could not invalidate prior reset tokens: {e}")
 
-            reset_doc = {
-                "token_hash": token_hash,
-                "user_id": user.get("id") or user.get("_id"),
-                "email": normalized_email,
-                "expires_at": expires_at.isoformat() + "Z",
-                "used": False,
-                "created_at": datetime.utcnow().isoformat() + "Z"
-            }
-            db.insert_one("password_resets", reset_doc)
+        # 5. Generate secure, unique single-use password-reset token (valid 15 minutes)
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        expires_at = datetime.utcnow() + timedelta(minutes=15)
+        user_id = user.get("id") or user.get("_id")
 
-            # Primary: Brevo Transactional Email API (HTTPS Port 443)
-            if settings.brevo_api_key:
-                try:
-                    self._dispatch_reset_email_brevo(
-                        to_email=normalized_email,
-                        to_name=user.get("full_name"),
-                        raw_token=raw_token,
-                        base_url=base_url
-                    )
-                except Exception as e:
-                    auth_rate_limiter.reset_key(rate_key)
-                    err_msg = str(e)
-                    logger.error(f"[BREVO_DISPATCH_ERROR] Failed to dispatch password recovery email via Brevo HTTPS: {err_msg}", exc_info=True)
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail=f"Failed to send password recovery email: {err_msg}"
-                    )
-            elif settings.is_smtp_configured:
-                # Secondary legacy SMTP fallback
-                try:
-                    self._dispatch_reset_email(normalized_email, raw_token, base_url)
-                except Exception as e:
-                    auth_rate_limiter.reset_key(rate_key)
-                    logger.error(f"Failed to dispatch password recovery email via SMTP: {e}", exc_info=True)
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail=f"Failed to send password recovery email: {str(e)}"
-                    )
+        reset_doc = {
+            "token_hash": token_hash,
+            "user_id": user_id,
+            "email": normalized_email,
+            "expires_at": expires_at.isoformat() + "Z",
+            "used": False,
+            "created_at": datetime.utcnow().isoformat() + "Z"
+        }
+        db.insert_one("password_resets", reset_doc)
 
-        # 3. Always return consistent, generic response to prevent user enumeration
+        # 6. Send recovery email to user's registered email using Brevo HTTPS API
+        base_url = self.get_recovery_base_url(request_origin)
+        try:
+            self._dispatch_reset_email_brevo(
+                to_email=normalized_email,
+                to_name=user.get("full_name"),
+                raw_token=raw_token,
+                base_url=base_url
+            )
+        except Exception as e:
+            auth_rate_limiter.reset_key(rate_key)
+            err_msg = str(e)
+            logger.error(f"[BREVO_DISPATCH_ERROR] Failed to dispatch password recovery email via Brevo HTTPS: {err_msg}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to send password recovery email: {err_msg}"
+            )
+
+        # 7. Return success response only if Brevo accepts the email request
         return {
             "message": "If that email address is registered, you will receive a password reset link shortly.",
             "status": "dispatched",
@@ -506,6 +549,9 @@ class AuthService:
 </body>
 </html>"""
 
+        # Ensure recipient is not blocklisted in Brevo due to prior bounce
+        self._ensure_recipient_not_blocked_in_brevo(to_email, api_key)
+
         recipient_entry: Dict[str, str] = {"email": to_email}
         if to_name and to_name.strip():
             recipient_entry["name"] = to_name.strip()
@@ -539,7 +585,16 @@ class AuthService:
                 if res.status_code in (200, 201, 202):
                     res_json = res.json()
                     message_id = res_json.get("messageId") or res_json.get("id")
-                    logger.info(f"Password reset email accepted by Brevo API (messageId={message_id}) for recipient.")
+                    logger.info(
+                        f"[AUTH_DIAGNOSTIC] Password recovery Brevo dispatch: "
+                        f"account_found=True, "
+                        f"token_generated=True, "
+                        f"brevo_called=True, "
+                        f"recipient={self._mask_email(to_email)}, "
+                        f"brevo_status={resp.status}, "
+                        f"message_id={message_id}, "
+                        f"timestamp={datetime.utcnow().isoformat()}Z"
+                    )
                     return {"messageId": message_id, "status": "accepted"}
 
                 try:
@@ -547,6 +602,16 @@ class AuthService:
                     err_detail = err_json.get("message") or err_json.get("code") or str(err_json)
                 except Exception:
                     err_detail = res.text or f"HTTP {res.status_code}"
+
+                logger.error(
+                    f"[AUTH_DIAGNOSTIC] Password recovery Brevo failure: "
+                    f"account_found=True, "
+                    f"token_generated=True, "
+                    f"brevo_called=True, "
+                    f"recipient={self._mask_email(to_email)}, "
+                    f"brevo_status={resp.status}, "
+                    f"error={err_detail}"
+                )
 
                 if res.status_code == 401:
                     logger.error("Brevo API 401 Unauthorized: Invalid or missing API key.")
@@ -579,7 +644,16 @@ class AuthService:
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     resp_data = json.loads(resp.read().decode("utf-8"))
                     message_id = resp_data.get("messageId") or resp_data.get("id")
-                    logger.info(f"Password reset email accepted by Brevo API (messageId={message_id}) for recipient.")
+                    logger.info(
+                        f"[AUTH_DIAGNOSTIC] Password recovery Brevo dispatch: "
+                        f"account_found=True, "
+                        f"token_generated=True, "
+                        f"brevo_called=True, "
+                        f"recipient={self._mask_email(to_email)}, "
+                        f"brevo_status={resp.status}, "
+                        f"message_id={message_id}, "
+                        f"timestamp={datetime.utcnow().isoformat()}Z"
+                    )
                     return {"messageId": message_id, "status": "accepted"}
             except urllib.error.HTTPError as he:
                 err_text = he.read().decode("utf-8", errors="replace")

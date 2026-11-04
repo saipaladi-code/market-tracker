@@ -1,4 +1,5 @@
 import secrets
+import hashlib
 import pytest
 
 from datetime import datetime, timedelta
@@ -995,3 +996,209 @@ def test_brevo_non_registered_user_enumeration_protection(monkeypatch):
     assert res.status_code == 200
     assert len(dispatched) == 0
     assert "if that email address is registered" in res.json()["message"].lower()
+
+
+# ==============================================================================
+# SECTION 6 TEST SCENARIOS (TESTS A - H)
+# ==============================================================================
+
+def test_scenario_a_registered_email_brevo_recipient(monkeypatch):
+    """TEST A: Registered email -> Brevo receives the correct recipient address."""
+    email = "alice.scenario.a@testfinancial.com"
+    db.delete_many("users", {"email": email})
+    db.delete_many("password_resets", {"email": email})
+    auth_service.register_user("Alice Trader", email, "InitialP@ss123!")
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-scenario-test")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "noreply@finsentiment.ai")
+    monkeypatch.setattr(settings, "BREVO_SENDER_NAME", "FIN-SENTIMENT")
+
+    dispatched = []
+    def mock_brevo(to_email, to_name, raw_token, base_url):
+        dispatched.append({"to_email": to_email, "to_name": to_name, "token": raw_token})
+        return {"messageId": "<msg-alice-123>", "status": "accepted"}
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_brevo)
+
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 200
+    assert len(dispatched) == 1
+    assert dispatched[0]["to_email"] == email
+    assert dispatched[0]["to_name"] == "Alice Trader"
+
+    # Verify token was saved in MongoDB
+    reset_rec = db.find_one("password_resets", {"email": email, "used": False})
+    assert reset_rec is not None
+
+
+def test_scenario_b_unregistered_email_no_email_and_no_token(monkeypatch):
+    """TEST B: Unregistered email -> No email is sent, no token generated."""
+    email = "unregistered.bob.999@testfinancial.com"
+    db.delete_many("users", {"email": email})
+    db.delete_many("password_resets", {"email": email})
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-scenario-test")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "noreply@finsentiment.ai")
+
+    dispatched = []
+    def mock_brevo(to_email, to_name, raw_token, base_url):
+        dispatched.append(to_email)
+        return {"messageId": "<msg-unregistered>"}
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_brevo)
+
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 200
+    # 1. No email sent through Brevo
+    assert len(dispatched) == 0
+    # 2. No reset token created in MongoDB
+    assert db.find_one("password_resets", {"email": email}) is None
+    # 3. No user created
+    assert db.find_user_by_email(email) is None
+    # 4. Consistent non-enumerating message returned
+    assert "if that email address is registered" in res.json()["message"].lower()
+    assert res.json().get("dev_reset_token") is None
+
+
+def test_scenario_c_registered_email_different_capitalization(monkeypatch):
+    """TEST C: Registered email with different capitalization -> Correct account is found."""
+    reg_email = "charlie.case@testfinancial.com"
+    db.delete_many("users", {"email": reg_email})
+    db.delete_many("password_resets", {"email": reg_email})
+    auth_service.register_user("Charlie Analyst", reg_email, "CharlieP@ss123!")
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-scenario-test")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "noreply@finsentiment.ai")
+
+    dispatched = []
+    def mock_brevo(to_email, to_name, raw_token, base_url):
+        dispatched.append(to_email)
+        return {"messageId": "<msg-charlie>"}
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_brevo)
+
+    # Submit with UPPERCASE and mixed case
+    res = client.post("/api/auth/forgot-password", json={"email": "ChArLiE.CaSe@TestFinancial.COM"})
+    assert res.status_code == 200
+    assert len(dispatched) == 1
+    assert dispatched[0] == reg_email
+
+
+def test_scenario_d_email_leading_trailing_spaces(monkeypatch):
+    """TEST D: Email with leading or trailing spaces -> Correct account is found."""
+    reg_email = "david.spaces@testfinancial.com"
+    db.delete_many("users", {"email": reg_email})
+    db.delete_many("password_resets", {"email": reg_email})
+    auth_service.register_user("David Trader", reg_email, "DavidP@ss123!")
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-scenario-test")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "noreply@finsentiment.ai")
+
+    dispatched = []
+    def mock_brevo(to_email, to_name, raw_token, base_url):
+        dispatched.append(to_email)
+        return {"messageId": "<msg-david>"}
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_brevo)
+
+    # Submit with whitespace
+    res = client.post("/api/auth/forgot-password", json={"email": "   david.spaces@testfinancial.com   \t"})
+    assert res.status_code == 200
+    assert len(dispatched) == 1
+    assert dispatched[0] == reg_email
+
+
+def test_scenario_e_brevo_api_failure_no_false_success(monkeypatch):
+    """TEST E: Brevo API failure -> No false success message, returns 500 with error."""
+    reg_email = "eva.fail@testfinancial.com"
+    db.delete_many("users", {"email": reg_email})
+    db.delete_many("password_resets", {"email": reg_email})
+    auth_service.register_user("Eva Trader", reg_email, "EvaP@ss123!")
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-scenario-test")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "noreply@finsentiment.ai")
+
+    def mock_brevo_fail(to_email, to_name, raw_token, base_url):
+        raise RuntimeError("Brevo API rejected request (400 Bad Request): Sender not verified.")
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_brevo_fail)
+
+    res = client.post("/api/auth/forgot-password", json={"email": reg_email})
+    # Must NOT report success when email delivery fails
+    assert res.status_code == 500
+    assert "failed to send password recovery email" in res.json()["detail"].lower()
+    assert "sender not verified" in res.json()["detail"].lower()
+
+
+def test_scenario_f_expired_reset_token_rejected():
+    """TEST F: Expired reset token -> Password reset rejected."""
+    reg_email = "frank.expired@testfinancial.com"
+    db.delete_many("users", {"email": reg_email})
+    db.delete_many("password_resets", {"email": reg_email})
+    user_info = auth_service.register_user("Frank Trader", reg_email, "FrankOld123!")
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    # Expired 5 minutes ago
+    expired_at = (datetime.utcnow() - timedelta(minutes=5)).isoformat() + "Z"
+
+    db.insert_one("password_resets", {
+        "token_hash": token_hash,
+        "user_id": user_info["user"]["id"],
+        "email": reg_email,
+        "expires_at": expired_at,
+        "used": False,
+        "created_at": datetime.utcnow().isoformat() + "Z"
+    })
+
+    res = client.post("/api/auth/reset-password", json={"token": raw_token, "new_password": "NewValidP@ss123!"})
+    assert res.status_code == 400
+    assert "expired" in res.json()["detail"].lower()
+
+
+def test_scenario_g_and_h_valid_reset_token_password_updated_and_old_password_fails(monkeypatch):
+    """
+    TEST G: Valid reset token -> Password successfully updated.
+    TEST H: Old password fails and new password works.
+    """
+    reg_email = "grace.lifecycle@testfinancial.com"
+    db.delete_many("users", {"email": reg_email})
+    db.delete_many("password_resets", {"email": reg_email})
+    old_pwd = "OriginalP@ssword123!"
+    new_pwd = "UpdatedP@ssword456!"
+
+    auth_service.register_user("Grace Analyst", reg_email, old_pwd)
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-scenario-test")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "noreply@finsentiment.ai")
+
+    captured_tokens = []
+    def mock_brevo(to_email, to_name, raw_token, base_url):
+        captured_tokens.append(raw_token)
+        return {"messageId": "<msg-grace>", "status": "accepted"}
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_brevo)
+
+    # 1. Request recovery
+    res_req = client.post("/api/auth/forgot-password", json={"email": reg_email})
+    assert res_req.status_code == 200
+    assert len(captured_tokens) == 1
+    token = captured_tokens[0]
+
+    # 2. Reset password (TEST G)
+    res_reset = client.post("/api/auth/reset-password", json={"token": token, "new_password": new_pwd})
+    assert res_reset.status_code == 200
+    assert "success" in res_reset.json()["status"].lower()
+
+    # 3. Old password fails (TEST H)
+    res_fail = client.post("/api/auth/login", json={"email": reg_email, "password": old_pwd})
+    assert res_fail.status_code == 401
+
+    # 4. New password works (TEST H)
+    res_ok = client.post("/api/auth/login", json={"email": reg_email, "password": new_pwd})
+    assert res_ok.status_code == 200
+    assert "token" in res_ok.json()
+
+    # 5. Token reuse rejected
+    res_reuse = client.post("/api/auth/reset-password", json={"token": token, "new_password": "YetAnotherP@ss789!"})
+    assert res_reuse.status_code == 400
