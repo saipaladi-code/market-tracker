@@ -89,10 +89,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-sm tracking-wider text-white">FIN-SENTIMENT</span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                  PRO
-                </span>
+                <span className="font-extrabold text-sm tracking-wider text-white notranslate" translate="no">FIN-SENTIMENT</span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 notranslate" translate="no">PRO</span>
               </div>
               <p className="text-[10px] text-slate-400 truncate tracking-tight">AI Financial News Intelligence</p>
             </div>

@@ -11,9 +11,70 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Pre-Initialization: Synchronize Centralized Language Cookie Before First Paint -->
+    <script type="text/javascript">
+      (function() {
+        try {
+          // React + Google Translate DOM reconciliation guard
+          if (typeof Node === 'function' && Node.prototype) {
+            var origRemoveChild = Node.prototype.removeChild;
+            Node.prototype.removeChild = function(child) {
+              if (child.parentNode !== this) {
+                return child;
+              }
+              return origRemoveChild.apply(this, arguments);
+            };
+            var origInsertBefore = Node.prototype.insertBefore;
+            Node.prototype.insertBefore = function(newNode, referenceNode) {
+              if (referenceNode && referenceNode.parentNode !== this) {
+                return newNode;
+              }
+              return origInsertBefore.apply(this, arguments);
+            };
+          }
+
+          var savedLang = localStorage.getItem('FIN_SENTIMENT_LANGUAGE') || 'en';
+          var rtlLanguages = ['ur', 'ar'];
+          if (rtlLanguages.indexOf(savedLang.toLowerCase()) !== -1) {
+            document.documentElement.dir = 'rtl';
+          } else {
+            document.documentElement.dir = 'ltr';
+          }
+          document.documentElement.lang = savedLang;
+
+          if (savedLang && savedLang !== 'en') {
+            var googleCode = savedLang === 'zh' ? 'zh-CN' : savedLang;
+            var cookieVal = '/en/' + googleCode;
+            document.cookie = 'googtrans=' + cookieVal + '; path=/; SameSite=Lax';
+            if (window.location.hostname && window.location.hostname.indexOf('.') !== -1) {
+              document.cookie = 'googtrans=' + cookieVal + '; path=/; domain=' + window.location.hostname + '; SameSite=Lax';
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-[#070b14] text-slate-100 antialiased font-sans selection:bg-blue-600 selection:text-white">
+    <!-- Hidden Google Translate Mount Point -->
+    <div id="google_translate_element" style="display:none!important;visibility:hidden!important;height:0!important;overflow:hidden!important;" aria-hidden="true"></div>
+
     <div id="root"></div>
+
+    <!-- Centralized Google Universal Neural Translation Engine Callback & Script -->
+    <script type="text/javascript">
+      window.googleTranslateElementInit = function() {
+        if (window.google && window.google.translate && window.google.translate.TranslateElement) {
+          new window.google.translate.TranslateElement({
+            pageLanguage: 'en',
+            autoDisplay: false,
+            includedLanguages: 'en,te,hi,ta,kn,ml,mr,bn,gu,pa,ur,or,as,es,fr,de,ar,zh-CN,ja,ko',
+            multilanguagePage: true
+          }, 'google_translate_element');
+        }
+      };
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async defer></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

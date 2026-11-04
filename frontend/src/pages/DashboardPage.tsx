@@ -356,9 +356,7 @@ export const DashboardPage: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-white text-sm">{conf.company}</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-navy-800 text-slate-300 border border-navy-700">
-                        {conf.ticker}
-                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-navy-800 text-slate-300 border border-navy-700 notranslate" translate="no">{conf.ticker}</span>
                     </div>
                     <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 font-mono text-[10px] font-bold border border-amber-500/30">
                       {(conf.conflict_score * 100).toFixed(0)}% Divergence

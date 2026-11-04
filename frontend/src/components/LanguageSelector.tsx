@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Globe, Check, Search, ChevronDown, RotateCcw } from 'lucide-react';
-import { SUPPORTED_LANGUAGES, Language } from '../i18n/languages';
+import { SUPPORTED_LANGUAGES, Language, getLanguageByCode } from '../i18n/languages';
+import { changeAppLanguage, getSavedLanguage } from '../i18n';
 
 export const LanguageSelector: React.FC = () => {
   const { i18n, t } = useTranslation();
@@ -9,10 +10,8 @@ export const LanguageSelector: React.FC = () => {
   const [search, setSearch] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const currentCode = (i18n.language || 'en').toLowerCase().split('-')[0];
-  const currentLang = SUPPORTED_LANGUAGES.find(
-    (l) => l.code.toLowerCase() === i18n.language.toLowerCase() || l.code === currentCode
-  ) || SUPPORTED_LANGUAGES[0];
+  const activeLangCode = getSavedLanguage() || i18n.language || 'en';
+  const currentLang = getLanguageByCode(activeLangCode);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -25,15 +24,15 @@ export const LanguageSelector: React.FC = () => {
   }, []);
 
   const handleSelectLanguage = (lang: Language) => {
-    i18n.changeLanguage(lang.code);
     setIsOpen(false);
     setSearch('');
+    changeAppLanguage(lang.code, true);
   };
 
   const handleResetToEnglish = () => {
-    i18n.changeLanguage('en');
     setIsOpen(false);
     setSearch('');
+    changeAppLanguage('en', true);
   };
 
   const filteredLanguages = SUPPORTED_LANGUAGES.filter(
@@ -44,11 +43,12 @@ export const LanguageSelector: React.FC = () => {
   );
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative notranslate" translate="no" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-navy-900 hover:bg-navy-800 border border-navy-750 hover:border-cyan-500/40 text-slate-300 hover:text-white text-xs font-medium transition-all cursor-pointer shadow-sm"
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-navy-900 hover:bg-navy-800 border border-navy-750 hover:border-cyan-500/40 text-slate-300 hover:text-white text-xs font-medium transition-all cursor-pointer shadow-sm select-none"
         title={t('nav.language', 'Language')}
+        type="button"
       >
         <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
         <span className="font-semibold text-[11px] text-cyan-300 max-w-[80px] sm:max-w-[110px] truncate">
@@ -58,18 +58,19 @@ export const LanguageSelector: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-72 max-h-96 bg-navy-900 border border-navy-700/80 rounded-xl shadow-2xl py-2 z-50 flex flex-col backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute right-0 mt-2 w-72 max-h-96 bg-navy-900 border border-navy-700/80 rounded-xl shadow-2xl py-2 z-50 flex flex-col backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 notranslate" translate="no">
           {/* Header */}
-          <div className="px-3 pb-2 border-b border-navy-800 flex items-center justify-between">
+          <div className="px-3 pb-2 border-b border-navy-800 flex items-center justify-between select-none">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
               <Globe className="w-4 h-4 text-cyan-400" />
-              <span>{t('nav.language', 'Global Language')} (20)</span>
+              <span>{t('nav.language', 'Global Language')} ({SUPPORTED_LANGUAGES.length})</span>
             </div>
             {currentLang.code !== 'en' && (
               <button
                 onClick={handleResetToEnglish}
                 className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 font-mono transition-colors"
                 title={t('nav.resetToEnglish', 'Reset to English')}
+                type="button"
               >
                 <RotateCcw className="w-2.5 h-2.5" />
                 <span>EN</span>
@@ -97,13 +98,14 @@ export const LanguageSelector: React.FC = () => {
             {filteredLanguages.map((lang) => {
               const isSelected =
                 lang.code === currentLang.code ||
-                lang.code === i18n.language ||
-                (lang.code === 'zh' && i18n.language.startsWith('zh'));
+                lang.code === activeLangCode ||
+                (lang.code === 'zh' && activeLangCode.startsWith('zh'));
 
               return (
                 <button
                   key={lang.code}
                   onClick={() => handleSelectLanguage(lang)}
+                  type="button"
                   className={`w-full px-3 py-2 text-left flex items-center justify-between text-xs transition-colors cursor-pointer ${
                     isSelected
                       ? 'bg-cyan-500/10 text-cyan-300 font-semibold border-l-2 border-cyan-400'
@@ -132,6 +134,7 @@ export const LanguageSelector: React.FC = () => {
           <div className="pt-2 px-3 border-t border-navy-800 flex justify-end">
             <button
               onClick={handleResetToEnglish}
+              type="button"
               className="text-[11px] text-slate-400 hover:text-cyan-300 flex items-center gap-1 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3 h-3" />

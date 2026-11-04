@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { TrendingUp, User, Mail, Lock, Eye, EyeOff, AlertCircle, Loader2, ArrowRight, ShieldCheck } from 'lucide-react';
+import { LanguageSelector } from '../components/LanguageSelector';
 
 export const SignupPage: React.FC = () => {
   const { register } = useAuth();
@@ -70,6 +71,10 @@ export const SignupPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-navy-950 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 relative overflow-hidden select-none">
+      {/* Universal Multilingual Language Selector */}
+      <div className="absolute top-4 right-4 z-20 notranslate" translate="no">
+        <LanguageSelector />
+      </div>
       {/* Background Decorative Radial Glows */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-gradient-to-b from-blue-600/10 via-cyan-500/5 to-transparent blur-3xl pointer-events-none" />
       <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -81,10 +86,8 @@ export const SignupPage: React.FC = () => {
             <TrendingUp className="w-6 h-6" />
           </div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-extrabold tracking-wider text-white">FIN-SENTIMENT</h1>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
-              PRO
-            </span>
+            <h1 className="text-xl font-extrabold tracking-wider text-white notranslate" translate="no">FIN-SENTIMENT</h1>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 notranslate" translate="no">PRO</span>
           </div>
           <p className="mt-1 text-xs text-slate-400 max-w-xs">
             Create your analyst profile to access real-time sentiment analytics

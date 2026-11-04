@@ -136,6 +136,9 @@ class TranslateRequest(BaseModel):
 class TranslateResponse(BaseModel):
     original_text: str
     translated_text: str
+    source_lang: Optional[str] = "en"
     target_lang: str
+    cached: bool = False
     is_cached: bool = False
     provider: str = "Google Translate"
+    status: str = "success"

@@ -19,6 +19,7 @@ import { DataQualityPage } from './pages/DataQualityPage';
 import { AssistantPage } from './pages/AssistantPage';
 import { GoldSilverIntelligencePage } from './pages/GoldSilverIntelligencePage';
 import { BackendConfigModal } from './components/BackendConfigModal';
+import { GlobalTranslationManager } from './components/GlobalTranslationManager';
 import { api } from './services/api';
 
 function AuthenticatedLayout() {
@@ -151,6 +152,7 @@ function AuthenticatedLayout() {
 export function App() {
   return (
     <BrowserRouter>
+      <GlobalTranslationManager />
       <AuthProvider>
         <Routes>
           {/* Public Authentication Routes */}

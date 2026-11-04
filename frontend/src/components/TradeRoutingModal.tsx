@@ -234,7 +234,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                 <div className="p-3 rounded-lg bg-navy-950 border border-navy-800">
                   <span className="text-[10px] text-slate-400 font-mono uppercase block">Symbol / Ticker</span>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-sm font-bold text-white font-mono">{route.ticker}</span>
+                    <span className="text-sm font-bold text-white font-mono notranslate" translate="no">{route.ticker}</span>
                     <button
                       onClick={() => handleCopyTicker(route.ticker || '')}
                       className="p-1 rounded bg-navy-800 hover:bg-navy-700 text-slate-300 hover:text-white transition-colors cursor-pointer"

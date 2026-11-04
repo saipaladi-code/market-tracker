@@ -170,9 +170,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className="w-full text-left px-3 py-2 hover:bg-navy-800 flex items-center justify-between text-slate-200 transition-colors"
                 >
                   <span className="font-medium text-white">{c.name}</span>
-                  <span className="font-mono text-blue-400 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
-                    {c.ticker}
-                  </span>
+                  <span className="font-mono text-blue-400 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20 notranslate" translate="no">{c.ticker}</span>
                 </button>
               ))
             ) : (

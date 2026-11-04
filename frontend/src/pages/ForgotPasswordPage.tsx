@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
-import { TrendingUp, Mail, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Info, KeyRound } from 'lucide-react';
+import { TrendingUp, Mail, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Info, KeyRound } from 'lucide-react';
+import { LanguageSelector } from '../components/LanguageSelector';
 import { ForgotPasswordResponse } from '../types';
 
 export const ForgotPasswordPage: React.FC = () => {
@@ -33,7 +34,11 @@ export const ForgotPasswordPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-navy-950 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden select-none">
+    <div className="min-h-screen bg-navy-950 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden select-none">
+      {/* Universal Multilingual Language Selector */}
+      <div className="absolute top-4 right-4 z-20 notranslate" translate="no">
+        <LanguageSelector />
+      </div>
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-gradient-to-b from-blue-600/10 via-cyan-500/5 to-transparent blur-3xl pointer-events-none" />
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
@@ -42,10 +47,8 @@ export const ForgotPasswordPage: React.FC = () => {
             <TrendingUp className="w-6 h-6" />
           </div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-extrabold tracking-wider text-white">FIN-SENTIMENT</h1>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
-              PRO
-            </span>
+            <h1 className="text-xl font-extrabold tracking-wider text-white notranslate" translate="no">FIN-SENTIMENT</h1>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 notranslate" translate="no">PRO</span>
           </div>
           <p className="mt-1 text-xs text-slate-400 max-w-xs">
             Expiring single-use credential recovery

@@ -90,3 +90,49 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ==============================================================================
+   UNIVERSAL MULTILINGUAL TRANSLATION ENGINE STYLING
+   Suppresses Google native toolbars, balloon frames, and shifts while maintaining
+   sleek custom FIN-SENTIMENT typography, brand styles, and ticker protection.
+   ============================================================================== */
+.goog-te-banner-frame.skiptranslate,
+.goog-te-banner-frame,
+iframe.goog-te-banner-frame,
+#goog-gt-tt,
+.goog-te-balloon-frame,
+.goog-tooltip,
+.goog-tooltip:hover {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+}
+
+body {
+  top: 0px !important;
+  position: static !important;
+}
+
+#google_translate_element {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
+.skiptranslate iframe {
+  display: none !important;
+}
+
+/* Financial symbols, tickers, currency amounts, and brand badges are strictly preserved */
+.notranslate,
+[translate="no"],
+.ticker-badge,
+.stock-ticker,
+.currency-amount {
+  -webkit-translate: no !important;
+  translate: no !important;
+}
