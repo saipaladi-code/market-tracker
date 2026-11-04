@@ -1,3 +1,4 @@
+import secrets
 import pytest
 
 from datetime import datetime, timedelta
@@ -23,16 +24,19 @@ def cleanup_test_users(monkeypatch):
     """Ensure clean test slate before and after tests."""
 
     client.cookies.clear()
+    auth_rate_limiter._attempts.clear()
 
-    monkeypatch.setattr(settings, "RESEND_API_KEY", None)
+    monkeypatch.setattr(settings, "BREVO_API_KEY", None)
 
-    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", None)
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", None)
+
+    monkeypatch.setattr(settings, "BREVO_SENDER_NAME", "FIN-SENTIMENT")
 
     monkeypatch.setattr(settings, "SMTP_HOST", None)
 
-    db.delete_many("users", {"email": {"$regex": r"@testfinancial\.com"}})
+    db.delete_many("users", {"email": {"$regex": r"(@testfinancial\.com|\.brevo@|investor\d@)"}})
 
-    db.delete_many("password_resets", {"email": {"$regex": r"@testfinancial\.com"}})
+    db.delete_many("password_resets", {"email": {"$regex": r"(@testfinancial\.com|\.brevo@|investor\d@)"}})
 
     # Also clean local test arrays if in local mode
 
@@ -52,9 +56,9 @@ def cleanup_test_users(monkeypatch):
 
     client.cookies.clear()
 
-    db.delete_many("users", {"email": {"$regex": r"@testfinancial\.com"}})
+    db.delete_many("users", {"email": {"$regex": r"(@testfinancial\.com|\.brevo@|investor\d@)"}})
 
-    db.delete_many("password_resets", {"email": {"$regex": r"@testfinancial\.com"}})
+    db.delete_many("password_resets", {"email": {"$regex": r"(@testfinancial\.com|\.brevo@|investor\d@)"}})
 
 # 1. Registration Tests
 
@@ -707,38 +711,23 @@ def test_smtp_ssl_port_465_detection(monkeypatch):
     assert settings.smtp_use_tls is False
 
 def test_health_endpoint_email_telemetry(monkeypatch):
-
-    """Verifies that /api/health exposes safe non-sensitive email telemetry for Resend HTTPS."""
-
-    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_secret_live_key_9999")
-
-    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", "security@finsentiment.ai")
-
-    
+    """Verifies that /api/health exposes safe non-sensitive email telemetry for Brevo HTTPS."""
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-secret-live-key-9999")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "security@finsentiment.ai")
+    monkeypatch.setattr(settings, "BREVO_SENDER_NAME", "FIN-SENTIMENT")
 
     res = client.get("/api/health")
-
     assert res.status_code == 200
-
     data = res.json()
-
     assert "email_service" in data
-
     email_status = data["email_service"]
-
     assert email_status["configured"] is True
-
-    assert email_status["provider"] == "Resend HTTPS API"
-
+    assert email_status["provider"] == "Brevo Transactional Email API"
     assert email_status["transport"] == "HTTPS (Port 443)"
-
     assert email_status["has_api_key"] is True
-
     assert email_status["sender_configured"] is True
-
     # Ensure sensitive secret API key is NOT in response
-
-    assert "re_secret_live_key_9999" not in str(data)
+    assert "xkeysib-secret-live-key-9999" not in str(data)
 
 def test_smtp_auth_error_diagnostic_detail(monkeypatch):
 
@@ -768,145 +757,241 @@ def test_smtp_auth_error_diagnostic_detail(monkeypatch):
 
     assert "failed to send password recovery email" in res.json()["detail"].lower()
 
-# 8. Resend HTTPS Email Dispatch Tests
+# 8. Brevo Transactional Email Dispatch Tests (Dynamic Recipient & Lifecycle)
 
-def test_resend_successful_email_dispatch(monkeypatch):
+def test_brevo_successful_email_dispatch_dynamic_recipient(monkeypatch):
+    """
+    Verifies that password reset emails are dynamically addressed to each user's
+    actual registered email address from MongoDB across different providers (Gmail, Yahoo, Outlook).
+    """
+    test_users = [
+        ("User Gmail", "sai.brevo@gmail.com", "SecureGmailP@ss1"),
+        ("User Yahoo", "rahul.brevo@yahoo.com", "SecureYahooP@ss2"),
+        ("User Outlook", "priya.brevo@outlook.com", "SecureOutlookP@ss3"),
+    ]
 
-    """Verifies that password reset email is successfully sent via Resend HTTPS API."""
+    for name, email, pwd in test_users:
+        if not db.find_user_by_email(email):
+            auth_service.register_user(name, email, pwd)
 
-    email = "trader.resend@testfinancial.com"
-
-    auth_service.register_user("Resend User", email, "SecurePassword123!")
-
-    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_mock_valid_key")
-
-    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", "security@testfinancial.com")
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-mock-valid-key")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "noreply@finsentiment.ai")
+    monkeypatch.setattr(settings, "BREVO_SENDER_NAME", "FIN-SENTIMENT")
 
     dispatched_calls = []
 
-    def mock_resend_dispatch(to_email, raw_token, base_url):
+    def mock_brevo_dispatch(to_email, to_name, raw_token, base_url):
+        dispatched_calls.append({
+            "to_email": to_email,
+            "to_name": to_name,
+            "raw_token": raw_token,
+            "base_url": base_url
+        })
+        return {"messageId": f"<mock-{secrets.token_hex(6)}@smtp-relay.brevo.com>", "status": "accepted"}
 
-        dispatched_calls.append((to_email, raw_token, base_url))
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_brevo_dispatch)
 
-        return {"id": "re_msg_123456"}
+    # 1. Dispatch reset for User A (Gmail)
+    res_a = client.post("/api/auth/forgot-password", json={"email": "sai.brevo@gmail.com"})
+    assert res_a.status_code == 200
+    assert dispatched_calls[-1]["to_email"] == "sai.brevo@gmail.com"
+    assert dispatched_calls[-1]["to_name"] == "User Gmail"
+    token_a = dispatched_calls[-1]["raw_token"]
 
-    monkeypatch.setattr(auth_service, "_dispatch_reset_email_resend", mock_resend_dispatch)
+    # 2. Dispatch reset for User B (Yahoo)
+    res_b = client.post("/api/auth/forgot-password", json={"email": "rahul.brevo@yahoo.com"})
+    assert res_b.status_code == 200
+    assert dispatched_calls[-1]["to_email"] == "rahul.brevo@yahoo.com"
+    assert dispatched_calls[-1]["to_name"] == "User Yahoo"
+    token_b = dispatched_calls[-1]["raw_token"]
 
-    res = client.post("/api/auth/forgot-password", json={"email": email})
+    # 3. Dispatch reset for User C (Outlook)
+    res_c = client.post("/api/auth/forgot-password", json={"email": "priya.brevo@outlook.com"})
+    assert res_c.status_code == 200
+    assert dispatched_calls[-1]["to_email"] == "priya.brevo@outlook.com"
+    assert dispatched_calls[-1]["to_name"] == "User Outlook"
+    token_c = dispatched_calls[-1]["raw_token"]
 
-    assert res.status_code == 200
+    # Confirm token isolation: all tokens must be mutually distinct
+    assert token_a != token_b
+    assert token_b != token_c
+    assert token_a != token_c
 
-    data = res.json()
+    # Confirm records exist in database with unconsumed status
+    for email in ["sai.brevo@gmail.com", "rahul.brevo@yahoo.com", "priya.brevo@outlook.com"]:
+        rec = db.find_one("password_resets", {"email": email, "used": False})
+        assert rec is not None
 
-    assert data["status"] == "dispatched"
 
-    assert len(dispatched_calls) == 1
-
-    assert dispatched_calls[0][0] == email
-
-    # Verify token was saved in database
-
-    token_rec = db.find_one("password_resets", {"email": email})
-
-    assert token_rec is not None
-
-    assert token_rec["used"] is False
-
-def test_resend_missing_api_key_configuration_error(monkeypatch):
-
-    """Verifies that missing RESEND_API_KEY produces clear configuration error."""
-
-    email = "trader.nokey@testfinancial.com"
-
+def test_brevo_missing_api_key_configuration_error(monkeypatch):
+    """Verifies that missing BREVO_API_KEY produces a clear configuration error."""
+    email = "trader.brevo.nokey@testfinancial.com"
     auth_service.register_user("No Key User", email, "SecurePassword123!")
 
-    monkeypatch.setattr(settings, "RESEND_API_KEY", None)
-
-    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", "security@testfinancial.com")
+    monkeypatch.setattr(settings, "BREVO_API_KEY", None)
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "security@testfinancial.com")
 
     res = client.post("/api/auth/forgot-password", json={"email": email})
-
     assert res.status_code == 500
+    assert "brevo_api_key" in res.json()["detail"].lower()
 
-    assert "resend_api_key" in res.json()["detail"].lower()
 
-def test_resend_default_sender_fallback_when_unspecified(monkeypatch):
+def test_brevo_missing_from_email_configuration_error(monkeypatch):
+    """Verifies that missing BREVO_FROM_EMAIL produces a clear configuration error."""
+    email = "trader.brevo.nofrom@testfinancial.com"
+    auth_service.register_user("No From User", email, "SecurePassword123!")
 
-    """Verifies that missing RESEND_FROM_EMAIL automatically falls back to onboarding@resend.dev sandbox sender."""
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-mock-valid-key")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", None)
 
-    email = "trader.nosender@testfinancial.com"
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 500
+    assert "brevo_from_email" in res.json()["detail"].lower()
 
-    auth_service.register_user("No Sender User", email, "SecurePassword123!")
 
-    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_test_key")
+def test_brevo_api_authentication_error_401(monkeypatch):
+    """Verifies that Brevo 401 Unauthorized (invalid API key) returns descriptive diagnostic error."""
+    email = "trader.brevo.401@testfinancial.com"
+    auth_service.register_user("Brevo 401 User", email, "SecurePassword123!")
 
-    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", None)
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "invalid_key")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "security@testfinancial.com")
+
+    def mock_dispatch_401(to_email, to_name, raw_token, base_url):
+        raise RuntimeError("Brevo API authentication failed (401 Unauthorized): Invalid Brevo API key. Please verify BREVO_API_KEY in Render.")
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_dispatch_401)
+
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 500
+    assert "401 unauthorized" in res.json()["detail"].lower()
+
+
+def test_brevo_unverified_sender_error_400(monkeypatch):
+    """Verifies that Brevo 400 Bad Request (unverified sender) returns clear instructions to verify sender in Brevo."""
+    email = "trader.brevo.400@testfinancial.com"
+    auth_service.register_user("Brevo 400 User", email, "SecurePassword123!")
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-valid-key")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "unverified@randomdomain.com")
+
+    def mock_dispatch_400(to_email, to_name, raw_token, base_url):
+        raise RuntimeError("Brevo API rejected request (400 Bad Request): Sender not verified. Please ensure BREVO_FROM_EMAIL ('unverified@randomdomain.com') is an authorized and verified sender in Brevo.")
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_dispatch_400)
+
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 500
+    assert "sender in brevo" in res.json()["detail"].lower()
+
+
+def test_brevo_rate_limit_error_429(monkeypatch):
+    """Verifies that Brevo 429 Too Many Requests returns clear rate limit notification."""
+    email = "trader.brevo.429@testfinancial.com"
+    auth_service.register_user("Brevo 429 User", email, "SecurePassword123!")
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-valid-key")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "security@testfinancial.com")
+
+    def mock_dispatch_429(to_email, to_name, raw_token, base_url):
+        raise RuntimeError("Brevo API rate limit exceeded (429 Too Many Requests): Please try again shortly.")
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_dispatch_429)
+
+    res = client.post("/api/auth/forgot-password", json={"email": email})
+    assert res.status_code == 500
+    assert "429" in res.json()["detail"] or "rate limit" in res.json()["detail"].lower()
+
+
+def test_brevo_multiple_user_full_reset_and_login_lifecycle(monkeypatch):
+    """
+    Full lifecycle test across multiple distinct users:
+    - User 1: Gmail
+    - User 2: Yahoo
+    - User 3: Outlook
+    Tests:
+    1. Forgot Password generates distinct tokens
+    2. Reset Password updates database password
+    3. New password authenticates successfully
+    4. Old password fails authentication
+    5. Used token cannot be reused
+    6. User 2's token is still valid after User 1 resets
+    """
+    user1_email = "investor1@gmail.com"
+    user2_email = "investor2@yahoo.com"
+    user3_email = "investor3@outlook.com"
+
+    for e in [user1_email, user2_email, user3_email]:
+        db.delete_many("users", {"email": e})
+        db.delete_many("password_resets", {"email": e})
+
+    auth_service.register_user("Investor One", user1_email, "OldPassword1!")
+    auth_service.register_user("Investor Two", user2_email, "OldPassword2!")
+    auth_service.register_user("Investor Three", user3_email, "OldPassword3!")
+
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-live-test")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "noreply@finsentiment.ai")
+
+    tokens = {}
+
+    def capture_dispatch(to_email, to_name, raw_token, base_url):
+        tokens[to_email] = raw_token
+        return {"messageId": f"<msg-{to_email}>", "status": "accepted"}
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", capture_dispatch)
+
+    # Request reset for User 1 & User 2
+    client.post("/api/auth/forgot-password", json={"email": user1_email})
+    client.post("/api/auth/forgot-password", json={"email": user2_email})
+
+    assert user1_email in tokens
+    assert user2_email in tokens
+    token1 = tokens[user1_email]
+    token2 = tokens[user2_email]
+    assert token1 != token2
+
+    # User 1 resets password
+    new_pwd_1 = "NewSecurePassword1!"
+    res_reset = client.post("/api/auth/reset-password", json={"token": token1, "new_password": new_pwd_1})
+    assert res_reset.status_code == 200
+
+    # User 1 signs in with new password -> SUCCESS
+    res_login_new = client.post("/api/auth/login", json={"email": user1_email, "password": new_pwd_1})
+    assert res_login_new.status_code == 200
+    assert "token" in res_login_new.json()
+
+    # User 1 signs in with old password -> FAILS (401)
+    res_login_old = client.post("/api/auth/login", json={"email": user1_email, "password": "OldPassword1!"})
+    assert res_login_old.status_code == 401
+
+    # User 1 tries to reuse the consumed token -> FAILS (400)
+    res_reuse = client.post("/api/auth/reset-password", json={"token": token1, "new_password": "AnotherPassword1!"})
+    assert res_reuse.status_code == 400
+    assert "already been used" in res_reuse.json()["detail"].lower()
+
+    # User 2's token is still valid and can be reset independently
+    new_pwd_2 = "NewSecurePassword2!"
+    res_reset_2 = client.post("/api/auth/reset-password", json={"token": token2, "new_password": new_pwd_2})
+    assert res_reset_2.status_code == 200
+
+    # User 2 signs in with new password
+    res_login_2 = client.post("/api/auth/login", json={"email": user2_email, "password": new_pwd_2})
+    assert res_login_2.status_code == 200
+
+
+def test_brevo_non_registered_user_enumeration_protection(monkeypatch):
+    """Verifies that non-registered users return generic response without triggering Brevo."""
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-mock")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "security@finsentiment.ai")
 
     dispatched = []
+    def mock_brevo(to_email, to_name, raw_token, base_url):
+        dispatched.append(to_email)
+        return {"messageId": "<unregistered>"}
 
-    def mock_dispatch(to_email, raw_token, base_url):
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_brevo)
 
-        dispatched.append((to_email, settings.resend_from_email))
-
-        return {"id": "msg_resend_default"}
-
-    monkeypatch.setattr(auth_service, "_dispatch_reset_email_resend", mock_dispatch)
-
-    res = client.post("/api/auth/forgot-password", json={"email": email})
-
+    res = client.post("/api/auth/forgot-password", json={"email": "nonexistent.trader999@randomfirm.com"})
     assert res.status_code == 200
-
-    assert "onboarding@resend.dev" in dispatched[0][1]
-
-def test_resend_api_error_rejection(monkeypatch):
-
-    """Verifies that API errors from Resend (e.g. 403 unverified domain) are returned with details."""
-
-    email = "trader.apierr@testfinancial.com"
-
-    auth_service.register_user("API Err User", email, "SecurePassword123!")
-
-    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_test_key")
-
-    monkeypatch.setattr(settings, "RESEND_FROM_EMAIL", "unverified@domain.com")
-
-    def mock_dispatch_fail(to_email, raw_token, base_url):
-
-        raise RuntimeError("Resend API error (403): Domain not verified. Please verify domain at resend.com/domains")
-
-    monkeypatch.setattr(auth_service, "_dispatch_reset_email_resend", mock_dispatch_fail)
-
-    res = client.post("/api/auth/forgot-password", json={"email": email})
-
-    assert res.status_code == 500
-
-    assert "domain not verified" in res.json()["detail"].lower()
-
-def test_resend_sandbox_restriction_external_email_fallback(monkeypatch):
-
-    """Verifies that when Resend rejects external recipient in sandbox mode, a testing reset token is returned."""
-
-    email = "different.user@testfinancial.com"
-
-    auth_service.register_user("Different User", email, "SecurePassword123!")
-
-    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_test_key")
-
-    def mock_sandbox_fail(to_email, raw_token, base_url):
-
-        raise RuntimeError("Resend API error (403): You can only send testing emails to your own email address (saipaladi73@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains")
-
-    monkeypatch.setattr(auth_service, "_dispatch_reset_email_resend", mock_sandbox_fail)
-
-    res = client.post("/api/auth/forgot-password", json={"email": email})
-
-    assert res.status_code == 200
-
-    data = res.json()
-
-    assert data["status"] == "sandbox_mode"
-
-    assert data["dev_reset_token"] is not None
-
-    assert "sandbox mode" in data["message"].lower()
-
+    assert len(dispatched) == 0
+    assert "if that email address is registered" in res.json()["message"].lower()

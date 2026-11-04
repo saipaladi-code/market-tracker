@@ -115,12 +115,12 @@ async def _warmup_background():
 @app.on_event("startup")
 async def startup_event():
     logger.info("Initializing Financial Market Sentiment Tracker API (non-blocking)...")
-    if settings.resend_api_key:
-        logger.info(f"Outbound Email: Resend HTTPS configured (sender: {settings.resend_from_email or 'NOT SET'}).")
+    if settings.brevo_api_key:
+        logger.info(f"Outbound Email: Brevo HTTPS configured (sender: {settings.brevo_from_email or 'NOT SET'}, name: {settings.brevo_sender_name}).")
     elif settings.smtp_host:
         logger.info(f"Outbound Email: Legacy SMTP configured ({settings.smtp_host}:{settings.smtp_port}).")
     else:
-        logger.warning("Outbound Email: No email service configured (set RESEND_API_KEY and RESEND_FROM_EMAIL).")
+        logger.warning("Outbound Email: No email service configured (set BREVO_API_KEY and BREVO_FROM_EMAIL).")
     # Launch background warmup so Uvicorn binds to $PORT immediately
     asyncio.create_task(_warmup_background())
 
@@ -187,13 +187,13 @@ def get_health():
             "has_key": bool(settings.GEMINI_API_KEY)
         },
         "email_service": {
-            "provider": "Resend HTTPS API" if settings.resend_api_key else ("SMTP" if settings.smtp_host else "Unconfigured"),
+            "provider": "Brevo Transactional Email API" if settings.brevo_api_key else ("SMTP" if settings.smtp_host else "Unconfigured"),
             "configured": settings.is_email_service_configured,
-            "has_api_key": bool(settings.resend_api_key),
-            "sender_configured": bool(settings.resend_from_email or settings.smtp_from_email),
-            "transport": "HTTPS (Port 443)" if settings.resend_api_key else "SMTP (Raw Sockets)",
+            "has_api_key": bool(settings.brevo_api_key),
+            "sender_configured": bool(settings.brevo_from_email or settings.smtp_from_email),
+            "transport": "HTTPS (Port 443)" if settings.brevo_api_key else "SMTP (Raw Sockets)",
             "frontend_url": settings.frontend_url,
-            "build": "v3.0.0-resend-https"
+            "build": "v3.1.0-brevo-https"
         }
     }
 

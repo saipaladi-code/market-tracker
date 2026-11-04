@@ -233,15 +233,15 @@ class AuthService:
 
         base_url = self.get_recovery_base_url(request_origin)
 
-        # 1. Configuration Validation: Check if Resend or SMTP email service is configured
+        # 1. Configuration Validation: Check if Brevo or SMTP email service is configured
         if not is_configured:
-            # If user explicitly configured RESEND_FROM_EMAIL but forgot RESEND_API_KEY
-            explicit_from = getattr(settings, "RESEND_FROM_EMAIL", None) or os.getenv("RESEND_FROM_EMAIL")
-            if explicit_from and not settings.resend_api_key:
+            # If user explicitly configured BREVO_FROM_EMAIL but forgot BREVO_API_KEY
+            explicit_from = getattr(settings, "BREVO_FROM_EMAIL", None) or os.getenv("BREVO_FROM_EMAIL")
+            if explicit_from and not settings.brevo_api_key:
                 auth_rate_limiter.reset_key(rate_key)
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to send password recovery email: RESEND_API_KEY environment variable is missing on Render. Please configure RESEND_API_KEY in your Render dashboard."
+                    detail="Failed to send password recovery email: BREVO_API_KEY environment variable is missing on Render. Please configure BREVO_API_KEY in your Render dashboard."
                 )
 
             # In local dev / test environment without RENDER, allow dev token evaluation if neither is configured
@@ -274,7 +274,14 @@ class AuthService:
             auth_rate_limiter.reset_key(rate_key)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to send password recovery email: Outbound email service is not configured on Render. Please configure RESEND_API_KEY and RESEND_FROM_EMAIL in your Render dashboard."
+                detail="Failed to send password recovery email: Outbound email service is not configured on Render. Please configure BREVO_API_KEY and BREVO_FROM_EMAIL in your Render dashboard."
+            )
+
+        if settings.brevo_api_key and not settings.brevo_from_email:
+            auth_rate_limiter.reset_key(rate_key)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send password recovery email: BREVO_FROM_EMAIL environment variable is missing on Render. Please configure your verified Brevo sender email in your Render dashboard."
             )
 
         # 2. If user exists, invalidate previous active tokens and dispatch new recovery email
@@ -299,28 +306,19 @@ class AuthService:
             }
             db.insert_one("password_resets", reset_doc)
 
-            # Primary: Resend HTTPS API
-            if settings.resend_api_key:
+            # Primary: Brevo Transactional Email API (HTTPS Port 443)
+            if settings.brevo_api_key:
                 try:
-                    self._dispatch_reset_email_resend(normalized_email, raw_token, base_url)
+                    self._dispatch_reset_email_brevo(
+                        to_email=normalized_email,
+                        to_name=user.get("full_name"),
+                        raw_token=raw_token,
+                        base_url=base_url
+                    )
                 except Exception as e:
                     auth_rate_limiter.reset_key(rate_key)
                     err_msg = str(e)
-                    logger.error(f"[RESEND_DISPATCH_ERROR] Failed to dispatch password recovery email via Resend HTTPS: {err_msg}", exc_info=True)
-
-                    # If Resend sandbox restricts external recipients when using onboarding@resend.dev:
-                    if "only send testing emails to your own email address" in err_msg.lower():
-                        logger.warning(
-                            f"[RESEND_SANDBOX_RESTRICTION] Recipient {normalized_email} cannot receive email via onboarding@resend.dev sandbox. "
-                            "Providing direct reset link so testing can proceed without a custom domain."
-                        )
-                        return {
-                            "message": "Resend Sandbox Mode: Outbound delivery to external email addresses is restricted until a custom domain is verified at resend.com/domains. You can test password recovery directly using the link below.",
-                            "status": "sandbox_mode",
-                            "smtp_configured": True,
-                            "dev_reset_token": raw_token
-                        }
-
+                    logger.error(f"[BREVO_DISPATCH_ERROR] Failed to dispatch password recovery email via Brevo HTTPS: {err_msg}", exc_info=True)
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail=f"Failed to send password recovery email: {err_msg}"
@@ -418,114 +416,195 @@ class AuthService:
             "status": "success"
         }
 
-    def _dispatch_reset_email_resend(self, to_email: str, raw_token: str, base_url: str) -> Dict[str, Any]:
+    def _dispatch_reset_email_brevo(self, to_email: str, to_name: Optional[str], raw_token: str, base_url: str) -> Dict[str, Any]:
         """
-        Dispatches an HTML password recovery email via the Resend HTTPS API (Port 443).
-        Eliminates reliance on raw SMTP socket ports (587/465) which are blocked by cloud firewalls.
+        Dispatches an HTML password recovery email via the official Brevo Transactional Email API (Port 443).
+        Official Documentation: https://developers.brevo.com/docs/send-a-transactional-email
+        API Endpoint: POST https://api.brevo.com/v3/smtp/email
         """
-        api_key = settings.resend_api_key
+        api_key = settings.brevo_api_key
         if not api_key:
-            raise RuntimeError("RESEND_API_KEY is not configured in backend environment variables.")
+            raise RuntimeError("BREVO_API_KEY is not configured in backend environment variables.")
 
-        from_email = settings.resend_from_email
-        if not from_email:
-            raise RuntimeError("RESEND_FROM_EMAIL is not configured. Please specify a verified sender in Render environment variables.")
+        from_email_raw = settings.brevo_from_email
+        if not from_email_raw:
+            raise RuntimeError("BREVO_FROM_EMAIL is not configured. Please specify a verified sender in Render environment variables.")
 
-        sender = from_email if ("<" in from_email and ">" in from_email) else f"FIN-SENTIMENT Security <{from_email}>"
+        # Parse sender email and display name cleanly
+        sender_email = from_email_raw.strip()
+        sender_name = settings.brevo_sender_name
+
+        if "<" in from_email_raw and ">" in from_email_raw:
+            try:
+                name_part = from_email_raw.split("<")[0].strip().strip('"').strip("'")
+                email_part = from_email_raw.split("<")[1].split(">")[0].strip()
+                if name_part:
+                    sender_name = name_part
+                if email_part:
+                    sender_email = email_part
+            except Exception:
+                pass
+
         reset_url = f"{base_url.rstrip('/')}/reset-password?token={raw_token}"
 
         text_content = (
-            f"FIN-SENTIMENT Password Reset\n\n"
-            f"You requested a password reset for your FIN-SENTIMENT account.\n"
-            f"Use the link below to set a new password:\n{reset_url}\n\n"
-            f"This single-use link expires in 15 minutes.\n"
-            f"If you did not request this, please ignore this email.\n"
+            "Hello,\n\n"
+            "We received a request to reset your FIN-SENTIMENT account password.\n"
+            "Click the button below to create a new password:\n"
+            f"{reset_url}\n\n"
+            "This link expires in 15 minutes.\n"
+            "If you did not request this password reset, you can safely ignore this email.\n\n"
+            "Regards,\n"
+            "FIN-SENTIMENT Team\n"
         )
-        html_content = f"""
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #070b14; color: #f8fafc; padding: 32px 16px;">
-            <div style="max-width: 520px; margin: 0 auto; background-color: #0f172a; border: 1px solid #1c2b4a; border-radius: 16px; padding: 32px;">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 24px;">
-                    <span style="font-size: 18px; font-weight: 800; color: #ffffff; letter-spacing: 0.05em;">FIN-SENTIMENT</span>
-                    <span style="background: rgba(59,130,246,0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">SECURITY</span>
-                </div>
-                <h2 style="font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 0;">Reset your FIN-SENTIMENT password</h2>
-                <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">You recently requested to reset the password for your FIN-SENTIMENT intelligence terminal account. Click the button below to establish a new password.</p>
-                <div style="margin: 28px 0; text-align: center;">
-                    <a href="{reset_url}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: linear-gradient(135deg, #2563eb, #06b6d4); color: #ffffff; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 8px;">Reset Password</a>
-                </div>
-                <p style="color: #64748b; font-size: 12px; line-height: 1.5;">This single-use token will expire in <strong>15 minutes</strong>. If you did not make this request, you can safely ignore this email.</p>
-                <p style="color: #475569; font-size: 11px; word-break: break-all; margin-top: 20px;">If the button above does not work, copy and paste this link into your browser:<br/><a href="{reset_url}" target="_blank" rel="noopener noreferrer" style="color: #38bdf8;">{reset_url}</a></p>
-            </div>
-        </div>
-        """
+
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset your FIN-SENTIMENT password</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #070b14; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #070b14; padding: 40px 16px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="100%" style="max-width: 540px; background-color: #0f172a; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+                    <tr>
+                        <td style="padding: 32px 32px 20px 32px; border-bottom: 1px solid #1e293b;">
+                            <span style="font-size: 18px; font-weight: 800; color: #ffffff; letter-spacing: 0.05em;">FIN-SENTIMENT</span>
+                            <span style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">SECURITY</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 32px;">
+                            <h2 style="font-size: 20px; font-weight: 700; color: #ffffff; margin: 0 0 16px 0;">Reset your FIN-SENTIMENT password</h2>
+                            <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">Hello,</p>
+                            <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 24px 0;">We received a request to reset your FIN-SENTIMENT account password. Click the button below to create a new password.</p>
+                            <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 28px 0;">
+                                <tr>
+                                    <td align="center" style="border-radius: 8px; background: linear-gradient(135deg, #2563eb, #06b6d4);">
+                                        <a href="{reset_url}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 14px 32px; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 8px; letter-spacing: 0.025em;">RESET PASSWORD</a>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="color: #f59e0b; font-size: 12px; font-weight: 600; line-height: 1.5; margin: 20px 0 12px 0;">This link expires in 15 minutes.</p>
+                            <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin: 0 0 24px 0;">If you did not request this password reset, you can safely ignore this email.</p>
+                            <div style="border-top: 1px solid #1e293b; padding-top: 20px; margin-top: 24px;">
+                                <p style="color: #64748b; font-size: 11px; line-height: 1.5; margin: 0 0 8px 0;">If the button above does not work, copy and paste this link into your browser:</p>
+                                <p style="margin: 0; word-break: break-all;"><a href="{reset_url}" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; font-size: 11px; text-decoration: underline;">{reset_url}</a></p>
+                            </div>
+                            <div style="margin-top: 24px;">
+                                <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 0;">Regards,<br><strong style="color: #ffffff;">FIN-SENTIMENT Team</strong></p>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+
+        recipient_entry: Dict[str, str] = {"email": to_email}
+        if to_name and to_name.strip():
+            recipient_entry["name"] = to_name.strip()
 
         payload = {
-            "from": sender,
-            "to": [to_email],
+            "sender": {
+                "name": sender_name,
+                "email": sender_email
+            },
+            "to": [recipient_entry],
             "subject": "Reset your FIN-SENTIMENT password",
-            "html": html_content,
-            "text": text_content
+            "htmlContent": html_content,
+            "textContent": text_content
+        }
+
+        headers = {
+            "accept": "application/json",
+            "api-key": api_key,
+            "content-type": "application/json",
+            "user-agent": "FIN-SENTIMENT-Auth/1.0"
         }
 
         try:
             import httpx
             with httpx.Client(timeout=10.0) as client:
                 res = client.post(
-                    "https://api.resend.com/emails",
+                    "https://api.brevo.com/v3/smtp/email",
                     json=payload,
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                        "User-Agent": "FIN-SENTIMENT-Auth/1.0"
-                    }
+                    headers=headers
                 )
-                if res.status_code in (200, 201):
+                if res.status_code in (200, 201, 202):
                     res_json = res.json()
-                    logger.info(f"Password reset email accepted by Resend API (id={res_json.get('id')}) for recipient.")
-                    return res_json
+                    message_id = res_json.get("messageId") or res_json.get("id")
+                    logger.info(f"Password reset email accepted by Brevo API (messageId={message_id}) for recipient.")
+                    return {"messageId": message_id, "status": "accepted"}
 
                 try:
                     err_json = res.json()
-                    err_detail = err_json.get("message") or str(err_json)
+                    err_detail = err_json.get("message") or err_json.get("code") or str(err_json)
                 except Exception:
                     err_detail = res.text or f"HTTP {res.status_code}"
 
-                logger.error(f"Resend HTTPS API returned error ({res.status_code}): {err_detail}")
-                raise RuntimeError(f"Resend API error ({res.status_code}): {err_detail}")
+                if res.status_code == 401:
+                    logger.error("Brevo API 401 Unauthorized: Invalid or missing API key.")
+                    raise RuntimeError(f"Brevo API authentication failed (401 Unauthorized): Invalid Brevo API key. Please verify BREVO_API_KEY in Render. Details: {err_detail}")
+                elif res.status_code == 400:
+                    logger.error(f"Brevo API 400 Bad Request: {err_detail}")
+                    raise RuntimeError(f"Brevo API rejected request (400 Bad Request): {err_detail}. Please ensure BREVO_FROM_EMAIL ('{sender_email}') is an authorized and verified sender in Brevo.")
+                elif res.status_code == 402:
+                    logger.error(f"Brevo API 402 Payment Required: {err_detail}")
+                    raise RuntimeError(f"Brevo account credit limit reached (402 Payment Required): {err_detail}")
+                elif res.status_code == 403:
+                    logger.error(f"Brevo API 403 Forbidden: {err_detail}")
+                    raise RuntimeError(f"Brevo API error (403 Forbidden): {err_detail}. Please ensure transactional emails are activated in your Brevo account.")
+                elif res.status_code == 429:
+                    logger.error(f"Brevo API 429 Rate Limit: {err_detail}")
+                    raise RuntimeError(f"Brevo API rate limit exceeded (429 Too Many Requests): {err_detail}. Please try again shortly.")
+                else:
+                    logger.error(f"Brevo API error ({res.status_code}): {err_detail}")
+                    raise RuntimeError(f"Brevo API error ({res.status_code}): {err_detail}")
+
         except ImportError:
             req_bytes = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(
-                "https://api.resend.com/emails",
+                "https://api.brevo.com/v3/smtp/email",
                 data=req_bytes,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "FIN-SENTIMENT-Auth/1.0"
-                },
+                headers=headers,
                 method="POST"
             )
             try:
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     resp_data = json.loads(resp.read().decode("utf-8"))
-                    logger.info(f"Password reset email accepted by Resend API (id={resp_data.get('id')}) for recipient.")
-                    return resp_data
+                    message_id = resp_data.get("messageId") or resp_data.get("id")
+                    logger.info(f"Password reset email accepted by Brevo API (messageId={message_id}) for recipient.")
+                    return {"messageId": message_id, "status": "accepted"}
             except urllib.error.HTTPError as he:
                 err_text = he.read().decode("utf-8", errors="replace")
                 try:
                     err_j = json.loads(err_text)
-                    err_detail = err_j.get("message") or err_text
+                    err_detail = err_j.get("message") or err_j.get("code") or err_text
                 except Exception:
                     err_detail = err_text
-                logger.error(f"Resend HTTPS API HTTPError ({he.code}): {err_detail}")
-                raise RuntimeError(f"Resend API error ({he.code}): {err_detail}") from he
+                if he.code == 401:
+                    raise RuntimeError(f"Brevo API authentication failed (401 Unauthorized): Invalid Brevo API key. Details: {err_detail}") from he
+                elif he.code == 400:
+                    raise RuntimeError(f"Brevo API rejected request (400 Bad Request): {err_detail}. Please ensure BREVO_FROM_EMAIL ('{sender_email}') is verified in Brevo.") from he
+                elif he.code == 403:
+                    raise RuntimeError(f"Brevo API error (403 Forbidden): {err_detail}. Verify transactional email activation in Brevo.") from he
+                elif he.code == 429:
+                    raise RuntimeError(f"Brevo API rate limit exceeded (429): {err_detail}") from he
+                raise RuntimeError(f"Brevo API error ({he.code}): {err_detail}") from he
             except Exception as ue:
-                logger.error(f"Resend HTTPS API connection failure: {ue}")
-                raise RuntimeError(f"Failed to connect to Resend API: {str(ue)}") from ue
+                logger.error(f"Brevo HTTPS connection failure: {ue}")
+                raise RuntimeError(f"Failed to connect to Brevo API: {str(ue)}") from ue
         except RuntimeError:
             raise
         except Exception as e:
-            logger.error(f"Resend dispatch unexpected error: {e}")
-            raise RuntimeError(f"Resend delivery error: {str(e)}") from e
+            logger.error(f"Brevo dispatch unexpected error: {e}")
+            raise RuntimeError(f"Brevo delivery error: {str(e)}") from e
 
     def _dispatch_reset_email(self, to_email: str, raw_token: str, base_url: str):
         """Sends an HTML password recovery email via configured SMTP relay."""
