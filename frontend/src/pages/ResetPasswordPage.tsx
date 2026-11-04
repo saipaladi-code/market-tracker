@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { TrendingUp, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Loader2, ArrowRight, KeyRound } from 'lucide-react';
+import { TrendingUp, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
 import { LanguageSelector } from '../components/LanguageSelector';
 
 export const ResetPasswordPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // 1. Automatically extract token from URL query parameters (e.g. ?token=ABC123)
   const queryParams = new URLSearchParams(location.search);
   const initialToken = queryParams.get('token') || '';
 
+  // 2. Temporary frontend state (never stored in localStorage, never logged, never rendered as visible text)
   const [token, setToken] = useState(initialToken);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -17,10 +20,19 @@ export const ResetPasswordPage: React.FC = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [isTokenInvalid, setIsTokenInvalid] = useState(!initialToken.trim());
   const [success, setSuccess] = useState(false);
   const [countdown, setCountdown] = useState(3);
 
-  React.useEffect(() => {
+  // Clear temporary token state when component unmounts
+  useEffect(() => {
+    return () => {
+      setToken('');
+    };
+  }, []);
+
+  // Countdown redirect to login upon successful password reset
+  useEffect(() => {
     if (success) {
       const interval = setInterval(() => {
         setCountdown((prev) => {
@@ -36,7 +48,7 @@ export const ResetPasswordPage: React.FC = () => {
     }
   }, [success, navigate]);
 
-  // Strength validation
+  // Password strength validation: >=8 chars, uppercase, lowercase, number
   const hasMinLength = newPassword.length >= 8;
   const hasUpperCase = /[A-Z]/.test(newPassword);
   const hasLowerCase = /[a-z]/.test(newPassword);
@@ -45,7 +57,8 @@ export const ResetPasswordPage: React.FC = () => {
 
   const validateForm = (): boolean => {
     if (!token.trim()) {
-      setFormError('Password recovery token is required.');
+      setIsTokenInvalid(true);
+      setFormError('Your password reset link is invalid or has expired. Please request a new password reset link.');
       return false;
     }
     if (!isPasswordValid) {
@@ -61,6 +74,7 @@ export const ResetPasswordPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return; // Prevent multiple submissions
     setFormError(null);
 
     if (!validateForm()) return;
@@ -69,9 +83,24 @@ export const ResetPasswordPage: React.FC = () => {
       setLoading(true);
       await api.resetPassword(token.trim(), newPassword);
       api.setAuthToken(null);
+      // Immediately clear sensitive token and credentials from memory
+      setToken('');
+      setNewPassword('');
+      setConfirmPassword('');
       setSuccess(true);
     } catch (err: any) {
-      setFormError(err?.response?.data?.detail || err?.message || 'Password update failed. The token may be expired or used.');
+      const detail = err?.response?.data?.detail || err?.message || '';
+      const isTokenIssue =
+        err?.response?.status === 400 ||
+        err?.response?.status === 404 ||
+        /token|expired|invalid|used/i.test(detail);
+
+      if (isTokenIssue) {
+        setIsTokenInvalid(true);
+        setFormError('Your password reset link is invalid or has expired. Please request a new password reset link.');
+      } else {
+        setFormError(detail || 'Password update failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -107,57 +136,72 @@ export const ResetPasswordPage: React.FC = () => {
             </p>
           </div>
 
-          {formError && (
-            <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2.5 text-xs text-rose-300">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <div className="flex-1 leading-relaxed">{formError}</div>
-            </div>
-          )}
-
+          {/* Success State */}
           {success ? (
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs leading-relaxed space-y-2">
                 <div className="flex items-center gap-2 font-bold text-emerald-400">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Password updated successfully.</span>
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>Password updated successfully</span>
                 </div>
                 <p>
-                  Your credentials have been securely updated. Redirecting to the analyst login page in {countdown}s...
+                  Your password has been updated successfully. Please log in with your new password.
+                </p>
+                <p className="text-emerald-400/80 text-[11px]">
+                  Redirecting to the login page in {countdown}s...
                 </p>
               </div>
 
               <div className="pt-2">
                 <Link
                   to="/login"
-                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 transition-all"
+                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 transition-all cursor-pointer"
                 >
-                  <span>Sign In with New Password</span>
+                  <span>Log in with New Password</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Reset Token Field */}
-              <div>
-                <label htmlFor="reset-token" className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Recovery Token
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                    <KeyRound className="w-4 h-4" />
-                  </div>
-                  <input
-                    id="reset-token"
-                    type="text"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    placeholder="Enter recovery token from link"
-                    disabled={loading}
-                    className="w-full bg-navy-800/90 border border-navy-750 text-slate-100 placeholder-slate-500 text-xs sm:text-sm rounded-xl pl-10 pr-4 py-2.5 sm:py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors disabled:opacity-50 font-mono"
-                  />
+          ) : isTokenInvalid ? (
+            /* Missing, Invalid, or Expired Token State */
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3 text-xs text-rose-300 leading-relaxed">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-rose-300 mb-1">Invalid or Expired Link</p>
+                  <p className="text-slate-300">
+                    Your password reset link is invalid or has expired. Please request a new password reset link.
+                  </p>
                 </div>
               </div>
+
+              <div className="pt-2 space-y-3">
+                <Link
+                  to="/forgot-password"
+                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 transition-all cursor-pointer"
+                >
+                  <span>Request New Password Reset Link</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                <div className="text-center pt-2">
+                  <Link
+                    to="/login"
+                    className="text-xs text-slate-400 hover:text-white transition-colors"
+                  >
+                    Cancel & Return to Login
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Valid Token: Form with ONLY New Password and Confirm New Password */
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {formError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2.5 text-xs text-rose-300">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 leading-relaxed">{formError}</div>
+                </div>
+              )}
 
               {/* New Password Field */}
               <div>
@@ -222,6 +266,7 @@ export const ResetPasswordPage: React.FC = () => {
                 )}
               </div>
 
+              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading}
@@ -237,6 +282,7 @@ export const ResetPasswordPage: React.FC = () => {
                 )}
               </button>
 
+              {/* Cancel Link */}
               <div className="pt-3 border-t border-navy-750/60 text-center">
                 <Link
                   to="/login"
