@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LanguageSelector } from './LanguageSelector';
+import { BrokerSelector } from './BrokerSelector';
 import { useTranslation } from 'react-i18next';
 import {
   RefreshCw,
@@ -212,6 +213,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           <Clock className="w-3.5 h-3.5 text-blue-400" />
           <span>Synced: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : 'Live'}</span>
         </div>
+
+        {/* Global Broker Selector (Upstox / Groww) */}
+        <BrokerSelector variant="navbar" />
 
         {/* Global Multilingual Selector */}
         <LanguageSelector />

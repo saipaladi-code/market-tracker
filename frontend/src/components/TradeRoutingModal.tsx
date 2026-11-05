@@ -16,7 +16,7 @@ import {
 import { Article, CompanyTradingRoute, BrokerDestination } from '../types';
 import { SentimentBadge } from './SentimentBadge';
 import { brokerNavigationService, NavigationResult } from '../services/brokerNavigationService';
-import { BrokerId, getSelectedBroker, setSelectedBrokerPreference } from '../utils/brokerConfig';
+import { BrokerId, getSelectedBroker, setSelectedBrokerPreference, hasUserSelectedBroker } from '../utils/brokerConfig';
 
 interface TradeRoutingModalProps {
   isOpen: boolean;
@@ -260,6 +260,17 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
           {/* CASE 1: Supported Indian Stock (Reliance, TCS, Infosys, Marico, etc.) */}
           {!loading && route && isIndianSupported && (
             <div className="space-y-4">
+              {/* Broker Selection Header */}
+              <div className="flex items-center justify-between text-xs px-1 text-slate-300">
+                <span className="font-semibold flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Choose Broker Destination:</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">
+                  {hasUserSelectedBroker() ? 'Preference Saved' : 'Click to Select & Save'}
+                </span>
+              </div>
+
               {/* Broker Switcher Tabs */}
               <div className="p-1 rounded-xl bg-navy-950 border border-navy-800 flex items-center gap-1">
                 <button
@@ -270,6 +281,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                       ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40 border border-blue-400/40'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-navy-850'
                   }`}
+                  title="Select Upstox Pro as broker destination"
                 >
                   <span>Upstox Pro</span>
                   {isUpstox && <Check className="w-3.5 h-3.5 text-blue-200" />}
@@ -282,6 +294,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                       ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/40 border border-emerald-400/40'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-navy-850'
                   }`}
+                  title="Select Groww as broker destination"
                 >
                   <span>Groww</span>
                   {!isUpstox && <Check className="w-3.5 h-3.5 text-emerald-200" />}

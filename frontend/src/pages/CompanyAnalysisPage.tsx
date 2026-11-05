@@ -45,7 +45,7 @@ export const CompanyAnalysisPage: React.FC = () => {
   const location = useLocation();
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
-  const [selectedBroker] = useBrokerPreference();
+  const [selectedBroker, , hasExplicitBroker] = useBrokerPreference();
 
   // Read URL query parameter if user navigated from search bar or dashboard
   useEffect(() => {
@@ -356,7 +356,11 @@ export const CompanyAnalysisPage: React.FC = () => {
                       {(() => {
                         const hlInst = resolveVerifiedInstrument(art.company, art.ticker) || resolveVerifiedInstrument(activeSummary.company, activeSummary.ticker);
                         const isIndian = hlInst?.country === 'IN';
-                        const hlBroker = isIndian ? (selectedBroker === 'upstox' ? 'Upstox' : 'Groww') : 'US Equity';
+                        const hlBroker = isIndian
+                          ? hasExplicitBroker
+                            ? selectedBroker === 'upstox' ? 'Upstox' : 'Groww'
+                            : 'Upstox / Groww'
+                          : 'US Equity';
                         return (
                           <button
                             onClick={() => {

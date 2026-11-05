@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import { BrokerSelector } from './BrokerSelector';
 import {
   LayoutDashboard,
   Sparkles,
@@ -51,6 +52,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
+
+  // Prevent background scrolling when mobile drawer is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    };
+  }, [mobileOpen]);
+
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, badge: null, translationKey: 'nav.dashboard' },
     { name: 'Gold & Silver Intelligence', path: '/metals', icon: Coins, badge: 'NEW', badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30', translationKey: 'nav.goldSilver' },
@@ -79,9 +96,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-navy-950 border-r border-navy-750/70 select-none">
+    <div className="flex flex-col h-full h-[100dvh] bg-navy-950 border-r border-navy-750/70 select-none overflow-hidden">
       {/* Brand Header */}
-      <div className={`h-16 flex items-center px-4 border-b border-navy-750/60 justify-between ${isCollapsed ? 'justify-center px-2' : ''}`}>
+      <div className={`h-16 shrink-0 flex items-center px-4 border-b border-navy-750/60 justify-between ${isCollapsed ? 'justify-center px-2' : ''}`}>
         {!isCollapsed ? (
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 shrink-0">
@@ -112,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto min-h-0">
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
@@ -165,10 +182,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* Footer System Telemetry / Status */}
-      <div className={`p-3 border-t border-navy-750/60 bg-navy-900/60 ${isCollapsed ? 'text-center' : 'space-y-2'}`}>
+      <div className={`p-3 shrink-0 border-t border-navy-750/60 bg-navy-900/60 mt-auto ${isCollapsed ? 'text-center' : 'space-y-2'}`}>
         {!isCollapsed ? (
           <>
-            <div className="flex flex-wrap items-center justify-between text-[11px] gap-1">
+            {/* Broker Selection Interface */}
+            <BrokerSelector variant="sidebar" />
+
+            <div className="flex flex-wrap items-center justify-between text-[11px] gap-1 pt-1 border-t border-navy-750/50">
               <span className="text-slate-400 flex items-center gap-1.5 shrink-0">
                 <Cpu className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                 <span>FinBERT AI</span>
@@ -278,9 +298,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Desktop Persistent Sidebar */}
+      {/* Desktop Persistent Fixed Sidebar */}
       <aside
-        className={`hidden md:block shrink-0 transition-all duration-200 h-screen sticky top-0 z-30 ${
+        className={`hidden md:flex flex-col shrink-0 h-screen h-[100dvh] sticky top-0 z-30 transition-all duration-200 overflow-hidden ${
           isCollapsed ? 'w-20' : 'w-64 lg:w-72'
         }`}
       >
@@ -297,7 +317,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Mobile Slide-in Drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 w-72 sm:w-80 max-w-[85vw] z-50 md:hidden transform transition-transform duration-200 ease-in-out ${
+        className={`fixed inset-y-0 left-0 w-72 sm:w-80 max-w-[85vw] h-full h-[100dvh] z-50 md:hidden transform transition-transform duration-200 ease-in-out ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

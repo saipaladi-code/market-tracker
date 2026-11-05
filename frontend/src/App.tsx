@@ -100,8 +100,8 @@ function AuthenticatedLayout() {
   const modelStatus = healthData?.model?.status || 'ready';
 
   return (
-    <div className="flex min-h-screen bg-navy-950 text-slate-100 selection:bg-blue-600 selection:text-white antialiased font-sans">
-      {/* Navigation Sidebar */}
+    <div className="flex h-screen h-[100dvh] overflow-hidden bg-navy-950 text-slate-100 selection:bg-blue-600 selection:text-white antialiased font-sans">
+      {/* Navigation Sidebar: Fixed on the screen, does not scroll with main content */}
       <Sidebar
         modelStatus={modelStatus}
         isDemo={isDemo}
@@ -116,7 +116,7 @@ function AuthenticatedLayout() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-full h-[100dvh] overflow-hidden">
         <Navbar
           lastUpdated={lastRefreshed}
           isDemo={isDemo}
@@ -126,8 +126,11 @@ function AuthenticatedLayout() {
           onOpenBackendSettings={() => setShowBackendModal(true)}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto overflow-y-auto">
-          <Outlet />
+        {/* Scrollable Page Content: Only this container scrolls vertically */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 min-h-0">
+          <div className="max-w-7xl w-full mx-auto">
+            <Outlet />
+          </div>
         </main>
 
         {/* Toast Notification Pill */}

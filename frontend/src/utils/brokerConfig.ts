@@ -6,6 +6,19 @@ export const BROKER_STORAGE_KEY = 'FIN_SENTIMENT_PREFERRED_BROKER';
 export const BROKER_CHANGE_EVENT = 'fin-sentiment-broker-changed';
 
 /**
+ * Returns whether the user has explicitly selected a broker (stored in localStorage).
+ */
+export function hasUserSelectedBroker(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const stored = window.localStorage.getItem(BROKER_STORAGE_KEY);
+    return stored === 'groww' || stored === 'upstox';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Returns the currently preferred broker from localStorage or defaults to 'upstox'.
  */
 export function getSelectedBroker(): BrokerId {
@@ -48,23 +61,32 @@ export function getBrokerDisplayName(broker: BrokerId): string {
 
 /**
  * React hook to read and update the active broker preference reactively.
+ * Returns [selectedBroker, setBroker, hasExplicitSelection].
  */
-export function useBrokerPreference(): [BrokerId, (b: BrokerId) => void] {
+export function useBrokerPreference(): [BrokerId, (b: BrokerId) => void, boolean] {
   const [broker, setBrokerState] = useState<BrokerId>(getSelectedBroker);
+  const [hasExplicit, setHasExplicit] = useState<boolean>(hasUserSelectedBroker);
 
   useEffect(() => {
     const handleCustomChange = (e: Event) => {
       const customEvent = e as CustomEvent<{ broker?: BrokerId }>;
       if (customEvent.detail?.broker) {
         setBrokerState(customEvent.detail.broker);
+        setHasExplicit(true);
       } else {
         setBrokerState(getSelectedBroker());
+        setHasExplicit(hasUserSelectedBroker());
       }
     };
 
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === BROKER_STORAGE_KEY && (e.newValue === 'upstox' || e.newValue === 'groww')) {
-        setBrokerState(e.newValue);
+      if (e.key === BROKER_STORAGE_KEY) {
+        if (e.newValue === 'upstox' || e.newValue === 'groww') {
+          setBrokerState(e.newValue);
+          setHasExplicit(true);
+        } else {
+          setHasExplicit(false);
+        }
       }
     };
 
@@ -80,8 +102,8 @@ export function useBrokerPreference(): [BrokerId, (b: BrokerId) => void] {
   const setBroker = useCallback((newBroker: BrokerId) => {
     setSelectedBrokerPreference(newBroker);
     setBrokerState(newBroker);
+    setHasExplicit(true);
   }, []);
 
-  return [broker, setBroker];
+  return [broker, setBroker, hasExplicit];
 }
-

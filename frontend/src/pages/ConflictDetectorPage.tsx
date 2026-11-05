@@ -25,7 +25,7 @@ export const ConflictDetectorPage: React.FC = () => {
   const [threshold, setThreshold] = useState<number>(20); // 20% min divergence
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
-  const [selectedBroker] = useBrokerPreference();
+  const [selectedBroker, , hasExplicitBroker] = useBrokerPreference();
 
   const loadConflicts = async () => {
     try {
@@ -158,7 +158,11 @@ export const ConflictDetectorPage: React.FC = () => {
                     {(() => {
                       const inst = resolveVerifiedInstrument(conf.company, conf.ticker);
                       const isIndian = inst ? inst.country === 'IN' : true;
-                      const brokerTag = isIndian ? (selectedBroker === 'upstox' ? 'Upstox' : 'Groww') : 'US Equity';
+                      const brokerTag = isIndian
+                        ? hasExplicitBroker
+                          ? selectedBroker === 'upstox' ? 'Upstox' : 'Groww'
+                          : 'Upstox / Groww'
+                        : 'US Equity';
                       return (
                         <button
                           onClick={() => {

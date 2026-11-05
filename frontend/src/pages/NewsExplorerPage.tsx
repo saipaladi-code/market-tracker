@@ -25,6 +25,7 @@ import { SentimentBadge } from '../components/SentimentBadge';
 import { ExplainModal } from '../components/ExplainModal';
 import { TradeRoutingModal } from '../components/TradeRoutingModal';
 import { MarketContextModal } from '../components/MarketContextModal';
+import { BrokerSelector } from '../components/BrokerSelector';
 import { resolveVerifiedTicker, resolveVerifiedInstrument } from '../utils/tickerLookup';
 import { getCanonicalSentimentResult } from '../utils/canonicalSentiment';
 import { useTranslation } from 'react-i18next';
@@ -339,7 +340,7 @@ export const NewsExplorerPage: React.FC = () => {
   // Trade routing modal state
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
-  const [selectedBroker] = useBrokerPreference();
+  const [selectedBroker, , hasExplicitBroker] = useBrokerPreference();
 
   // Market context modal state
   const [selectedContextArticle, setSelectedContextArticle] = useState<Article | null>(null);
@@ -514,6 +515,11 @@ export const NewsExplorerPage: React.FC = () => {
               <span>API ERROR</span>
             </div>
           )}
+
+          {/* Quick Broker Destination Switcher */}
+          <div className="self-start md:self-auto shrink-0">
+            <BrokerSelector variant="compact" />
+          </div>
         </div>
 
         {/* Search Bar & Multi-filter Controls */}
@@ -734,7 +740,11 @@ export const NewsExplorerPage: React.FC = () => {
             const verifiedTicker = verifiedInst?.ticker || resolveVerifiedTicker(art.company, art.ticker);
             const isTradable = Boolean(verifiedInst);
             const isIndian = verifiedInst?.country === 'IN';
-            const brokerTag = isIndian ? (selectedBroker === 'upstox' ? 'Upstox' : 'Groww') : 'US Equity';
+            const brokerTag = isIndian
+              ? hasExplicitBroker
+                ? selectedBroker === 'upstox' ? 'Upstox' : 'Groww'
+                : 'Upstox / Groww'
+              : 'US Equity';
 
             return (
               <article

@@ -60,7 +60,7 @@ export const DashboardPage: React.FC = () => {
   const [showBackendModal, setShowBackendModal] = useState(false);
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
-  const [selectedBroker] = useBrokerPreference();
+  const [selectedBroker, , hasExplicitBroker] = useBrokerPreference();
   const navigate = useNavigate();
 
   const loadData = async () => {
@@ -617,7 +617,11 @@ export const DashboardPage: React.FC = () => {
               const verifiedTicker = verifiedInst?.ticker || resolveVerifiedTicker(art.company, art.ticker);
               const isTradable = Boolean(verifiedInst);
               const isIndian = verifiedInst?.country === 'IN';
-              const brokerTag = isIndian ? (selectedBroker === 'upstox' ? 'Upstox' : 'Groww') : 'US Equity';
+              const brokerTag = isIndian
+                ? hasExplicitBroker
+                  ? selectedBroker === 'upstox' ? 'Upstox' : 'Groww'
+                  : 'Upstox / Groww'
+                : 'US Equity';
 
               return (
                 <div
