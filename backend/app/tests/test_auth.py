@@ -1218,3 +1218,212 @@ def test_scenario_g_and_h_valid_reset_token_password_updated_and_old_password_fa
     # 5. Token reuse rejected
     res_reuse = client.post("/api/auth/reset-password", json={"token": token, "new_password": "YetAnotherP@ss789!"})
     assert res_reuse.status_code == 400
+
+
+# ==============================================================================
+# DYNAMIC MONGODB RECIPIENT SELECTION & BREVO PAYLOAD TESTS (TESTS A - F)
+# ==============================================================================
+
+def test_dynamic_mongodb_recipient_selection_multi_user(monkeypatch):
+    """
+    Comprehensive verification of dynamic MongoDB recipient selection:
+    TEST A: User A (saipaladi73@gmail.com) -> Dispatched to saipaladi73@gmail.com.
+    TEST B: User B (analyst.kumar@hedgefund.com) -> Dispatched to analyst.kumar@hedgefund.com.
+    TEST C: User C (patllolasaikrishnareddy0@gmail.com) -> Dispatched to patllolasaikrishnareddy0@gmail.com.
+    TEST D: Unregistered User D -> 404 rejection, no Brevo call, no reset token.
+    TEST E: Each user receives a unique reset token.
+    TEST F: Each reset link updates only the correct user's password; cross-user isolation verified.
+    """
+    user_a_email = "saipaladi73@gmail.com"
+    user_b_email = "analyst.kumar@hedgefund.com"
+    user_c_email = "patllolasaikrishnareddy0@gmail.com"
+    unregistered_email = "unregistered.stranger999@domain.org"
+
+    # Clean state
+    for e in [user_a_email, user_b_email, user_c_email, unregistered_email]:
+        db.delete_many("users", {"email": e})
+        db.delete_many("password_resets", {"email": e})
+
+    user_a_info = auth_service.register_user("Sai Paladi", user_a_email, "SaiPassword123!")
+    user_b_info = auth_service.register_user("Kumar Analyst", user_b_email, "KumarPassword123!")
+    user_c_info = auth_service.register_user("Sai Krishna Reddy", user_c_email, "KrishnaPassword123!")
+
+    # Configure Brevo sender
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-dynamic-recipient-test")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "security@finsentiment.ai")
+    monkeypatch.setattr(settings, "BREVO_SENDER_NAME", "FIN-SENTIMENT Security")
+
+    dispatched_calls = []
+
+    def mock_brevo_capture(to_email, to_name, raw_token, base_url):
+        dispatched_calls.append({
+            "to_email": to_email,
+            "to_name": to_name,
+            "token": raw_token,
+            "base_url": base_url
+        })
+        return {"messageId": f"<msg-{to_email}>", "status": "accepted"}
+
+    monkeypatch.setattr(auth_service, "_dispatch_reset_email_brevo", mock_brevo_capture)
+
+    # --------------------------------------------------------------------------
+    # TEST A: Enter saipaladi73@gmail.com -> Expected recipient: saipaladi73@gmail.com
+    # --------------------------------------------------------------------------
+    res_a = client.post("/api/auth/forgot-password", json={"email": user_a_email})
+    assert res_a.status_code == 200
+    assert len(dispatched_calls) == 1
+    assert dispatched_calls[0]["to_email"] == user_a_email
+    assert dispatched_calls[0]["to_name"] == "Sai Paladi"
+    token_a = dispatched_calls[0]["token"]
+
+    # Verify MongoDB reset document is linked to User A
+    reset_a = db.find_one("password_resets", {"email": user_a_email, "used": False})
+    assert reset_a is not None
+    assert reset_a["user_id"] == user_a_info["user"]["id"]
+
+    # --------------------------------------------------------------------------
+    # TEST B: Enter User B email -> Expected recipient: That user's own registered email
+    # --------------------------------------------------------------------------
+    res_b = client.post("/api/auth/forgot-password", json={"email": user_b_email})
+    assert res_b.status_code == 200
+    assert len(dispatched_calls) == 2
+    assert dispatched_calls[1]["to_email"] == user_b_email
+    assert dispatched_calls[1]["to_name"] == "Kumar Analyst"
+    # CRITICAL: Verify recipient is NOT saipaladi73@gmail.com and NOT BREVO_FROM_EMAIL
+    assert dispatched_calls[1]["to_email"] != user_a_email
+    assert dispatched_calls[1]["to_email"] != settings.brevo_from_email
+    token_b = dispatched_calls[1]["token"]
+
+    # Verify MongoDB reset document is linked to User B
+    reset_b = db.find_one("password_resets", {"email": user_b_email, "used": False})
+    assert reset_b is not None
+    assert reset_b["user_id"] == user_b_info["user"]["id"]
+
+    # --------------------------------------------------------------------------
+    # TEST C: Enter User C email -> Expected recipient: That third user's own registered email
+    # --------------------------------------------------------------------------
+    res_c = client.post("/api/auth/forgot-password", json={"email": user_c_email})
+    assert res_c.status_code == 200
+    assert len(dispatched_calls) == 3
+    assert dispatched_calls[2]["to_email"] == user_c_email
+    assert dispatched_calls[2]["to_name"] == "Sai Krishna Reddy"
+    # CRITICAL: Verify recipient is NOT saipaladi73@gmail.com and NOT BREVO_FROM_EMAIL
+    assert dispatched_calls[2]["to_email"] != user_a_email
+    assert dispatched_calls[2]["to_email"] != settings.brevo_from_email
+    token_c = dispatched_calls[2]["token"]
+
+    # Verify MongoDB reset document is linked to User C
+    reset_c = db.find_one("password_resets", {"email": user_c_email, "used": False})
+    assert reset_c is not None
+    assert reset_c["user_id"] == user_c_info["user"]["id"]
+
+    # --------------------------------------------------------------------------
+    # TEST D: Enter unregistered email -> Expected: 404, no token, no Brevo call
+    # --------------------------------------------------------------------------
+    res_d = client.post("/api/auth/forgot-password", json={"email": unregistered_email})
+    assert res_d.status_code == 404
+    assert len(dispatched_calls) == 3  # Count unchanged, Brevo NOT called
+    assert db.find_one("password_resets", {"email": unregistered_email}) is None
+    assert "not registered" in res_d.json()["detail"].lower()
+
+    # --------------------------------------------------------------------------
+    # TEST E: Verify each user receives a different unique reset link / token
+    # --------------------------------------------------------------------------
+    assert len({token_a, token_b, token_c}) == 3
+    assert token_a != token_b
+    assert token_b != token_c
+    assert token_a != token_c
+
+    # --------------------------------------------------------------------------
+    # TEST F: Verify reset link updates only the correct user's password
+    # --------------------------------------------------------------------------
+    new_pwd_b = "UpdatedKumarPassword456!"
+    res_reset_b = client.post("/api/auth/reset-password", json={"token": token_b, "new_password": new_pwd_b})
+    assert res_reset_b.status_code == 200
+    assert "success" in res_reset_b.json()["status"].lower()
+
+    # User B signs in with new password -> SUCCESS
+    login_b_new = client.post("/api/auth/login", json={"email": user_b_email, "password": new_pwd_b})
+    assert login_b_new.status_code == 200
+    assert "token" in login_b_new.json()
+
+    # User B signs in with old password -> FAILS (401)
+    login_b_old = client.post("/api/auth/login", json={"email": user_b_email, "password": "KumarPassword123!"})
+    assert login_b_old.status_code == 401
+
+    # User A's password remains UNCHANGED (original password works)
+    login_a = client.post("/api/auth/login", json={"email": user_a_email, "password": "SaiPassword123!"})
+    assert login_a.status_code == 200
+
+    # User C's password remains UNCHANGED (original password works)
+    login_c = client.post("/api/auth/login", json={"email": user_c_email, "password": "KrishnaPassword123!"})
+    assert login_c.status_code == 200
+
+    # Consumed token B cannot be reused
+    res_reuse = client.post("/api/auth/reset-password", json={"token": token_b, "new_password": "AnotherNewPwd789!"})
+    assert res_reuse.status_code == 400
+    assert "already been used" in res_reuse.json()["detail"].lower()
+
+
+def test_brevo_api_payload_structure_and_recipient_isolation(monkeypatch):
+    """
+    Directly tests _dispatch_reset_email_brevo to verify that:
+    1. payload['sender']['email'] matches BREVO_FROM_EMAIL.
+    2. payload['to'][0]['email'] dynamically matches the recipient registered email.
+    3. The recipient is NEVER replaced with BREVO_FROM_EMAIL or any hardcoded address.
+    """
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-live-mock-key")
+    monkeypatch.setattr(settings, "BREVO_FROM_EMAIL", "system-sender@finsentiment.ai")
+    monkeypatch.setattr(settings, "BREVO_SENDER_NAME", "FIN-SENTIMENT Alert")
+
+    captured_payloads = []
+
+    class MockResponse:
+        status_code = 201
+        def json(self):
+            return {"messageId": "<test-msg-id-123>"}
+
+    class MockHttpxClient:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def post(self, url, json=None, headers=None):
+            captured_payloads.append({"url": url, "payload": json, "headers": headers})
+            return MockResponse()
+
+    import httpx
+    monkeypatch.setattr(httpx, "Client", MockHttpxClient)
+    # Mock auto-unblock check so it doesn't try actual network call
+    monkeypatch.setattr(auth_service, "_ensure_recipient_not_blocked_in_brevo", lambda email, api_key: False)
+
+    target_user_email = "target.analyst@wallstreetfirm.org"
+    target_user_name = "Target Analyst"
+
+    res = auth_service._dispatch_reset_email_brevo(
+        to_email=target_user_email,
+        to_name=target_user_name,
+        raw_token="secure_token_abc_123",
+        base_url="https://market-tracker-umber.vercel.app"
+    )
+
+    assert res["status"] == "accepted"
+    assert len(captured_payloads) == 1
+    call = captured_payloads[0]
+    assert call["url"] == "https://api.brevo.com/v3/smtp/email"
+    assert call["headers"]["api-key"] == "xkeysib-live-mock-key"
+
+    payload = call["payload"]
+    # Sender must be system sender
+    assert payload["sender"]["email"] == "system-sender@finsentiment.ai"
+    assert payload["sender"]["name"] == "FIN-SENTIMENT Alert"
+
+    # Recipient must be the registered user email, NEVER the sender
+    assert len(payload["to"]) == 1
+    assert payload["to"][0]["email"] == target_user_email
+    assert payload["to"][0]["name"] == target_user_name
+    assert payload["to"][0]["email"] != payload["sender"]["email"]
+    assert "reset-password?token=secure_token_abc_123" in payload["htmlContent"]
+

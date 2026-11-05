@@ -167,17 +167,25 @@ class DatabaseManager:
         user = self.find_one("users", {"email": normalized})
         if user:
             return user
-        # 2. Case-insensitive lookup fallback in case email was saved with different casing
+        # 2. Case-insensitive lookup fallback in case email was saved with different casing or schema variants
         if self.is_cloud and self.db is not None:
             try:
                 regex_query = {"email": {"$regex": f"^{re.escape(normalized)}$", "$options": "i"}}
-                return self.find_one("users", regex_query)
+                user = self.find_one("users", regex_query)
+                if user:
+                    return user
+                # Also check potential field aliases (e.g. user_email or work_email)
+                user = self.find_one("users", {"user_email": {"$regex": f"^{re.escape(normalized)}$", "$options": "i"}})
+                if user:
+                    return user
+                return self.find_one("users", {"work_email": {"$regex": f"^{re.escape(normalized)}$", "$options": "i"}})
             except Exception as e:
                 logger.warning(f"Case-insensitive MongoDB user lookup error: {e}")
         else:
             db_data = self._read_local_db()
             for u in db_data.get("users", []):
-                if (u.get("email") or "").strip().lower() == normalized:
+                u_email = (u.get("email") or u.get("user_email") or u.get("work_email") or "").strip().lower()
+                if u_email == normalized:
                     return u
         return None
 

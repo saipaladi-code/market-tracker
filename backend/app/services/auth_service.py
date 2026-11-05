@@ -276,16 +276,44 @@ class AuthService:
                 detail="Database service is currently unavailable. Please try again later."
             )
 
-        # 2. IF EMAIL DOES NOT EXIST
+        # 2. IF EMAIL DOES NOT EXIST: Reject immediately without token or Brevo dispatch
         if not user:
-            masked_email = f"{normalized_email[:2]}***@{normalized_email.split('@')[-1]}" if "@" in normalized_email else "***"
-            logger.info(f"[AUTH_DIAGNOSTIC] Password recovery rejected: account not found for {masked_email}. No reset token generated; no Brevo email dispatched.")
+            masked_email = self._mask_email(normalized_email)
+            logger.info(
+                f"[AUTH_DIAGNOSTIC] Password recovery rejected: account not found for {masked_email}. "
+                f"No reset token generated; no Brevo email dispatched."
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="This email address is not registered with FIN-SENTIMENT. Please check your email address or create a new account."
             )
 
-        # 3. IF EMAIL EXISTS: Verify outbound email service configuration
+        # 3. DYNAMIC MONGODB RECIPIENT SELECTION:
+        # Retrieve recipient email strictly and dynamically from the matching MongoDB user document.
+        # NEVER hardcode saipaladi73@gmail.com as recipient.
+        # NEVER use BREVO_FROM_EMAIL as recipient (BREVO_FROM_EMAIL is strictly the sender address).
+        # NEVER use the first user in the database or a default/fallback recipient.
+        recipient_email = (
+            user.get("email")
+            or user.get("user_email")
+            or user.get("work_email")
+            or normalized_email
+        ).strip().lower()
+
+        user_id = str(user.get("id") or user.get("_id") or "")
+        recipient_name = (user.get("full_name") or user.get("name") or "").strip()
+
+        # Safe diagnostic logging verifying the MongoDB lookup match and dynamic recipient selection
+        logger.info(
+            f"[AUTH_DIAGNOSTIC] Password recovery user verified: "
+            f"user_id={user_id}, "
+            f"submitted_email={self._mask_email(normalized_email)}, "
+            f"mongo_recipient_email={self._mask_email(recipient_email)}, "
+            f"account_found=True, "
+            f"sender_configured={bool(settings.brevo_from_email)}"
+        )
+
+        # 4. Verify outbound email service configuration
         explicit_from = getattr(settings, "BREVO_FROM_EMAIL", None) or os.getenv("BREVO_FROM_EMAIL")
         if explicit_from and not settings.brevo_api_key:
             auth_rate_limiter.reset_key(rate_key)
@@ -302,11 +330,10 @@ class AuthService:
                 raw_token = secrets.token_urlsafe(32)
                 token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
                 expires_at = datetime.utcnow() + timedelta(minutes=15)
-                user_id = user.get("id") or user.get("_id")
                 try:
                     db.update_many(
                         "password_resets",
-                        {"email": normalized_email, "used": False},
+                        {"$or": [{"email": recipient_email}, {"email": normalized_email}, {"user_id": user_id}], "used": False},
                         {"used": True, "invalidated_at": datetime.utcnow().isoformat() + "Z"}
                     )
                 except Exception:
@@ -314,7 +341,7 @@ class AuthService:
                 reset_doc = {
                     "token_hash": token_hash,
                     "user_id": user_id,
-                    "email": normalized_email,
+                    "email": recipient_email,
                     "expires_at": expires_at.isoformat() + "Z",
                     "used": False,
                     "created_at": datetime.utcnow().isoformat() + "Z"
@@ -341,45 +368,48 @@ class AuthService:
                 detail="Failed to send password recovery email: BREVO_FROM_EMAIL environment variable is missing on Render. Please configure your verified Brevo sender email in your Render dashboard."
             )
 
-        # 4. Invalidate any previous active tokens for this user account in MongoDB
+        # 5. Invalidate any previous active tokens for this user account in MongoDB
         try:
             db.update_many(
                 "password_resets",
-                {"email": normalized_email, "used": False},
+                {"$or": [{"email": recipient_email}, {"email": normalized_email}, {"user_id": user_id}], "used": False},
                 {"used": True, "invalidated_at": datetime.utcnow().isoformat() + "Z"}
             )
         except Exception as e:
             logger.warning(f"Could not invalidate prior reset tokens: {e}")
 
-        # 5. Generate secure, unique single-use password-reset token (valid 15 minutes)
+        # 6. Generate secure, unique single-use password-reset token (valid 15 minutes)
         raw_token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
         expires_at = datetime.utcnow() + timedelta(minutes=15)
-        user_id = user.get("id") or user.get("_id")
 
         reset_doc = {
             "token_hash": token_hash,
             "user_id": user_id,
-            "email": normalized_email,
+            "email": recipient_email,
             "expires_at": expires_at.isoformat() + "Z",
             "used": False,
             "created_at": datetime.utcnow().isoformat() + "Z"
         }
         db.insert_one("password_resets", reset_doc)
 
-        # 6. Send recovery email to user's registered email using Brevo HTTPS API
+        # 7. Send recovery email dynamically to matching registered user's email via Brevo HTTPS API
         base_url = self.get_recovery_base_url(request_origin)
         try:
             self._dispatch_reset_email_brevo(
-                to_email=normalized_email,
-                to_name=user.get("full_name"),
+                to_email=recipient_email,
+                to_name=recipient_name or None,
                 raw_token=raw_token,
                 base_url=base_url
             )
         except Exception as e:
             auth_rate_limiter.reset_key(rate_key)
             err_msg = str(e)
-            logger.error(f"[BREVO_DISPATCH_ERROR] Failed to dispatch password recovery email via Brevo HTTPS: {err_msg}", exc_info=True)
+            logger.error(
+                f"[BREVO_DISPATCH_ERROR] Failed to dispatch password recovery email via Brevo HTTPS: "
+                f"recipient={self._mask_email(recipient_email)}, error={err_msg}",
+                exc_info=True
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to send password recovery email: {err_msg}"
@@ -557,10 +587,14 @@ class AuthService:
 </body>
 </html>"""
 
-        # Ensure recipient is not blocklisted in Brevo due to prior bounce
-        self._ensure_recipient_not_blocked_in_brevo(to_email, api_key)
+        clean_recipient = (to_email or "").strip().lower()
+        if not clean_recipient or "@" not in clean_recipient:
+            raise ValueError(f"Invalid recipient email address for recovery dispatch: '{to_email}'")
 
-        recipient_entry: Dict[str, str] = {"email": to_email}
+        # Ensure recipient is not blocklisted in Brevo due to prior bounce
+        self._ensure_recipient_not_blocked_in_brevo(clean_recipient, api_key)
+
+        recipient_entry: Dict[str, str] = {"email": clean_recipient}
         if to_name and to_name.strip():
             recipient_entry["name"] = to_name.strip()
 
@@ -598,7 +632,8 @@ class AuthService:
                         f"account_found=True, "
                         f"token_generated=True, "
                         f"brevo_called=True, "
-                        f"recipient={self._mask_email(to_email)}, "
+                        f"recipient={self._mask_email(clean_recipient)}, "
+                        f"sender={self._mask_email(sender_email)}, "
                         f"brevo_status={res.status_code}, "
                         f"message_id={message_id}, "
                         f"timestamp={datetime.utcnow().isoformat()}Z"
@@ -616,7 +651,8 @@ class AuthService:
                     f"account_found=True, "
                     f"token_generated=True, "
                     f"brevo_called=True, "
-                    f"recipient={self._mask_email(to_email)}, "
+                    f"recipient={self._mask_email(clean_recipient)}, "
+                    f"sender={self._mask_email(sender_email)}, "
                     f"brevo_status={res.status_code}, "
                     f"error={err_detail}"
                 )
@@ -657,7 +693,8 @@ class AuthService:
                         f"account_found=True, "
                         f"token_generated=True, "
                         f"brevo_called=True, "
-                        f"recipient={self._mask_email(to_email)}, "
+                        f"recipient={self._mask_email(clean_recipient)}, "
+                        f"sender={self._mask_email(sender_email)}, "
                         f"brevo_status={resp.status}, "
                         f"message_id={message_id}, "
                         f"timestamp={datetime.utcnow().isoformat()}Z"
