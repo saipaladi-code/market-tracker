@@ -99,9 +99,9 @@ export const DataQualityPage: React.FC = () => {
       ) : (
         <div className="space-y-6">
           {/* Subsystems Connectivity Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 auto-rows-fr">
             {/* FinBERT AI Engine */}
-            <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl space-y-3 shadow-sm">
+            <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl h-full flex flex-col justify-between space-y-3 shadow-sm min-w-0 break-words">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400">FinBERT AI Model</span>
                 <Cpu className="w-4 h-4 text-emerald-400" />
@@ -126,7 +126,7 @@ export const DataQualityPage: React.FC = () => {
             </div>
 
             {/* Persistence Layer */}
-            <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl space-y-3 shadow-sm">
+            <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl h-full flex flex-col justify-between space-y-3 shadow-sm min-w-0 break-words">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400">Database Persistence</span>
                 <Database className="w-4 h-4 text-blue-400" />
@@ -137,13 +137,13 @@ export const DataQualityPage: React.FC = () => {
                   {report.database_status.persistence_mode}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed truncate" title={report.database_status.message}>
+              <p className="text-[11px] text-slate-400 leading-relaxed break-words" title={report.database_status.message}>
                 {report.database_status.message}
               </p>
             </div>
 
             {/* News Provider Status */}
-            <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl space-y-3 shadow-sm">
+            <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl h-full flex flex-col justify-between space-y-3 shadow-sm min-w-0 break-words">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400">News Provider</span>
                 <Globe className="w-4 h-4 text-amber-400" />
@@ -162,7 +162,7 @@ export const DataQualityPage: React.FC = () => {
             </div>
 
             {/* AI Assistant Status */}
-            <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl space-y-3 shadow-sm">
+            <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl h-full flex flex-col justify-between space-y-3 shadow-sm min-w-0 break-words">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400">Gemini Assistant</span>
                 <BotMessageSquare className="w-4 h-4 text-purple-400" />
@@ -199,9 +199,9 @@ export const DataQualityPage: React.FC = () => {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 auto-rows-fr">
               {/* Duplicate Analysis */}
-              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800 space-y-1">
+              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800 h-full flex flex-col justify-between space-y-1 min-w-0 break-words">
                 <div className="flex items-center justify-between text-xs text-slate-400">
                   <span>Near-Duplicate Articles</span>
                   <span className="font-mono text-cyan-400 font-bold">{report.duplicate_rate}%</span>
@@ -215,7 +215,7 @@ export const DataQualityPage: React.FC = () => {
               </div>
 
               {/* Low Confidence Ratio */}
-              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800 space-y-1">
+              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800 h-full flex flex-col justify-between space-y-1 min-w-0 break-words">
                 <div className="flex items-center justify-between text-xs text-slate-400">
                   <span>Low-Confidence Tone (&lt;60%)</span>
                   <span className="font-mono text-amber-400 font-bold">{report.low_confidence_rate}%</span>
@@ -229,7 +229,7 @@ export const DataQualityPage: React.FC = () => {
               </div>
 
               {/* Missing Metadata */}
-              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800 space-y-1">
+              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800 h-full flex flex-col justify-between space-y-1 min-w-0 break-words">
                 <div className="flex items-center justify-between text-xs text-slate-400">
                   <span>Missing Source / Title</span>
                   <span className="font-mono text-emerald-400 font-bold">0% Error</span>
@@ -243,7 +243,7 @@ export const DataQualityPage: React.FC = () => {
               </div>
 
               {/* Stale Articles */}
-              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800 space-y-1">
+              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800 h-full flex flex-col justify-between space-y-1 min-w-0 break-words">
                 <div className="flex items-center justify-between text-xs text-slate-400">
                   <span>Aged Headlines (&gt;7 Days)</span>
                   <span className="font-mono text-slate-400 font-bold">Archive</span>

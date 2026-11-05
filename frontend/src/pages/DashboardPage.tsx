@@ -230,92 +230,100 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* Top KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 auto-rows-fr">
         {/* Card 1: Unique Articles Analyzed */}
-        <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl relative overflow-hidden group hover:border-navy-700 transition-all duration-200 shadow-sm">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span className="font-medium">Total Unique Articles</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-              <Layers className="w-4 h-4" />
+        <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl relative overflow-hidden group hover:border-navy-700 transition-all duration-200 shadow-sm h-full flex flex-col justify-between min-w-0">
+          <div>
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-2 gap-2">
+              <span className="font-medium min-w-0 flex-1 leading-snug break-words">Total Unique Articles</span>
+              <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+                <Layers className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-baseline gap-2 mb-2">
+              <span className="text-3xl font-extrabold font-mono text-white tracking-tight">
+                {stats.total_articles}
+              </span>
+              <span className="text-xs text-slate-400 font-mono">distinct</span>
             </div>
           </div>
-          <div className="flex items-baseline gap-2 mb-1">
-            <span className="text-3xl font-extrabold font-mono text-white tracking-tight">
-              {stats.total_articles}
-            </span>
-            <span className="text-xs text-slate-400 font-mono">distinct</span>
-          </div>
-          <div className="pt-2 border-t border-navy-800 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Deduplication Filter</span>
-            <span className="font-mono text-cyan-400 font-semibold">
+          <div className="pt-2.5 border-t border-navy-800 flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-400">
+            <span className="break-words min-w-0">Deduplication Filter</span>
+            <span className="font-mono text-cyan-400 font-semibold break-words">
               +{totalDeduplicated} duplicates ({dedupEfficiency}%)
             </span>
           </div>
         </div>
 
         {/* Card 2: Bullish Sentiment */}
-        <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl relative overflow-hidden group hover:border-emerald-500/30 transition-all duration-200 shadow-sm">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span className="font-medium">Bullish Sentiment</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <TrendingUp className="w-4 h-4" />
+        <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl relative overflow-hidden group hover:border-emerald-500/30 transition-all duration-200 shadow-sm h-full flex flex-col justify-between min-w-0">
+          <div>
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-2 gap-2">
+              <span className="font-medium min-w-0 flex-1 leading-snug break-words">Bullish Sentiment</span>
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                <TrendingUp className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-baseline gap-2 mb-2">
+              <span className="text-3xl font-extrabold font-mono text-emerald-400 tracking-tight">
+                {stats.sentiment_percentages.positive}%
+              </span>
+              <span className="text-xs text-slate-400 font-mono">
+                ({stats.sentiment_counts.positive} articles)
+              </span>
             </div>
           </div>
-          <div className="flex items-baseline gap-2 mb-1">
-            <span className="text-3xl font-extrabold font-mono text-emerald-400 tracking-tight">
-              {stats.sentiment_percentages.positive}%
-            </span>
-            <span className="text-xs text-slate-400 font-mono">
-              ({stats.sentiment_counts.positive} articles)
-            </span>
-          </div>
-          <div className="pt-2 border-t border-navy-800 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Market Stance</span>
-            <span className="font-medium text-emerald-400">Positive tone dominance</span>
+          <div className="pt-2.5 border-t border-navy-800 flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-400">
+            <span className="break-words min-w-0">Market Stance</span>
+            <span className="font-medium text-emerald-400 break-words text-right">Positive tone dominance</span>
           </div>
         </div>
 
         {/* Card 3: Neutral Sentiment */}
-        <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl relative overflow-hidden group hover:border-amber-500/30 transition-all duration-200 shadow-sm">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span className="font-medium">Neutral Sentiment</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <Minus className="w-4 h-4" />
+        <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl relative overflow-hidden group hover:border-amber-500/30 transition-all duration-200 shadow-sm h-full flex flex-col justify-between min-w-0">
+          <div>
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-2 gap-2">
+              <span className="font-medium min-w-0 flex-1 leading-snug break-words">Neutral Sentiment</span>
+              <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                <Minus className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-baseline gap-2 mb-2">
+              <span className="text-3xl font-extrabold font-mono text-amber-400 tracking-tight">
+                {stats.sentiment_percentages.neutral}%
+              </span>
+              <span className="text-xs text-slate-400 font-mono">
+                ({stats.sentiment_counts.neutral} articles)
+              </span>
             </div>
           </div>
-          <div className="flex items-baseline gap-2 mb-1">
-            <span className="text-3xl font-extrabold font-mono text-amber-400 tracking-tight">
-              {stats.sentiment_percentages.neutral}%
-            </span>
-            <span className="text-xs text-slate-400 font-mono">
-              ({stats.sentiment_counts.neutral} articles)
-            </span>
-          </div>
-          <div className="pt-2 border-t border-navy-800 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Reporting Tone</span>
-            <span className="font-medium text-amber-300">Objective reporting</span>
+          <div className="pt-2.5 border-t border-navy-800 flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-400">
+            <span className="break-words min-w-0">Reporting Tone</span>
+            <span className="font-medium text-amber-300 break-words text-right">Objective reporting</span>
           </div>
         </div>
 
         {/* Card 4: Bearish Sentiment */}
-        <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl relative overflow-hidden group hover:border-rose-500/30 transition-all duration-200 shadow-sm">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span className="font-medium">Bearish Sentiment</span>
-            <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
-              <TrendingDown className="w-4 h-4" />
+        <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl relative overflow-hidden group hover:border-rose-500/30 transition-all duration-200 shadow-sm h-full flex flex-col justify-between min-w-0">
+          <div>
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-2 gap-2">
+              <span className="font-medium min-w-0 flex-1 leading-snug break-words">Bearish Sentiment</span>
+              <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
+                <TrendingDown className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-baseline gap-2 mb-2">
+              <span className="text-3xl font-extrabold font-mono text-rose-400 tracking-tight">
+                {stats.sentiment_percentages.negative}%
+              </span>
+              <span className="text-xs text-slate-400 font-mono">
+                ({stats.sentiment_counts.negative} articles)
+              </span>
             </div>
           </div>
-          <div className="flex items-baseline gap-2 mb-1">
-            <span className="text-3xl font-extrabold font-mono text-rose-400 tracking-tight">
-              {stats.sentiment_percentages.negative}%
-            </span>
-            <span className="text-xs text-slate-400 font-mono">
-              ({stats.sentiment_counts.negative} articles)
-            </span>
-          </div>
-          <div className="pt-2 border-t border-navy-800 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Risk Index</span>
-            <span className="font-medium text-rose-400">Negative headwinds</span>
+          <div className="pt-2.5 border-t border-navy-800 flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-400">
+            <span className="break-words min-w-0">Risk Index</span>
+            <span className="font-medium text-rose-400 break-words text-right">Negative headwinds</span>
           </div>
         </div>
       </div>
@@ -454,20 +462,20 @@ export const DashboardPage: React.FC = () => {
 
           {/* Breakdown pills */}
           <div className="grid grid-cols-3 gap-2 text-center text-xs pt-1">
-            <div className="p-2.5 bg-navy-950 rounded-xl border border-navy-800">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 mx-auto mb-1" />
-              <span className="text-slate-400 block text-[10px]">Bullish</span>
-              <strong className="text-emerald-400 font-mono">{stats.sentiment_percentages.positive}%</strong>
+            <div className="p-2 sm:p-2.5 bg-navy-950 rounded-xl border border-navy-800 flex flex-col justify-between min-w-0">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 mx-auto mb-1 shrink-0" />
+              <span className="text-slate-400 block text-[10px] break-words leading-tight mb-1">Bullish</span>
+              <strong className="text-emerald-400 font-mono text-xs sm:text-sm">{stats.sentiment_percentages.positive}%</strong>
             </div>
-            <div className="p-2.5 bg-navy-950 rounded-xl border border-navy-800">
-              <div className="w-2 h-2 rounded-full bg-amber-400 mx-auto mb-1" />
-              <span className="text-slate-400 block text-[10px]">Neutral</span>
-              <strong className="text-amber-400 font-mono">{stats.sentiment_percentages.neutral}%</strong>
+            <div className="p-2 sm:p-2.5 bg-navy-950 rounded-xl border border-navy-800 flex flex-col justify-between min-w-0">
+              <div className="w-2 h-2 rounded-full bg-amber-400 mx-auto mb-1 shrink-0" />
+              <span className="text-slate-400 block text-[10px] break-words leading-tight mb-1">Neutral</span>
+              <strong className="text-amber-400 font-mono text-xs sm:text-sm">{stats.sentiment_percentages.neutral}%</strong>
             </div>
-            <div className="p-2.5 bg-navy-950 rounded-xl border border-navy-800">
-              <div className="w-2 h-2 rounded-full bg-rose-400 mx-auto mb-1" />
-              <span className="text-slate-400 block text-[10px]">Bearish</span>
-              <strong className="text-rose-400 font-mono">{stats.sentiment_percentages.negative}%</strong>
+            <div className="p-2 sm:p-2.5 bg-navy-950 rounded-xl border border-navy-800 flex flex-col justify-between min-w-0">
+              <div className="w-2 h-2 rounded-full bg-rose-400 mx-auto mb-1 shrink-0" />
+              <span className="text-slate-400 block text-[10px] break-words leading-tight mb-1">Bearish</span>
+              <strong className="text-rose-400 font-mono text-xs sm:text-sm">{stats.sentiment_percentages.negative}%</strong>
             </div>
           </div>
         </div>
@@ -494,7 +502,7 @@ export const DashboardPage: React.FC = () => {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={stats.top_discussed_companies}
-                margin={{ top: 10, right: 10, left: -20, bottom: 25 }}
+                margin={{ top: 10, right: 15, left: -10, bottom: 35 }}
                 onClick={(data: any) => {
                   if (data && data.activePayload && data.activePayload.length > 0) {
                     const comp = data.activePayload[0].payload.company;

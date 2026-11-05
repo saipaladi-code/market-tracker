@@ -105,31 +105,31 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="h-16 bg-navy-950/90 border-b border-navy-750/70 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
+    <header className="min-h-[4rem] py-2 bg-navy-950/90 border-b border-navy-750/70 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md gap-2">
       {/* Left: Mobile hamburger & Page Breadcrumb */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <button
           onClick={onOpenMobileMenu}
-          className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-navy-800 transition-colors"
+          className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-navy-800 transition-colors shrink-0"
           aria-label="Open mobile navigation"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="hidden sm:block">
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-500 font-medium">{currentMeta.section}</span>
-            <span className="text-slate-600">/</span>
-            <h1 className="font-semibold text-white tracking-tight">{currentMeta.title}</h1>
+        <div className="hidden sm:block min-w-0 max-w-[160px] md:max-w-xs lg:max-w-md">
+          <div className="flex items-center gap-1.5 text-xs truncate">
+            <span className="text-slate-500 font-medium shrink-0">{currentMeta.section}</span>
+            <span className="text-slate-600 shrink-0">/</span>
+            <h1 className="font-semibold text-white tracking-tight truncate">{currentMeta.title}</h1>
           </div>
-          <p className="text-[11px] text-slate-400 truncate max-w-md hidden lg:block">
+          <p className="text-[11px] text-slate-400 truncate hidden lg:block">
             {currentMeta.desc}
           </p>
         </div>
       </div>
 
       {/* Center: Global Search Bar */}
-      <div className="relative max-w-xs sm:max-w-sm w-full mx-2 sm:mx-4">
+      <div className="relative max-w-[180px] sm:max-w-xs md:max-w-sm w-full mx-1 sm:mx-3 min-w-0">
         <div className="relative">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input

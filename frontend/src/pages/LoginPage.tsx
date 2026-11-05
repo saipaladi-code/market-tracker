@@ -106,12 +106,12 @@ export const LoginPage: React.FC = () => {
 
         {/* Login Card */}
         <div className="mt-8 bg-navy-900/90 border border-navy-750/80 rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl">
-          <div className="flex items-center justify-between pb-5 mb-5 border-b border-navy-750/60">
-            <div>
-              <h2 className="text-base font-bold text-white tracking-tight">Analyst Sign In</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Access terminal analytics & FinBERT lab</p>
+          <div className="flex items-center justify-between pb-5 mb-5 border-b border-navy-750/60 flex-wrap gap-2 min-w-0">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-bold text-white tracking-tight break-words leading-snug">Analyst Sign In</h2>
+              <p className="text-xs text-slate-400 mt-0.5 break-words">Access terminal analytics & FinBERT lab</p>
             </div>
-            <div className="flex items-center gap-1 px-2 py-1 rounded bg-navy-800/80 border border-navy-700 text-[10px] font-mono text-cyan-400">
+            <div className="flex items-center gap-1 px-2 py-1 rounded bg-navy-800/80 border border-navy-700 text-[10px] font-mono text-cyan-400 shrink-0">
               <ShieldCheck className="w-3 h-3" />
               <span>TLS / SHA-256</span>
             </div>
@@ -158,7 +158,7 @@ export const LoginPage: React.FC = () => {
 
             {/* Password Field */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1 min-w-0">
                 <label htmlFor="login-password" className="block text-xs font-semibold text-slate-300">
                   Password
                 </label>
@@ -204,7 +204,7 @@ export const LoginPage: React.FC = () => {
                   disabled={loading}
                   className="w-4 h-4 rounded border-navy-750 bg-navy-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-navy-900 cursor-pointer"
                 />
-                <span className="text-xs text-slate-400">Remember this terminal session (30 days)</span>
+                <span className="text-xs text-slate-400 break-words">Remember this terminal session (30 days)</span>
               </label>
             </div>
 

@@ -130,16 +130,16 @@ Indicators: ${context.market_indicators.map((ind) => `${ind.name} (${ind.change 
     >
       <div className="bg-navy-900 border border-navy-750 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl space-y-5">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-navy-750 flex items-center justify-between sticky top-0 bg-navy-900/95 backdrop-blur-md z-10">
-          <div className="flex items-center gap-2.5">
+        <div className="px-5 sm:px-6 py-4 border-b border-navy-750 flex items-center justify-between sticky top-0 bg-navy-900/95 backdrop-blur-md z-10 gap-3">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 flex items-center justify-center">
               <Compass className="w-4 h-4" />
             </div>
-            <div>
-              <h3 id="market-context-title" className="font-bold text-white text-sm">
+            <div className="min-w-0 flex-1">
+              <h3 id="market-context-title" className="font-bold text-white text-sm break-words leading-snug">
                 Market Context & Macro Intelligence
               </h3>
-              <p className="text-[10px] text-slate-400 font-mono">
+              <p className="text-[10px] text-slate-400 font-mono break-words leading-tight">
                 Systemic Indicators • Sector Benchmarks • Facts vs AI Interpretation
               </p>
             </div>

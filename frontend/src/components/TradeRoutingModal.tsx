@@ -137,8 +137,8 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-navy-900 border border-navy-750 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl space-y-5">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-navy-750 flex items-center justify-between sticky top-0 bg-navy-900/95 backdrop-blur-md z-10">
-          <div className="flex items-center gap-2.5">
+        <div className="px-5 sm:px-6 py-4 border-b border-navy-750 flex items-center justify-between sticky top-0 bg-navy-900/95 backdrop-blur-md z-10 gap-3">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
               isIndianSupported 
                 ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' 
@@ -148,16 +148,16 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
             }`}>
               <TrendingUp className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="font-bold text-white text-sm">{modalTitle}</h3>
-              <p className="text-[10px] text-slate-400 font-mono">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-bold text-white text-sm break-words leading-snug">{modalTitle}</h3>
+              <p className="text-[10px] text-slate-400 font-mono break-words leading-tight">
                 {modalSubtitle}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-navy-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-navy-800 transition-colors cursor-pointer shrink-0"
             title="Close dialog"
           >
             <X className="w-5 h-5" />

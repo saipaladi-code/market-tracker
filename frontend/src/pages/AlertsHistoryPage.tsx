@@ -62,20 +62,20 @@ export const AlertsHistoryPage: React.FC = () => {
     <div className="space-y-6 pb-12">
       {/* Header Banner */}
       <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-6 backdrop-blur-md shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold uppercase tracking-wider">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold uppercase tracking-wider shrink-0">
                 RISK SURVEILLANCE & AUDIT LOG
               </span>
-              <span className="text-xs text-slate-400 font-mono">
+              <span className="text-xs text-slate-400 font-mono break-words">
                 {alerts.length} Surveillance Events
               </span>
             </div>
-            <h2 className="text-xl font-extrabold text-white tracking-tight">
+            <h2 className="text-xl font-extrabold text-white tracking-tight break-words leading-snug">
               Sentiment Alerts & Historical Timeline
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5 break-words">
               Automated notifications triggered by bearish sentiment surges (40%+) or narrative divergence spikes.
             </p>
           </div>
@@ -181,7 +181,7 @@ export const AlertsHistoryPage: React.FC = () => {
                       : 'border-amber-900/60 bg-amber-950/15'
                   }`}
                 >
-                  <div className="flex items-start gap-4">
+                  <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
                         isBearishSurge
@@ -196,7 +196,7 @@ export const AlertsHistoryPage: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0 flex-1 break-words">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-extrabold text-white text-sm">{al.company}</span>
                         <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase border ${
@@ -209,7 +209,7 @@ export const AlertsHistoryPage: React.FC = () => {
                         </span>
                       </div>
 
-                      <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+                      <p className="text-xs text-slate-300 leading-relaxed max-w-2xl break-words">
                         {al.message}
                       </p>
 

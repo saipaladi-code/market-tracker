@@ -96,12 +96,12 @@ export const SignupPage: React.FC = () => {
 
         {/* Signup Card */}
         <div className="mt-7 bg-navy-900/90 border border-navy-750/80 rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl">
-          <div className="flex items-center justify-between pb-4 mb-4 border-b border-navy-750/60">
-            <div>
-              <h2 className="text-base font-bold text-white tracking-tight">Create Account</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Register terminal access credentials</p>
+          <div className="flex items-center justify-between pb-4 mb-4 border-b border-navy-750/60 flex-wrap gap-2 min-w-0">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-bold text-white tracking-tight break-words leading-snug">Create Account</h2>
+              <p className="text-xs text-slate-400 mt-0.5 break-words">Register terminal access credentials</p>
             </div>
-            <div className="flex items-center gap-1 px-2 py-1 rounded bg-navy-800/80 border border-navy-700 text-[10px] font-mono text-cyan-400">
+            <div className="flex items-center gap-1 px-2 py-1 rounded bg-navy-800/80 border border-navy-700 text-[10px] font-mono text-cyan-400 shrink-0">
               <ShieldCheck className="w-3 h-3" />
               <span>Bcrypt / Argon2</span>
             </div>

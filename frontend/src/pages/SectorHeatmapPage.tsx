@@ -79,7 +79,7 @@ export const SectorHeatmapPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Sectors Grid (2 columns on lg) */}
-          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 auto-rows-fr">
             {sectors.map((sec) => {
               const isInsufficient = sec.article_count === 0;
               const isBullish = sec.net_sentiment_score > 0.15;
@@ -109,19 +109,19 @@ export const SectorHeatmapPage: React.FC = () => {
                 <div
                   key={sec.sector}
                   onClick={() => setSelectedSector(sec)}
-                  className={`p-5 rounded-2xl border transition-all cursor-pointer space-y-4 shadow-sm hover:shadow-md ${cardBg} ${
+                  className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between min-w-0 break-words shadow-sm hover:shadow-md ${cardBg} ${
                     isSelected ? 'ring-2 ring-blue-500 shadow-blue-500/10' : ''
                   }`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-base font-bold text-white">{sec.sector}</h3>
-                      <span className="text-[11px] text-slate-400 font-mono">
+                  <div className="flex items-start justify-between gap-2 min-w-0 mb-3">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-base font-bold text-white break-words leading-snug">{sec.sector}</h3>
+                      <span className="text-[11px] text-slate-400 font-mono break-words">
                         {isInsufficient ? 'No verified articles' : `${sec.article_count} verified articles`}
                       </span>
                     </div>
 
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <span className="text-[10px] text-slate-400 font-mono uppercase block">Net Score</span>
                       <span className={`text-lg font-extrabold font-mono ${scoreColor}`}>
                         {sec.net_sentiment_score > 0 ? `+${sec.net_sentiment_score}` : sec.net_sentiment_score}
@@ -175,7 +175,7 @@ export const SectorHeatmapPage: React.FC = () => {
           </div>
 
           {/* Drilldown Inspector Card (Right side) */}
-          <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-6 space-y-5 h-fit shadow-sm">
+          <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-5 sm:p-6 space-y-5 h-fit shadow-sm min-w-0 break-words">
             {selectedSector ? (
               <div className="space-y-4">
                 <div className="pb-4 border-b border-navy-800">
@@ -189,11 +189,11 @@ export const SectorHeatmapPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-xs flex-wrap gap-1">
                     <span className="text-slate-400">Total Sector Articles:</span>
                     <strong className="text-white font-mono">{selectedSector.article_count}</strong>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-xs flex-wrap gap-1">
                     <span className="text-slate-400">Net Tone Score:</span>
                     <strong className={`font-mono ${
                       selectedSector.net_sentiment_score > 0 ? 'text-emerald-400' : selectedSector.net_sentiment_score < 0 ? 'text-rose-400' : 'text-amber-400'
@@ -201,15 +201,15 @@ export const SectorHeatmapPage: React.FC = () => {
                       {selectedSector.net_sentiment_score > 0 ? `+${selectedSector.net_sentiment_score}` : selectedSector.net_sentiment_score}
                     </strong>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-xs flex-wrap gap-1">
                     <span className="text-slate-400">Bullish Share:</span>
                     <strong className="text-emerald-400 font-mono">{selectedSector.bullish_pct}%</strong>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-xs flex-wrap gap-1">
                     <span className="text-slate-400">Neutral Share:</span>
                     <strong className="text-amber-400 font-mono">{selectedSector.neutral_pct}%</strong>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-xs flex-wrap gap-1">
                     <span className="text-slate-400">Bearish Share:</span>
                     <strong className="text-rose-400 font-mono">{selectedSector.bearish_pct}%</strong>
                   </div>

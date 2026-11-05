@@ -721,7 +721,7 @@ export const NewsExplorerPage: React.FC = () => {
         </div>
       ) : (
         /* Articles Cards Grid */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr">
           {articles.map((art) => {
             const isDuplicate = Boolean(art.is_duplicate);
             const tr = translations[art.id];
@@ -735,7 +735,7 @@ export const NewsExplorerPage: React.FC = () => {
             return (
               <article
                 key={art.id}
-                className={`bg-navy-900/90 border rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-navy-700 hover:shadow-lg transition-all duration-200 box-border w-full min-w-0 ${
+                className={`bg-navy-900/90 border rounded-2xl p-4 sm:p-5 h-full flex flex-col justify-between hover:border-navy-700 hover:shadow-lg transition-all duration-200 box-border w-full min-w-0 break-words ${
                   isDuplicate ? 'border-amber-500/30 opacity-75' : 'border-navy-750/90'
                 }`}
               >
@@ -808,7 +808,7 @@ export const NewsExplorerPage: React.FC = () => {
                         title="Translate headline into current language"
                       >
                         <Languages className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                        <span className="whitespace-nowrap">{tr?.loading ? 'Translating...' : isTranslated ? 'Original' : 'Translate'}</span>
+                        <span className="leading-tight text-center break-words">{tr?.loading ? 'Translating...' : isTranslated ? 'Original' : 'Translate'}</span>
                       </button>
                     )}
 
@@ -822,7 +822,7 @@ export const NewsExplorerPage: React.FC = () => {
                       title="Explore macroeconomic indicators and systemic market context"
                     >
                       <Compass className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                      <span className="whitespace-nowrap">Market Context</span>
+                      <span className="leading-tight text-center break-words">Market Context</span>
                     </button>
 
                     {/* 2. Trade Button (when verified tradable instrument exists) */}
@@ -840,7 +840,7 @@ export const NewsExplorerPage: React.FC = () => {
                         title={`Trade ${verifiedInst?.company || art.company} via ${verifiedInst?.brokerName || 'broker'}`}
                       >
                         <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span className="whitespace-nowrap">Trade ({brokerTag})</span>
+                        <span className="leading-tight text-center break-words">Trade ({brokerTag})</span>
                       </button>
                     )}
 
@@ -851,7 +851,7 @@ export const NewsExplorerPage: React.FC = () => {
                       title="Inspect FinBERT token perturbation attribution"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                      <span className="whitespace-nowrap">XAI Salience</span>
+                      <span className="leading-tight text-center break-words">XAI Salience</span>
                     </button>
 
                     {/* 4. External Link Icon */}

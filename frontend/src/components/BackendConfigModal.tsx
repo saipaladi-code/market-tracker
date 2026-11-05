@@ -78,14 +78,14 @@ export const BackendConfigModal: React.FC<BackendConfigModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-navy-900 border border-navy-750 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="p-5 border-b border-navy-750 flex items-center justify-between bg-navy-950/60">
-          <div className="flex items-center gap-3">
+        <div className="p-4 sm:p-5 border-b border-navy-750 flex items-center justify-between bg-navy-950/60 gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
               <Server className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">Backend Connection Settings</h3>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base font-bold text-white break-words leading-snug">Backend Connection Settings</h3>
                 <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
                   isOffline
                     ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'

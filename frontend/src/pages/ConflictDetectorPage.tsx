@@ -47,20 +47,20 @@ export const ConflictDetectorPage: React.FC = () => {
       {/* Header & Divergence Mechanics */}
       <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-6 backdrop-blur-md shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
               <GitCompareArrows className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 font-mono text-[10px] font-bold border border-amber-500/30">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 font-mono text-[10px] font-bold border border-amber-500/30 shrink-0">
                   DIVERGENCE ENGINE
                 </span>
-                <span className="text-xs text-slate-400 font-mono">
+                <span className="text-xs text-slate-400 font-mono break-words">
                   {conflicts.length} Active Cross-Currents Flagged
                 </span>
               </div>
-              <h2 className="text-xl font-extrabold text-white tracking-tight">
+              <h2 className="text-xl font-extrabold text-white tracking-tight break-words leading-snug mt-1">
                 Bullish / Bearish Sentiment Conflict Detector
               </h2>
             </div>
@@ -83,9 +83,9 @@ export const ConflictDetectorPage: React.FC = () => {
 
         {/* Sensitivity Filter Toolbar */}
         <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-navy-800">
-          <div className="flex items-center gap-3 text-xs text-slate-300">
-            <SlidersHorizontal className="w-4 h-4 text-slate-400" />
-            <span className="font-semibold text-slate-400">Divergence Sensitivity Threshold:</span>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 min-w-0">
+            <SlidersHorizontal className="w-4 h-4 text-slate-400 shrink-0" />
+            <span className="font-semibold text-slate-400 break-words">Divergence Sensitivity Threshold:</span>
             <input
               type="range"
               min="10"
@@ -124,17 +124,17 @@ export const ConflictDetectorPage: React.FC = () => {
           {filteredConflicts.map((conf) => (
             <div
               key={conf.company}
-              className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-6 space-y-5 hover:border-navy-700 transition-all shadow-sm"
+              className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-5 sm:p-6 space-y-5 hover:border-navy-700 transition-all shadow-sm min-w-0 break-words"
             >
               {/* Card Header: Ticker, Conflict Score, Timestamp */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-navy-800">
-                <div className="flex items-center gap-3">
-                  <span className="px-3 py-1 rounded-xl bg-blue-600/20 text-blue-300 font-mono font-bold text-sm border border-blue-500/30">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-navy-800 min-w-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="px-3 py-1 rounded-xl bg-blue-600/20 text-blue-300 font-mono font-bold text-sm border border-blue-500/30 shrink-0">
                     {conf.ticker}
                   </span>
-                  <div>
-                    <h3 className="text-base font-bold text-white">{conf.company}</h3>
-                    <div className="flex items-center gap-3 text-xs text-slate-400 font-mono mt-0.5">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-bold text-white break-words leading-snug">{conf.company}</h3>
+                    <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-400 font-mono mt-0.5 flex-wrap">
                       <span className="text-emerald-400 font-semibold">+{conf.positive_count} Bullish</span>
                       <span>vs</span>
                       <span className="text-rose-400 font-semibold">-{conf.negative_count} Bearish</span>
@@ -144,7 +144,7 @@ export const ConflictDetectorPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0 flex-wrap sm:flex-nowrap">
                   <div className="text-right">
                     <span className="text-[10px] text-slate-400 font-mono uppercase block">Divergence Index</span>
                     <span className="text-base font-bold font-mono text-amber-400">
@@ -192,9 +192,9 @@ export const ConflictDetectorPage: React.FC = () => {
               </div>
 
               {/* Opposing Signals: Side-by-side columns */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 auto-rows-fr">
                 {/* Positive Signals Column */}
-                <div className="p-4 bg-emerald-950/20 border border-emerald-900/40 rounded-xl space-y-2.5">
+                <div className="p-4 bg-emerald-950/20 border border-emerald-900/40 rounded-xl space-y-2.5 h-full flex flex-col justify-between min-w-0 break-words">
                   <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase font-mono tracking-wider">
                     <TrendingUp className="w-4 h-4" />
                     <span>Positive Catalysts ({conf.positive_headlines.length})</span>
@@ -216,7 +216,7 @@ export const ConflictDetectorPage: React.FC = () => {
                 </div>
 
                 {/* Negative Signals Column */}
-                <div className="p-4 bg-rose-950/20 border border-rose-900/40 rounded-xl space-y-2.5">
+                <div className="p-4 bg-rose-950/20 border border-rose-900/40 rounded-xl space-y-2.5 h-full flex flex-col justify-between min-w-0 break-words">
                   <div className="flex items-center gap-2 text-xs font-bold text-rose-400 uppercase font-mono tracking-wider">
                     <TrendingDown className="w-4 h-4" />
                     <span>Negative Headwinds ({conf.negative_headlines.length})</span>

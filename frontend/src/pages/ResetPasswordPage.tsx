@@ -129,9 +129,9 @@ export const ResetPasswordPage: React.FC = () => {
         </div>
 
         <div className="mt-8 bg-navy-900/90 border border-navy-750/80 rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl">
-          <div className="mb-5 pb-4 border-b border-navy-750/60">
-            <h2 className="text-base font-bold text-white tracking-tight">Set New Password</h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+          <div className="mb-5 pb-4 border-b border-navy-750/60 min-w-0">
+            <h2 className="text-base font-bold text-white tracking-tight break-words leading-snug">Set New Password</h2>
+            <p className="text-xs text-slate-400 mt-0.5 break-words">
               Establish a strong password for your analyst session
             </p>
           </div>

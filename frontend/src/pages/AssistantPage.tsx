@@ -127,7 +127,7 @@ export const AssistantPage: React.FC = () => {
               key={idx}
               onClick={() => handleSend(q)}
               disabled={loading}
-              className="px-3.5 py-1.5 rounded-xl bg-navy-900/90 hover:bg-navy-850 text-slate-300 hover:text-white border border-navy-750 text-xs font-medium transition-all text-left flex items-center gap-2 cursor-pointer shadow-sm"
+              className="px-3.5 py-1.5 rounded-xl bg-navy-900/90 hover:bg-navy-850 text-slate-300 hover:text-white border border-navy-750 text-xs font-medium transition-all text-left flex items-center gap-2 cursor-pointer shadow-sm break-words leading-snug"
             >
               <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
               <span>{q}</span>
@@ -170,11 +170,11 @@ export const AssistantPage: React.FC = () => {
                       <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 font-semibold block">
                         Referenced News Citations ({m.citations.length} Verified Sources)
                       </span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 auto-rows-fr">
                         {m.citations.map((c, i) => (
                           <div
                             key={i}
-                            className="p-3 bg-navy-950 border border-navy-800 rounded-xl space-y-2 text-xs"
+                            className="p-3 bg-navy-950 border border-navy-800 rounded-xl space-y-2 text-xs h-full flex flex-col justify-between min-w-0 break-words"
                           >
                             <div className="flex items-center justify-between text-[11px]">
                               <span className="font-bold text-white font-mono">{c.company}</span>

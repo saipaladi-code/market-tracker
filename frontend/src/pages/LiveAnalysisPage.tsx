@@ -292,9 +292,9 @@ export const LiveAnalysisPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-navy-800/80">
-            <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-              <Cpu className="w-3.5 h-3.5 text-blue-400" />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2 border-t border-navy-800/80">
+            <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono flex-wrap">
+              <Cpu className="w-3.5 h-3.5 text-blue-400 shrink-0" />
               <span>Inference Engine: <strong className="text-slate-200">{result?.model_name || engineInfo}</strong></span>
             </div>
 
@@ -303,7 +303,7 @@ export const LiveAnalysisPage: React.FC = () => {
               type="button"
               onClick={() => handleAnalyze()}
               disabled={isButtonDisabled}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
                 isButtonDisabled
                   ? 'bg-slate-800/80 text-slate-500 border border-navy-750 cursor-not-allowed opacity-60'
                   : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 cursor-pointer'
@@ -402,9 +402,9 @@ export const LiveAnalysisPage: React.FC = () => {
                 Calculated from Loughran-McDonald institutional dictionary keyword counts with base uncertainty dampening. These represent relative directional weights, not calibrated model probabilities.
               </p>
             )}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 auto-rows-fr">
               {/* Bullish */}
-              <div className="bg-navy-950/80 p-4 rounded-xl border border-navy-800">
+              <div className="bg-navy-950/80 p-4 rounded-xl border border-navy-800 flex flex-col justify-between min-w-0">
                 <div className="flex items-center justify-between text-xs mb-2">
                   <span className="text-slate-400 flex items-center gap-1.5">
                     <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />

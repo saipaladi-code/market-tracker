@@ -139,10 +139,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <Icon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'}`} />
                   
                   {!isCollapsed && (
-                    <div className="flex-1 flex items-center justify-between min-w-0">
-                      <span className="truncate">{item.translationKey ? t(item.translationKey, item.name) : item.name}</span>
+                    <div className="flex-1 flex items-center justify-between min-w-0 gap-2">
+                      <span className="break-words line-clamp-2 leading-snug text-left flex-1 min-w-0">
+                        {item.translationKey ? t(item.translationKey, item.name) : item.name}
+                      </span>
                       {item.badge && (
-                        <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${item.badgeColor || 'bg-navy-800 text-slate-300 border-navy-700'}`}>
+                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${item.badgeColor || 'bg-navy-800 text-slate-300 border-navy-700'}`}>
                           {item.badge}
                         </span>
                       )}
@@ -166,20 +168,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className={`p-3 border-t border-navy-750/60 bg-navy-900/60 ${isCollapsed ? 'text-center' : 'space-y-2'}`}>
         {!isCollapsed ? (
           <>
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 flex items-center gap-1.5">
-                <Cpu className="w-3.5 h-3.5 text-blue-400" />
+            <div className="flex flex-wrap items-center justify-between text-[11px] gap-1">
+              <span className="text-slate-400 flex items-center gap-1.5 shrink-0">
+                <Cpu className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                 <span>FinBERT AI</span>
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 {modelStatus.toUpperCase()}
               </span>
             </div>
 
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 flex items-center gap-1.5">
-                <Globe className="w-3.5 h-3.5 text-cyan-400" />
+            <div className="flex flex-wrap items-center justify-between text-[11px] gap-1">
+              <span className="text-slate-400 flex items-center gap-1.5 shrink-0">
+                <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                 <span>News Feed</span>
               </span>
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border ${
@@ -279,7 +281,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Desktop Persistent Sidebar */}
       <aside
         className={`hidden md:block shrink-0 transition-all duration-200 h-screen sticky top-0 z-30 ${
-          isCollapsed ? 'w-20' : 'w-64'
+          isCollapsed ? 'w-20' : 'w-64 lg:w-72'
         }`}
       >
         {sidebarContent}
@@ -295,7 +297,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Mobile Slide-in Drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 w-72 z-50 md:hidden transform transition-transform duration-200 ease-in-out ${
+        className={`fixed inset-y-0 left-0 w-72 sm:w-80 max-w-[85vw] z-50 md:hidden transform transition-transform duration-200 ease-in-out ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

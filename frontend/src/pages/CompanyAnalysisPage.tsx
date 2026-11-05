@@ -223,43 +223,51 @@ export const CompanyAnalysisPage: React.FC = () => {
             </div>
 
             {/* Metrics Row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-5">
-              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800">
-                <span className="text-xs text-slate-400 block mb-1">Bullish Tone</span>
-                <span className="text-2xl font-extrabold font-mono text-emerald-400">
-                  {activeSummary.positive_pct}%
-                </span>
-                <span className="text-[11px] text-slate-500 block font-mono">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-5 auto-rows-fr">
+              <div className="p-3.5 sm:p-4 bg-navy-950/80 rounded-xl border border-navy-800 flex flex-col justify-between min-w-0">
+                <span className="text-xs text-slate-400 block mb-1 break-words leading-snug">Bullish Tone</span>
+                <div className="my-1">
+                  <span className="text-xl sm:text-2xl font-extrabold font-mono text-emerald-400">
+                    {activeSummary.positive_pct}%
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-500 block font-mono break-words">
                   {activeSummary.positive_count} articles
                 </span>
               </div>
 
-              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800">
-                <span className="text-xs text-slate-400 block mb-1">Neutral Tone</span>
-                <span className="text-2xl font-extrabold font-mono text-amber-400">
-                  {activeSummary.neutral_pct}%
-                </span>
-                <span className="text-[11px] text-slate-500 block font-mono">
+              <div className="p-3.5 sm:p-4 bg-navy-950/80 rounded-xl border border-navy-800 flex flex-col justify-between min-w-0">
+                <span className="text-xs text-slate-400 block mb-1 break-words leading-snug">Neutral Tone</span>
+                <div className="my-1">
+                  <span className="text-xl sm:text-2xl font-extrabold font-mono text-amber-400">
+                    {activeSummary.neutral_pct}%
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-500 block font-mono break-words">
                   {activeSummary.neutral_count} articles
                 </span>
               </div>
 
-              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800">
-                <span className="text-xs text-slate-400 block mb-1">Bearish Tone</span>
-                <span className="text-2xl font-extrabold font-mono text-rose-400">
-                  {activeSummary.negative_pct}%
-                </span>
-                <span className="text-[11px] text-slate-500 block font-mono">
+              <div className="p-3.5 sm:p-4 bg-navy-950/80 rounded-xl border border-navy-800 flex flex-col justify-between min-w-0">
+                <span className="text-xs text-slate-400 block mb-1 break-words leading-snug">Bearish Tone</span>
+                <div className="my-1">
+                  <span className="text-xl sm:text-2xl font-extrabold font-mono text-rose-400">
+                    {activeSummary.negative_pct}%
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-500 block font-mono break-words">
                   {activeSummary.negative_count} articles
                 </span>
               </div>
 
-              <div className="p-4 bg-navy-950/80 rounded-xl border border-navy-800">
-                <span className="text-xs text-slate-400 block mb-1">Mean AI Confidence</span>
-                <span className="text-2xl font-extrabold font-mono text-white">
-                  {(activeSummary.average_confidence * 100).toFixed(1)}%
-                </span>
-                <span className="text-[11px] text-slate-500 block font-mono">FinBERT Softmax</span>
+              <div className="p-3.5 sm:p-4 bg-navy-950/80 rounded-xl border border-navy-800 flex flex-col justify-between min-w-0">
+                <span className="text-xs text-slate-400 block mb-1 break-words leading-snug">Mean AI Confidence</span>
+                <div className="my-1">
+                  <span className="text-xl sm:text-2xl font-extrabold font-mono text-white">
+                    {(activeSummary.average_confidence * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-500 block font-mono break-words">FinBERT Softmax</span>
               </div>
             </div>
           </div>

@@ -8,7 +8,24 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        sans: [
+          'Inter',
+          'Noto Sans Telugu',
+          'Noto Sans Devanagari',
+          'Noto Sans Tamil',
+          'Noto Sans Kannada',
+          'Noto Sans Bengali',
+          'Noto Sans Gujarati',
+          'Noto Sans Gurmukhi',
+          'Noto Sans Malayalam',
+          'Noto Sans Oriya',
+          'Noto Sans Arabic',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'Roboto',
+          'sans-serif'
+        ],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
       colors: {

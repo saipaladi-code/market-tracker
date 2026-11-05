@@ -51,7 +51,7 @@ export const LanguageSelector: React.FC = () => {
         type="button"
       >
         <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-        <span className="font-semibold text-[11px] text-cyan-300 max-w-[80px] sm:max-w-[110px] truncate">
+        <span className="font-semibold text-[11px] text-cyan-300 max-w-[100px] sm:max-w-[140px] truncate">
           {currentLang.native}
         </span>
         <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
@@ -112,12 +112,12 @@ export const LanguageSelector: React.FC = () => {
                       : 'text-slate-300 hover:bg-navy-800/80 hover:text-white'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] uppercase px-1 py-0.5 rounded bg-navy-800 text-slate-400 border border-navy-700">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="font-mono text-[10px] uppercase px-1 py-0.5 rounded bg-navy-800 text-slate-400 border border-navy-700 shrink-0">
                       {lang.code}
                     </span>
-                    <span className="text-white text-xs font-medium">{lang.native}</span>
-                    <span className="text-slate-500 text-[11px]">({lang.name})</span>
+                    <span className="text-white text-xs font-medium break-words">{lang.native}</span>
+                    <span className="text-slate-500 text-[11px] truncate">({lang.name})</span>
                   </div>
                   {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
                 </button>

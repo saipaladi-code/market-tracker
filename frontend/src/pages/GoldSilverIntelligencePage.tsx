@@ -247,10 +247,10 @@ export const GoldSilverIntelligencePage: React.FC = () => {
             </span>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-4">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 auto-rows-fr">
             {/* International USD/oz */}
-            <div className="p-3.5 rounded-xl bg-navy-950/80 border border-navy-750">
-              <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">
+            <div className="p-3.5 rounded-xl bg-navy-950/80 border border-navy-750 flex flex-col justify-between min-w-0">
+              <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1 break-words leading-tight">
                 International (USD / oz)
               </span>
               <div className="text-2xl font-black font-mono text-white">
@@ -304,10 +304,10 @@ export const GoldSilverIntelligencePage: React.FC = () => {
             </span>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-4">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 auto-rows-fr">
             {/* International USD/oz */}
-            <div className="p-3.5 rounded-xl bg-navy-950/80 border border-navy-750">
-              <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1">
+            <div className="p-3.5 rounded-xl bg-navy-950/80 border border-navy-750 flex flex-col justify-between min-w-0">
+              <span className="text-[10px] font-mono uppercase text-slate-400 block mb-1 break-words leading-tight">
                 International (USD / oz)
               </span>
               <div className="text-2xl font-black font-mono text-white">

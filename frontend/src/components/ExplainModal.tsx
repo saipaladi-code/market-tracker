@@ -22,8 +22,8 @@ export const ExplainModal: React.FC<ExplainModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-navy-900 border border-navy-750 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl space-y-5">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-navy-750 flex items-center justify-between sticky top-0 bg-navy-900/95 backdrop-blur-md z-10">
-          <div className="flex items-center gap-2.5">
+        <div className="px-5 sm:px-6 py-4 border-b border-navy-750 flex items-center justify-between sticky top-0 bg-navy-900/95 backdrop-blur-md z-10 gap-3">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
               result?.is_fallback
                 ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400'
@@ -31,11 +31,11 @@ export const ExplainModal: React.FC<ExplainModalProps> = ({
             }`}>
               {result?.is_fallback ? <AlertTriangle className="w-4 h-4" /> : <Cpu className="w-4 h-4" />}
             </div>
-            <div>
-              <h3 className="font-bold text-white text-sm">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-bold text-white text-sm break-words leading-snug">
                 {result?.is_fallback ? 'Institutional Lexicon Keyword Attribution' : 'FinBERT Explainable AI Breakdown'}
               </h3>
-              <p className="text-[10px] text-slate-400 font-mono">
+              <p className="text-[10px] text-slate-400 font-mono break-words leading-tight">
                 {result?.is_fallback ? 'Loughran-McDonald Financial Dictionary Attribution' : 'Token Perturbation Salience'}
               </p>
             </div>
@@ -85,7 +85,7 @@ export const ExplainModal: React.FC<ExplainModalProps> = ({
               <span className="text-[10px] text-slate-400 uppercase font-mono tracking-wider font-semibold block mb-1.5">
                 {result.is_fallback ? 'Heuristic Polarity Weights (Uncalibrated Estimates)' : 'Softmax Probability Distribution'}
               </span>
-              <div className="grid grid-cols-3 gap-2.5 text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-center auto-rows-fr">
                 <div className="p-3 bg-navy-950 rounded-xl border border-navy-800">
                   <span className="text-[10px] text-slate-400 block mb-1">
                     {result.is_fallback ? 'Bullish Weight' : 'Bullish'}
