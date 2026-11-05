@@ -32,29 +32,27 @@ class AuthService:
 
     def _ensure_recipient_not_blocked_in_brevo(self, email: str, api_key: str) -> bool:
         """
-        Checks if recipient email is present on Brevo's blocked contacts list (e.g. from prior bounce).
-        If blocked, automatically clears the blocklist entry so delivery can be attempted.
-        Returns True if contact was previously blocked and was unblocked.
+        Ensures recipient email is not present on Brevo's blocked contacts list (e.g. from prior bounce).
+        Directly sends DELETE /v3/smtp/blockedContacts/{email}.
+        Returns True if contact was previously blocked and was successfully unblocked.
         """
         try:
             quoted_email = urllib.parse.quote(email.strip().lower())
             url = f"https://api.brevo.com/v3/smtp/blockedContacts/{quoted_email}"
             headers = {"accept": "application/json", "api-key": api_key}
-            req = urllib.request.Request(url, headers=headers, method="GET")
+            req = urllib.request.Request(url, headers=headers, method="DELETE")
             with urllib.request.urlopen(req, timeout=5) as resp:
-                if resp.status == 200:
-                    del_req = urllib.request.Request(url, headers=headers, method="DELETE")
-                    with urllib.request.urlopen(del_req, timeout=5) as del_resp:
-                        if del_resp.status in (200, 204):
-                            logger.warning(
-                                f"[BREVO_AUTO_UNBLOCK] Recipient {self._mask_email(email)} was found on Brevo blocklist. "
-                                "Successfully cleared blocklist entry so delivery can be retried."
-                            )
-                            return True
+                if resp.status in (200, 204):
+                    logger.warning(
+                        f"[BREVO_AUTO_UNBLOCK] Recipient {self._mask_email(email)} was found on Brevo blocklist. "
+                        "Successfully cleared blocklist entry so delivery can proceed."
+                    )
+                    return True
         except urllib.error.HTTPError as he:
-            if he.code == 404:
+            if he.code in (404, 400):
+                # Contact was not on the blocked list
                 return False
-            logger.debug(f"Brevo blockedContacts lookup HTTP status {he.code}")
+            logger.debug(f"Brevo blockedContacts DELETE HTTP status {he.code}")
         except Exception as e:
             logger.debug(f"Brevo blockedContacts check skipped: {e}")
         return False
@@ -396,7 +394,7 @@ class AuthService:
         # 7. Send recovery email dynamically to matching registered user's email via Brevo HTTPS API
         base_url = self.get_recovery_base_url(request_origin)
         try:
-            self._dispatch_reset_email_brevo(
+            dispatch_res = self._dispatch_reset_email_brevo(
                 to_email=recipient_email,
                 to_name=recipient_name or None,
                 raw_token=raw_token,
@@ -415,11 +413,34 @@ class AuthService:
                 detail=f"Failed to send password recovery email: {err_msg}"
             )
 
-        # 7. Return success response only if Brevo accepts the email request
+        message_id = dispatch_res.get("messageId") or f"<gen-{secrets.token_hex(8)}>"
+        initial_status = dispatch_res.get("delivery_status") or "accepted"
+
+        # Record email delivery attempt in MongoDB email_deliveries collection for audit and real-time tracking
+        try:
+            db.insert_one("email_deliveries", {
+                "message_id": message_id,
+                "user_id": user_id,
+                "email": recipient_email,
+                "recipient_masked": self._mask_email(recipient_email),
+                "token_hash": token_hash,
+                "delivery_status": initial_status,
+                "delivery_detail": "Request accepted by Brevo Transactional Email API; transmission queued to recipient mail server.",
+                "failure_reason": None,
+                "created_at": datetime.utcnow().isoformat() + "Z",
+                "updated_at": datetime.utcnow().isoformat() + "Z"
+            })
+        except Exception as log_err:
+            logger.warning(f"Failed to record email_deliveries entry: {log_err}")
+
+        # Rule 6: Return accurate non-deceptive status ("Recovery Request Accepted", not claiming delivered before confirmed)
         return {
-            "title": "Recovery Email Sent",
-            "message": "A password reset link has been sent to your registered email address. Please check your inbox and spam folder.",
-            "status": "dispatched",
+            "title": "Recovery Request Accepted",
+            "message": "Your password recovery request has been accepted by our email service and is currently being processed for delivery. Please check your inbox and spam folder shortly.",
+            "status": "accepted",
+            "delivery_status": initial_status,
+            "message_id": message_id,
+            "recipient_masked": self._mask_email(recipient_email),
             "smtp_configured": True,
             "dev_reset_token": None
         }
@@ -828,5 +849,156 @@ class AuthService:
         if not sent:
             logger.error(f"Failed all SMTP connection attempts to {host}: {last_error}")
             raise RuntimeError(f"Could not connect to SMTP server {host} on ports 587/465 ({type(last_error).__name__}: {last_error}).")
+
+    def get_delivery_status(self, message_id: str) -> Dict[str, Any]:
+        """
+        Inspects real-time Brevo transactional email event logs for a given message ID.
+        Determines whether the message is: accepted, delivered, deferred, blocked, hard_bounced, soft_bounced, or rejected.
+        Updates persistent database delivery tracking record in MongoDB.
+        """
+        clean_id = (message_id or "").strip()
+        if not clean_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message ID is required.")
+
+        delivery_rec = db.find_one("email_deliveries", {"message_id": clean_id})
+        recipient_masked = delivery_rec.get("recipient_masked") if delivery_rec else None
+
+        api_key = settings.brevo_api_key
+        if not api_key:
+            return {
+                "message_id": clean_id,
+                "delivery_status": delivery_rec.get("delivery_status") if delivery_rec else "accepted",
+                "detail": delivery_rec.get("delivery_detail") if delivery_rec else "Processing",
+                "failure_reason": None,
+                "recipient_masked": recipient_masked,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+
+        try:
+            import httpx
+            import urllib.parse
+            quoted = urllib.parse.quote(clean_id)
+            url = f"https://api.brevo.com/v3/smtp/statistics/events?messageId={quoted}"
+            headers = {"accept": "application/json", "api-key": api_key}
+            with httpx.Client(timeout=8.0) as client:
+                res = client.get(url, headers=headers)
+                if res.status_code == 200:
+                    events = res.json().get("events", [])
+                    final_status = "accepted"
+                    final_detail = "Accepted by email service; queued for transmission to recipient mail server."
+                    failure_reason = None
+
+                    for e in events:
+                        ev = e.get("event")
+                        if ev == "delivered":
+                            final_status = "delivered"
+                            final_detail = "Confirmed delivered to recipient mailbox."
+                            break
+                        elif ev in ("hard_bounce", "hardBounce"):
+                            final_status = "hard_bounced"
+                            failure_reason = e.get("reason") or "Recipient email address does not exist or was rejected by receiving mail server."
+                            final_detail = f"Hard bounce: {failure_reason}"
+                            break
+                        elif ev in ("soft_bounce", "softBounce"):
+                            final_status = "soft_bounced"
+                            failure_reason = e.get("reason") or "Recipient mailbox full or receiving mail server temporarily unavailable."
+                            final_detail = f"Soft bounce: {failure_reason}"
+                            break
+                        elif ev == "blocked":
+                            final_status = "blocked"
+                            failure_reason = e.get("reason") or "Recipient address was blocked by email provider suppression list."
+                            final_detail = f"Blocked: {failure_reason}"
+                            break
+                        elif ev == "deferred":
+                            final_status = "deferred"
+                            final_detail = "Delivery temporarily deferred by recipient mail server; automatic retries in progress."
+                        elif ev == "requests" and final_status == "accepted":
+                            final_status = "accepted"
+                            final_detail = "Accepted by Brevo API; queued for transmission to recipient mail server."
+
+                    if delivery_rec:
+                        db.update_one(
+                            "email_deliveries",
+                            {"message_id": clean_id},
+                            {
+                                "delivery_status": final_status,
+                                "delivery_detail": final_detail,
+                                "failure_reason": failure_reason,
+                                "events_count": len(events),
+                                "updated_at": datetime.utcnow().isoformat() + "Z"
+                            }
+                        )
+
+                    return {
+                        "message_id": clean_id,
+                        "delivery_status": final_status,
+                        "detail": final_detail,
+                        "failure_reason": failure_reason,
+                        "recipient_masked": recipient_masked,
+                        "timestamp": datetime.utcnow().isoformat() + "Z"
+                    }
+        except Exception as e:
+            logger.warning(f"Error querying Brevo delivery events for {clean_id}: {e}")
+
+        return {
+            "message_id": clean_id,
+            "delivery_status": delivery_rec.get("delivery_status") if delivery_rec else "accepted",
+            "detail": delivery_rec.get("delivery_detail") if delivery_rec else "Processing",
+            "failure_reason": None,
+            "recipient_masked": recipient_masked,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }
+
+    def record_webhook_event(self, payload: Any) -> Dict[str, Any]:
+        """
+        Processes real-time webhook delivery events from Brevo and updates tracking logs in MongoDB.
+        """
+        events = payload if isinstance(payload, list) else [payload]
+        recorded = 0
+        for ev in events:
+            if not isinstance(ev, dict):
+                continue
+            msg_id = ev.get("message-id") or ev.get("messageId")
+            ev_type = ev.get("event")
+            email = ev.get("email")
+            reason = ev.get("reason")
+            date_str = ev.get("date")
+
+            if msg_id:
+                clean_msg_id = msg_id.strip()
+                norm_status = "accepted"
+                if ev_type == "delivered":
+                    norm_status = "delivered"
+                elif ev_type in ("hard_bounce", "hardBounce"):
+                    norm_status = "hard_bounced"
+                elif ev_type in ("soft_bounce", "softBounce"):
+                    norm_status = "soft_bounced"
+                elif ev_type == "blocked":
+                    norm_status = "blocked"
+                elif ev_type == "deferred":
+                    norm_status = "deferred"
+
+                logger.info(
+                    f"[BREVO_WEBHOOK] Delivery event received: "
+                    f"message_id={clean_msg_id}, "
+                    f"event={ev_type}, "
+                    f"recipient={self._mask_email(email or '')}, "
+                    f"reason={reason}"
+                )
+
+                db.update_one(
+                    "email_deliveries",
+                    {"message_id": clean_msg_id},
+                    {
+                        "delivery_status": norm_status,
+                        "delivery_detail": f"Webhook event: {ev_type} ({reason or 'OK'})",
+                        "failure_reason": reason,
+                        "last_webhook_date": date_str,
+                        "updated_at": datetime.utcnow().isoformat() + "Z"
+                    }
+                )
+                recorded += 1
+
+        return {"status": "recorded", "events_processed": recorded}
 
 auth_service = AuthService()

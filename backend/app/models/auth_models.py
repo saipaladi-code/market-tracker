@@ -63,9 +63,20 @@ class AuthResponse(BaseModel):
 class ForgotPasswordResponse(BaseModel):
     message: str
     status: str
-    title: Optional[str] = "Recovery Email Sent"
+    title: Optional[str] = "Recovery Request Accepted"
     smtp_configured: bool
     dev_reset_token: Optional[str] = None
+    delivery_status: Optional[str] = "accepted"
+    message_id: Optional[str] = None
+    recipient_masked: Optional[str] = None
+
+class DeliveryStatusResponse(BaseModel):
+    message_id: str
+    delivery_status: str
+    detail: str
+    failure_reason: Optional[str] = None
+    recipient_masked: Optional[str] = None
+    timestamp: str
 
 class MessageResponse(BaseModel):
     message: str

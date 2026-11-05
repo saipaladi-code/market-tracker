@@ -14,6 +14,7 @@ import {
   User,
   AuthResponse,
   ForgotPasswordResponse,
+  DeliveryStatusResponse,
   MessageResponse,
   MetalsPricesResponse,
   MetalsNewsResponse,
@@ -306,6 +307,13 @@ export const api = {
       origin,
     });
     setOfflineStatus(false);
+    return res.data;
+  },
+
+  getRecoveryDeliveryStatus: async (messageId: string): Promise<DeliveryStatusResponse> => {
+    const res = await client.get<DeliveryStatusResponse>('/api/auth/password-recovery/status', {
+      params: { message_id: messageId },
+    });
     return res.data;
   },
 

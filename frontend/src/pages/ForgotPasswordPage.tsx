@@ -1,9 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
-import { TrendingUp, Mail, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Info, KeyRound, UserPlus } from 'lucide-react';
+import {
+  TrendingUp,
+  Mail,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  ArrowLeft,
+  Info,
+  KeyRound,
+  UserPlus,
+  Clock,
+  AlertTriangle,
+  RotateCcw
+} from 'lucide-react';
 import { LanguageSelector } from '../components/LanguageSelector';
-import { ForgotPasswordResponse } from '../types';
+import { ForgotPasswordResponse, DeliveryStatusResponse } from '../types';
 
 interface FormErrorState {
   title: string;
@@ -16,12 +29,64 @@ export const ForgotPasswordPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ForgotPasswordResponse | null>(null);
   const [formError, setFormError] = useState<FormErrorState | null>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState<string>('accepted');
+  const [deliveryDetail, setDeliveryDetail] = useState<string | null>(null);
+  const [isCheckingDelivery, setIsCheckingDelivery] = useState(false);
+
+  // Poll for actual inbox delivery verification when message_id is available
+  useEffect(() => {
+    if (!result?.message_id) return;
+
+    let isMounted = true;
+    let pollCount = 0;
+    const maxPolls = 4;
+
+    const checkStatus = async () => {
+      try {
+        if (!isMounted) return;
+        setIsCheckingDelivery(true);
+        const res: DeliveryStatusResponse = await api.getRecoveryDeliveryStatus(result.message_id!);
+        if (!isMounted) return;
+
+        if (res.delivery_status) {
+          setDeliveryStatus(res.delivery_status);
+        }
+        if (res.detail) {
+          setDeliveryDetail(res.detail);
+        }
+
+        // Stop polling if definitive state reached
+        if (['delivered', 'blocked', 'hard_bounced'].includes(res.delivery_status)) {
+          return;
+        }
+      } catch (e) {
+        // Continue quietly on polling check
+      } finally {
+        if (isMounted) setIsCheckingDelivery(false);
+      }
+
+      pollCount++;
+      if (pollCount < maxPolls && isMounted) {
+        timeoutId = setTimeout(checkStatus, 3000);
+      }
+    };
+
+    // First check after 2 seconds
+    let timeoutId = setTimeout(checkStatus, 2000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [result?.message_id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
     setFormError(null);
     setResult(null);
+    setDeliveryStatus('accepted');
+    setDeliveryDetail(null);
 
     const trimmedEmail = email.trim();
     // Validate standard email format (user@domain.tld with at least 2 char TLD)
@@ -39,6 +104,9 @@ export const ForgotPasswordPage: React.FC = () => {
       setLoading(true);
       const res = await api.forgotPassword(trimmedEmail);
       setResult(res);
+      if (res.delivery_status) {
+        setDeliveryStatus(res.delivery_status);
+      }
     } catch (err: any) {
       const status = err?.response?.status;
       const detail = err?.response?.data?.detail;
@@ -78,6 +146,13 @@ export const ForgotPasswordPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResetForm = () => {
+    setResult(null);
+    setFormError(null);
+    setDeliveryStatus('accepted');
+    setDeliveryDetail(null);
   };
 
   return (
@@ -143,15 +218,75 @@ export const ForgotPasswordPage: React.FC = () => {
 
           {result ? (
             <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs leading-relaxed space-y-2">
-                <div className="flex items-center gap-2 font-bold text-emerald-400 text-sm">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{result.title || 'Recovery Email Sent'}</span>
+              {deliveryStatus === 'delivered' ? (
+                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs leading-relaxed space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-emerald-400 text-sm">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>Recovery Email Delivered</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      DELIVERED
+                    </span>
+                  </div>
+                  <p className="text-slate-200 text-xs leading-relaxed">
+                    Brevo has confirmed successful delivery to your mail server. Please check your inbox and spam folder.
+                  </p>
+                  {result.recipient_masked && (
+                    <p className="text-[11px] text-emerald-400/80 font-mono">
+                      Destination: {result.recipient_masked}
+                    </p>
+                  )}
                 </div>
-                <p className="text-slate-200 text-xs leading-relaxed">
-                  {result.message || 'A password reset link has been sent to your registered email address. Please check your inbox and spam folder.'}
-                </p>
-              </div>
+              ) : ['blocked', 'hard_bounced', 'soft_bounced'].includes(deliveryStatus) ? (
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs leading-relaxed space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-amber-400 text-sm">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>Email Delivery Alert</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 uppercase">
+                      {deliveryStatus.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <p className="text-slate-200 text-xs leading-relaxed">
+                    {deliveryDetail || 'The receiving email server or provider reported a delivery issue with this email address. Any provider suppression blocklist entry has been automatically cleared.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleResetForm}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Try Again or Use Different Email</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs leading-relaxed space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-cyan-400 text-sm">
+                      {isCheckingDelivery ? (
+                        <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                      ) : (
+                        <Clock className="w-4 h-4 shrink-0" />
+                      )}
+                      <span>{result.title || 'Recovery Request Accepted'}</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                      IN TRANSIT
+                    </span>
+                  </div>
+                  <p className="text-slate-200 text-xs leading-relaxed">
+                    {result.message || 'Your password recovery request has been accepted by our email service and is being processed for delivery. Please check your inbox and spam folder shortly.'}
+                  </p>
+                  {result.recipient_masked && (
+                    <div className="pt-1 flex items-center justify-between text-[11px] text-cyan-400/80 font-mono">
+                      <span>Recipient: {result.recipient_masked}</span>
+                      {isCheckingDelivery && <span className="animate-pulse">Checking mailbox receipt...</span>}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {result.dev_reset_token && (
                 <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs leading-relaxed space-y-2.5">

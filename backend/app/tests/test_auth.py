@@ -1427,3 +1427,70 @@ def test_brevo_api_payload_structure_and_recipient_isolation(monkeypatch):
     assert payload["to"][0]["email"] != payload["sender"]["email"]
     assert "reset-password?token=secure_token_abc_123" in payload["htmlContent"]
 
+
+def test_brevo_delivery_status_endpoint_and_service(monkeypatch):
+    """Verifies that /api/auth/password-recovery/status queries Brevo and maps delivered/blocked events."""
+    monkeypatch.setattr(settings, "BREVO_API_KEY", "xkeysib-mock-status-test")
+
+    class MockEventsResponse:
+        status_code = 200
+        def json(self):
+            return {
+                "events": [
+                    {
+                        "email": "analyst.delivery@firm.org",
+                        "event": "delivered",
+                        "date": "2026-11-05T21:40:00Z",
+                        "messageId": "<test-msg-delivered-999>"
+                    }
+                ]
+            }
+
+    class MockHttpx:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def get(self, url, headers=None):
+            return MockEventsResponse()
+
+    import httpx
+    monkeypatch.setattr(httpx, "Client", MockHttpx)
+
+    res = client.get("/api/auth/password-recovery/status?message_id=%3Ctest-msg-delivered-999%3E")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["message_id"] == "<test-msg-delivered-999>"
+    assert data["delivery_status"] == "delivered"
+    assert "delivered to recipient mailbox" in data["detail"].lower()
+
+
+def test_brevo_webhook_event_processing():
+    """Verifies that POST /api/webhooks/brevo updates delivery records in MongoDB."""
+    msg_id = "<webhook-test-delivered-123>"
+    db.insert_one("email_deliveries", {
+        "message_id": msg_id,
+        "email": "analyst@firm.com",
+        "delivery_status": "accepted",
+        "created_at": datetime.utcnow().isoformat() + "Z"
+    })
+
+    webhook_payload = {
+        "event": "delivered",
+        "email": "analyst@firm.com",
+        "message-id": msg_id,
+        "date": "2026-11-05 21:50:00",
+        "subject": "Reset your FIN-SENTIMENT password"
+    }
+
+    res = client.post("/api/webhooks/brevo", json=webhook_payload)
+    assert res.status_code == 200
+    assert res.json()["status"] == "recorded"
+
+    updated = db.find_one("email_deliveries", {"message_id": msg_id})
+    assert updated is not None
+    assert updated["delivery_status"] == "delivered"
+
+

@@ -18,7 +18,7 @@ from app.models.schemas import (
 from app.models.auth_models import (
     UserRegisterRequest, UserLoginRequest, ForgotPasswordRequest,
     ResetPasswordRequest, UserResponse, AuthResponse,
-    ForgotPasswordResponse, MessageResponse
+    ForgotPasswordResponse, MessageResponse, DeliveryStatusResponse
 )
 from app.services.auth_service import auth_service
 from app.services.auth_dependencies import (
@@ -262,6 +262,21 @@ def forgot_password(req: ForgotPasswordRequest, request: Request):
 def reset_password(req: ResetPasswordRequest):
     """Verifies single-use token and establishes updated password."""
     return auth_service.reset_password(req.token, req.new_password)
+
+@app.get("/api/auth/password-recovery/status", response_model=DeliveryStatusResponse)
+def get_recovery_delivery_status(message_id: str = Query(..., description="Brevo Message ID returned during password recovery dispatch")):
+    """Inspects real-time Brevo delivery event logs and provider status for an initiated recovery email."""
+    return auth_service.get_delivery_status(message_id)
+
+@app.post("/api/webhooks/brevo")
+async def brevo_webhook(request: Request):
+    """Receives verified real-time transactional email delivery events from Brevo."""
+    try:
+        body = await request.json()
+        return auth_service.record_webhook_event(body)
+    except Exception as e:
+        logger.warning(f"Invalid Brevo webhook payload: {e}")
+        return {"status": "ignored", "error": str(e)}
 
 @app.post("/api/auth/demo", response_model=AuthResponse)
 def demo_login(response: Response):

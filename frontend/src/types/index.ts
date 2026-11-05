@@ -196,6 +196,18 @@ export interface ForgotPasswordResponse {
   title?: string;
   smtp_configured: boolean;
   dev_reset_token?: string;
+  delivery_status?: 'accepted' | 'delivered' | 'blocked' | 'hard_bounced' | 'soft_bounced' | 'deferred' | string;
+  message_id?: string;
+  recipient_masked?: string;
+}
+
+export interface DeliveryStatusResponse {
+  message_id: string;
+  delivery_status: 'accepted' | 'delivered' | 'blocked' | 'hard_bounced' | 'soft_bounced' | 'deferred' | string;
+  detail: string;
+  failure_reason?: string | null;
+  recipient_masked?: string | null;
+  timestamp: string;
 }
 
 export interface MessageResponse {
