@@ -196,6 +196,21 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "aliases": [
             "wipro", "wipro limited", "wipro ltd", "wipro (wipro)"
         ]
+    },
+    "marico": {
+        "company": "Marico Limited",
+        "short_name": "Marico",
+        "ticker": "MARICO",
+        "exchange": "NSE",
+        "country": "IN",
+        "isin": "INE196A01026",
+        "upstox_instrument_key": "NSE_EQ|INE196A01026",
+        "upstox_direct_url": "https://upstox.com/stocks/marico-limited-share-price/",
+        "groww_direct_url": "https://groww.in/stocks/marico-ltd",
+        "preferred_broker": "upstox",
+        "aliases": [
+            "marico", "marico limited", "marico ltd", "marico (marico)", "saffola", "parachute"
+        ]
     }
 }
 
@@ -400,7 +415,7 @@ class BrokerRoutingService:
 
         return None
 
-    def get_trading_route(self, identifier: Optional[str]) -> CompanyTradingRoute:
+    def get_trading_route(self, identifier: Optional[str], broker: Optional[str] = None) -> CompanyTradingRoute:
         inst = self.resolve_instrument(identifier)
         if not inst:
             raw_name = (identifier or "Unknown").strip()
@@ -431,30 +446,55 @@ class BrokerRoutingService:
         short_name = inst.get("short_name", company)
         share_class_note = inst.get("share_class_note")
 
-        # RULE 1: Indian stocks route to Groww with verified stock-specific pages
+        # RULE 1: Indian stocks (NSE / BSE) - Upstox and Groww both supported with verified direct URLs
         if country == "IN" or exchange in ("NSE", "BSE") or inst.get("is_indian", False):
             groww_direct = inst.get("groww_direct_url") or f"https://groww.in/stocks/{self._normalize_string(short_name).replace(' ', '-')}"
-            has_direct = bool(groww_direct)
-            dest_type = "direct_instrument" if has_direct else "verified_portal_with_ticker_search"
-            action_label = f"Open {short_name} on Groww"
+            has_groww_direct = bool(groww_direct)
 
             groww_broker = GROWW_BASE_BROKER.model_copy()
-            groww_broker.entry_url = groww_direct if has_direct else "https://groww.in/stocks"
+            groww_broker.entry_url = groww_direct if has_groww_direct else "https://groww.in/stocks"
             groww_broker.direct_url = groww_direct
-            groww_broker.destination_type = dest_type
-            groww_broker.is_direct_link_verified = has_direct
-            groww_broker.action_label = action_label
+            groww_broker.destination_type = "direct_instrument" if has_groww_direct else "verified_portal_with_ticker_search"
+            groww_broker.is_direct_link_verified = has_groww_direct
+            groww_broker.action_label = f"Open {short_name} on Groww"
             groww_broker.instructions = (
                 f"Navigate directly to {short_name} on Groww ({ticker}) with live NSE charts, market depth, and fundamentals. "
                 f"To execute a trade, log in to your Groww account."
             )
 
-            # Upstox broker preserved in brokers list as alternative
             upstox_direct = inst.get("upstox_direct_url")
+            has_upstox_direct = bool(upstox_direct)
+
             upstox_broker = UPSTOX_BASE_BROKER.model_copy()
-            upstox_broker.entry_url = upstox_direct if upstox_direct else "https://pro.upstox.com"
+            upstox_broker.entry_url = upstox_direct if has_upstox_direct else "https://pro.upstox.com"
             upstox_broker.direct_url = upstox_direct
+            upstox_broker.destination_type = "direct_instrument" if has_upstox_direct else "verified_portal_with_ticker_search"
+            upstox_broker.is_direct_link_verified = has_upstox_direct
             upstox_broker.action_label = f"Open {short_name} in Upstox"
+            upstox_broker.instructions = (
+                f"Navigate directly to {short_name} on Upstox ({ticker}) with live NSE charts, technical indicators, and order execution. "
+                f"To execute a trade, log in to Upstox Pro."
+            )
+
+            # Selected broker resolution
+            selected_broker_id = (broker or "").strip().lower()
+            if selected_broker_id == "upstox":
+                primary_broker = upstox_broker
+                secondary_broker = groww_broker
+                dest_type = "direct_instrument" if has_upstox_direct else "verified_portal_with_ticker_search"
+                direct_url = upstox_direct
+                portal_url = "https://pro.upstox.com"
+                action_label = f"Open {short_name} in Upstox"
+                message = f"Verified Indian equity instrument: {ticker} ({exchange}). Official route: Upstox Pro direct stock page."
+            else:
+                # Default to Groww or when Groww is requested
+                primary_broker = groww_broker
+                secondary_broker = upstox_broker
+                dest_type = "direct_instrument" if has_groww_direct else "verified_portal_with_ticker_search"
+                direct_url = groww_direct
+                portal_url = "https://groww.in/stocks"
+                action_label = f"Open {short_name} on Groww"
+                message = f"Verified Indian equity instrument: {ticker} ({exchange}). Official route: Groww direct stock page."
 
             return CompanyTradingRoute(
                 status="supported",
@@ -466,13 +506,13 @@ class BrokerRoutingService:
                 isin=inst.get("isin"),
                 upstox_instrument_key=inst.get("upstox_instrument_key"),
                 destination_type=dest_type,
-                direct_url=groww_direct,
-                portal_fallback_url="https://groww.in/stocks",
+                direct_url=direct_url,
+                portal_fallback_url=portal_url,
                 action_label=action_label,
                 share_class_note=share_class_note,
-                brokers=[groww_broker, upstox_broker],
-                recommended_broker=groww_broker,
-                message=f"Verified Indian equity instrument: {ticker} ({exchange}). Official route: Groww direct stock page.",
+                brokers=[primary_broker, secondary_broker],
+                recommended_broker=primary_broker,
+                message=message,
                 disclaimer="Sentiment scores reflect news reporting tone and do not guarantee investment performance. Always perform independent diligence."
             )
 
@@ -522,34 +562,35 @@ class BrokerRoutingService:
     def get_trading_route_by_identifiers(
         self,
         company: Optional[str] = None,
-        ticker: Optional[str] = None
+        ticker: Optional[str] = None,
+        broker: Optional[str] = None
     ) -> CompanyTradingRoute:
         """
         Attempts resolution using ticker first if available, then company name, then composite string.
-        Guarantees that Indian stocks resolve to Upstox and US stocks resolve to Groww.
+        Supports both Upstox and Groww broker destinations for Indian equities.
         """
         # Try ticker first
         if ticker and ticker.strip():
-            route = self.get_trading_route(ticker.strip())
+            route = self.get_trading_route(ticker.strip(), broker=broker)
             if route.is_tradable:
                 return route
 
         # Try company name
         if company and company.strip():
-            route = self.get_trading_route(company.strip())
+            route = self.get_trading_route(company.strip(), broker=broker)
             if route.is_tradable:
                 return route
 
         # Try composite string if both exist (e.g. "Apple (AAPL)")
         if company and ticker:
             composite = f"{company.strip()} ({ticker.strip()})"
-            route = self.get_trading_route(composite)
+            route = self.get_trading_route(composite, broker=broker)
             if route.is_tradable:
                 return route
 
         # Fallback to unsupported result
         raw = (company or ticker or "Unknown").strip()
-        return self.get_trading_route(raw)
+        return self.get_trading_route(raw, broker=broker)
 
     def get_all_supported_instruments(self) -> SupportedInstrumentsResponse:
         indian_routes = [self.get_trading_route(k) for k in VERIFIED_INDIAN_INSTRUMENTS.keys()]

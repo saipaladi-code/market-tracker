@@ -42,6 +42,7 @@ import { SentimentBadge } from '../components/SentimentBadge';
 import { BackendConfigModal } from '../components/BackendConfigModal';
 import { TradeRoutingModal } from '../components/TradeRoutingModal';
 import { resolveVerifiedTicker, resolveVerifiedInstrument } from '../utils/tickerLookup';
+import { useBrokerPreference } from '../utils/brokerConfig';
 import { MOCK_DASHBOARD_STATS, MOCK_ARTICLES, MOCK_HISTORY } from '../services/mockData';
 
 const COLORS = {
@@ -59,6 +60,7 @@ export const DashboardPage: React.FC = () => {
   const [showBackendModal, setShowBackendModal] = useState(false);
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
+  const [selectedBroker] = useBrokerPreference();
   const navigate = useNavigate();
 
   const loadData = async () => {
@@ -614,7 +616,8 @@ export const DashboardPage: React.FC = () => {
               const verifiedInst = resolveVerifiedInstrument(art.company, art.ticker);
               const verifiedTicker = verifiedInst?.ticker || resolveVerifiedTicker(art.company, art.ticker);
               const isTradable = Boolean(verifiedInst);
-              const brokerTag = verifiedInst?.preferredBroker === 'upstox' ? 'Upstox' : 'Groww';
+              const isIndian = verifiedInst?.country === 'IN';
+              const brokerTag = isIndian ? (selectedBroker === 'upstox' ? 'Upstox' : 'Groww') : 'US Equity';
 
               return (
                 <div
@@ -653,10 +656,20 @@ export const DashboardPage: React.FC = () => {
                             });
                             setTradeModalOpen(true);
                           }}
-                          className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                          title={`Trade ${verifiedInst?.company || art.company} via ${verifiedInst?.brokerName || 'broker'}`}
+                          className={`px-2 py-0.5 rounded border text-[10px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+                            isIndian
+                              ? selectedBroker === 'upstox'
+                                ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border-blue-500/30'
+                                : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30'
+                              : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+                          }`}
+                          title={
+                            isIndian
+                              ? `Trade ${verifiedInst?.company || art.company} via ${selectedBroker === 'upstox' ? 'Upstox Pro' : 'Groww'}`
+                              : `US Equity (${verifiedInst?.company || art.company}) - Review LRS trading status`
+                          }
                         >
-                          <TrendingUp className="w-3 h-3 text-emerald-400" />
+                          <TrendingUp className="w-3 h-3" />
                           <span>Trade ({brokerTag})</span>
                         </button>
                       ) : (
@@ -688,6 +701,7 @@ export const DashboardPage: React.FC = () => {
           setSelectedTradeArticle(null);
         }}
         article={selectedTradeArticle}
+        initialBroker={selectedBroker}
       />
     </div>
   );

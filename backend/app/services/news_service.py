@@ -37,8 +37,9 @@ SUPPORTED_COMPANIES = {
     "Bharti Airtel": ["BHARTIARTL", "bharti airtel", "airtel", "bhartiartl"],
     "Larsen & Toubro": ["LT", "larsen & toubro", "l&t", "larsen and toubro"],
     "Wipro": ["WIPRO", "wipro"],
+    "Marico": ["MARICO", "marico", "marico limited", "marico ltd", "parachute", "saffola"],
 
-    # US Equities (Interactive Brokers preferred)
+    # US Equities
     "Apple": ["AAPL", "apple", "iphone", "tim cook", "apple inc"],
     "Microsoft": ["MSFT", "microsoft", "azure", "satya nadella"],
     "Nvidia": ["NVDA", "nvidia", "jensen huang", "gpu", "blackwell"],
@@ -62,6 +63,7 @@ COMPANY_TICKER_MAP = {
     "Bharti Airtel": "BHARTIARTL",
     "Larsen & Toubro": "LT",
     "Wipro": "WIPRO",
+    "Marico": "MARICO",
     "Apple": "AAPL",
     "Microsoft": "MSFT",
     "Nvidia": "NVDA",
@@ -111,6 +113,9 @@ COMPANY_ALIAS_LOOKUP = {
     "l&t": "Larsen & Toubro",
     "lt": "Larsen & Toubro",
     "wipro": "Wipro",
+    "marico": "Marico",
+    "marico limited": "Marico",
+    "marico ltd": "Marico",
 
     # US aliases
     "apple": "Apple",

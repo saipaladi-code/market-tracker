@@ -690,10 +690,11 @@ export const api = {
   },
 
   // Broker Trading Routing
-  getTradingRoute: async (company?: string, ticker?: string): Promise<CompanyTradingRoute> => {
+  getTradingRoute: async (company?: string, ticker?: string, broker?: string): Promise<CompanyTradingRoute> => {
     const params: Record<string, string> = {};
     if (company) params.company = company;
     if (ticker) params.ticker = ticker;
+    if (broker) params.broker = broker;
     const res = await client.get<CompanyTradingRoute>('/api/trading/route', { params });
     return res.data;
   },

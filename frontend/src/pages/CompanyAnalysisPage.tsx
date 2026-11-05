@@ -33,6 +33,7 @@ import { CompanySummary, Article } from '../types';
 import { SentimentBadge } from '../components/SentimentBadge';
 import { TradeRoutingModal } from '../components/TradeRoutingModal';
 import { resolveVerifiedTicker, resolveVerifiedInstrument } from '../utils/tickerLookup';
+import { useBrokerPreference } from '../utils/brokerConfig';
 
 export const CompanyAnalysisPage: React.FC = () => {
   const [companies, setCompanies] = useState<CompanySummary[]>([]);
@@ -44,6 +45,7 @@ export const CompanyAnalysisPage: React.FC = () => {
   const location = useLocation();
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
+  const [selectedBroker] = useBrokerPreference();
 
   // Read URL query parameter if user navigated from search bar or dashboard
   useEffect(() => {
@@ -353,7 +355,8 @@ export const CompanyAnalysisPage: React.FC = () => {
                     <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
                       {(() => {
                         const hlInst = resolveVerifiedInstrument(art.company, art.ticker) || resolveVerifiedInstrument(activeSummary.company, activeSummary.ticker);
-                        const hlBroker = hlInst?.preferredBroker === 'upstox' ? 'Upstox' : 'Groww';
+                        const isIndian = hlInst?.country === 'IN';
+                        const hlBroker = isIndian ? (selectedBroker === 'upstox' ? 'Upstox' : 'Groww') : 'US Equity';
                         return (
                           <button
                             onClick={() => {
@@ -364,10 +367,20 @@ export const CompanyAnalysisPage: React.FC = () => {
                               });
                               setTradeModalOpen(true);
                             }}
-                            className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                            title={`Trade ${hlInst?.company || art.company} via ${hlInst?.brokerName || 'broker'}`}
+                            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+                              isIndian
+                                ? selectedBroker === 'upstox'
+                                  ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border-blue-500/30'
+                                  : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30'
+                                : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+                            }`}
+                            title={
+                              isIndian
+                                ? `Trade ${hlInst?.company || art.company} via ${selectedBroker === 'upstox' ? 'Upstox Pro' : 'Groww'}`
+                                : `US Equity (${hlInst?.company || art.company}) - Review LRS trading status`
+                            }
                           >
-                            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                            <TrendingUp className="w-3.5 h-3.5" />
                             <span>Trade ({hlBroker})</span>
                           </button>
                         );
@@ -401,6 +414,7 @@ export const CompanyAnalysisPage: React.FC = () => {
           setSelectedTradeArticle(null);
         }}
         article={selectedTradeArticle}
+        initialBroker={selectedBroker}
       />
     </div>
   );

@@ -836,13 +836,14 @@ def get_translation_languages():
 @app.get("/api/trading/route", response_model=CompanyTradingRoute)
 def get_trading_route(
     company: Optional[str] = Query(None, description="Company name or alias"),
-    ticker: Optional[str] = Query(None, description="Stock ticker symbol")
+    ticker: Optional[str] = Query(None, description="Stock ticker symbol"),
+    broker: Optional[str] = Query(None, description="Preferred broker destination: 'upstox' or 'groww'")
 ):
     """
-    Resolves company/ticker to verified instrument and provides authorized broker destination:
-    Upstox for Indian equities (NSE/BSE), Groww for US equities (NASDAQ/NYSE).
+    Resolves company/ticker to verified instrument and provides authorized broker destination
+    for Indian equities (NSE/BSE) on Upstox Pro or Groww.
     """
-    return broker_routing_service.get_trading_route_by_identifiers(company=company, ticker=ticker)
+    return broker_routing_service.get_trading_route_by_identifiers(company=company, ticker=ticker, broker=broker)
 
 @app.get("/api/trading/supported-instruments", response_model=SupportedInstrumentsResponse)
 def get_supported_instruments():

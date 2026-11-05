@@ -1,13 +1,14 @@
 import { CompanyTradingRoute, BrokerDestination } from '../types';
 import { api } from './api';
-import { getClientSideTradingRoute, resolveVerifiedInstrument } from '../utils/tickerLookup';
+import { getClientSideTradingRoute } from '../utils/tickerLookup';
+import { BrokerId, getSelectedBroker } from '../utils/brokerConfig';
 
 export interface BrokerNavigationQuery {
   company?: string;
   ticker?: string;
   exchange?: string;
   country?: string;
-  preferredBrokerId?: 'upstox' | 'groww';
+  preferredBrokerId?: BrokerId;
   brokerInstrumentKey?: string;
 }
 
@@ -26,14 +27,15 @@ class BrokerNavigationService {
    * and queries the backend API for live backend instrument metadata.
    */
   async resolveRoute(query: BrokerNavigationQuery): Promise<CompanyTradingRoute> {
-    const { company, ticker } = query;
+    const { company, ticker, preferredBrokerId } = query;
+    const broker = preferredBrokerId || getSelectedBroker();
 
-    // 1. Instant deterministic client resolution
-    const clientRoute = getClientSideTradingRoute(company, ticker);
+    // 1. Instant deterministic client resolution matching requested broker
+    const clientRoute = getClientSideTradingRoute(company, ticker, broker);
 
     try {
-      // 2. Fetch backend confirmed route
-      const backendRoute = await api.getTradingRoute(company, ticker);
+      // 2. Fetch backend confirmed route with preferred broker
+      const backendRoute = await api.getTradingRoute(company, ticker, broker);
       if (backendRoute && backendRoute.status === 'supported') {
         return backendRoute;
       }
@@ -47,7 +49,7 @@ class BrokerNavigationService {
   /**
    * Returns the primary URL to navigate to for a given route and broker destination.
    * If a verified direct instrument URL is available and preferred, returns that.
-   * Otherwise returns the official portal fallback URL.
+   * Strictly respects the broker identity (Upstox vs Groww) to prevent wrong redirections.
    */
   getDestinationUrl(
     route: CompanyTradingRoute,
@@ -58,15 +60,34 @@ class BrokerNavigationService {
       return '';
     }
 
-    if (destinationPreference === 'direct' && broker.direct_url) {
-      return broker.direct_url;
+    const brokerId = broker.broker_id?.toLowerCase();
+
+    // Find the specific broker destination in the route's broker list if possible
+    const matchingBroker = route.brokers.find(
+      (b) => b.broker_id.toLowerCase() === brokerId
+    ) || broker;
+
+    if (destinationPreference === 'direct' && matchingBroker.direct_url) {
+      return matchingBroker.direct_url;
     }
 
-    if (destinationPreference === 'portal' && route.portal_fallback_url) {
-      return route.portal_fallback_url;
+    if (destinationPreference === 'portal') {
+      if (brokerId === 'upstox') {
+        return 'https://pro.upstox.com';
+      }
+      if (brokerId === 'groww') {
+        return 'https://groww.in/stocks';
+      }
+      if (route.portal_fallback_url) {
+        return route.portal_fallback_url;
+      }
     }
 
-    return broker.entry_url || route.direct_url || route.portal_fallback_url || '';
+    return (
+      matchingBroker.direct_url ||
+      matchingBroker.entry_url ||
+      (brokerId === 'upstox' ? 'https://pro.upstox.com' : 'https://groww.in/stocks')
+    );
   }
 
   /**

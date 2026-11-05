@@ -28,6 +28,7 @@ import { MarketContextModal } from '../components/MarketContextModal';
 import { resolveVerifiedTicker, resolveVerifiedInstrument } from '../utils/tickerLookup';
 import { getCanonicalSentimentResult } from '../utils/canonicalSentiment';
 import { useTranslation } from 'react-i18next';
+import { useBrokerPreference } from '../utils/brokerConfig';
 
 const COMPANIES = [
   { label: 'All Companies', value: 'All Companies' },
@@ -41,6 +42,7 @@ const COMPANIES = [
   { label: 'Bharti Airtel (BHARTIARTL)', value: 'Bharti Airtel' },
   { label: 'L&T (LT)', value: 'Larsen & Toubro' },
   { label: 'Wipro (WIPRO)', value: 'Wipro' },
+  { label: 'Marico (MARICO)', value: 'Marico' },
   { label: 'Apple (AAPL)', value: 'Apple' },
   { label: 'Microsoft (MSFT)', value: 'Microsoft' },
   { label: 'Amazon (AMZN)', value: 'Amazon' },
@@ -337,6 +339,7 @@ export const NewsExplorerPage: React.FC = () => {
   // Trade routing modal state
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
+  const [selectedBroker] = useBrokerPreference();
 
   // Market context modal state
   const [selectedContextArticle, setSelectedContextArticle] = useState<Article | null>(null);
@@ -730,7 +733,8 @@ export const NewsExplorerPage: React.FC = () => {
             const verifiedInst = resolveVerifiedInstrument(art.company, art.ticker);
             const verifiedTicker = verifiedInst?.ticker || resolveVerifiedTicker(art.company, art.ticker);
             const isTradable = Boolean(verifiedInst);
-            const brokerTag = verifiedInst?.preferredBroker === 'upstox' ? 'Upstox' : 'Groww';
+            const isIndian = verifiedInst?.country === 'IN';
+            const brokerTag = isIndian ? (selectedBroker === 'upstox' ? 'Upstox' : 'Groww') : 'US Equity';
 
             return (
               <article
@@ -836,10 +840,20 @@ export const NewsExplorerPage: React.FC = () => {
                           });
                           setTradeModalOpen(true);
                         }}
-                        className="flex-1 min-w-[115px] h-8 px-2.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer box-border"
-                        title={`Trade ${verifiedInst?.company || art.company} via ${verifiedInst?.brokerName || 'broker'}`}
+                        className={`flex-1 min-w-[115px] h-8 px-2.5 rounded-lg border text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer box-border ${
+                          isIndian
+                            ? selectedBroker === 'upstox'
+                              ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 hover:text-blue-200 border-blue-500/30'
+                              : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-200 border-emerald-500/30'
+                            : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border-amber-500/30'
+                        }`}
+                        title={
+                          isIndian
+                            ? `Trade ${verifiedInst?.company || art.company} via ${selectedBroker === 'upstox' ? 'Upstox Pro' : 'Groww'}`
+                            : `US Equity (${verifiedInst?.company || art.company}) - Review LRS trading status`
+                        }
                       >
-                        <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <TrendingUp className="w-3.5 h-3.5 shrink-0" />
                         <span className="leading-tight text-center break-words">Trade ({brokerTag})</span>
                       </button>
                     )}
@@ -925,6 +939,7 @@ export const NewsExplorerPage: React.FC = () => {
           setSelectedTradeArticle(null);
         }}
         article={selectedTradeArticle}
+        initialBroker={selectedBroker}
       />
 
       {/* XAI Attribution Explain Modal */}

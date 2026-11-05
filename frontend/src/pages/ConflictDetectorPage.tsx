@@ -16,6 +16,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { ConflictSignal, Article } from '../types';
 import { TradeRoutingModal } from '../components/TradeRoutingModal';
+import { useBrokerPreference } from '../utils/brokerConfig';
+import { resolveVerifiedInstrument } from '../utils/tickerLookup';
 
 export const ConflictDetectorPage: React.FC = () => {
   const [conflicts, setConflicts] = useState<ConflictSignal[]>([]);
@@ -23,6 +25,7 @@ export const ConflictDetectorPage: React.FC = () => {
   const [threshold, setThreshold] = useState<number>(20); // 20% min divergence
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
+  const [selectedBroker] = useBrokerPreference();
 
   const loadConflicts = async () => {
     try {
@@ -152,28 +155,41 @@ export const ConflictDetectorPage: React.FC = () => {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedTradeArticle({
-                          id: `conflict-${conf.company}`,
-                          canonical_id: `conflict-${conf.company}`,
-                          title: `${conf.company} (${conf.ticker}) Narrative Divergence Conflict`,
-                          company: conf.company,
-                          ticker: conf.ticker,
-                          url: '',
-                          source: 'Sentiment Divergence Engine',
-                          published_at: new Date().toISOString(),
-                          is_duplicate: false,
-                          is_demo: false,
-                        });
-                        setTradeModalOpen(true);
-                      }}
-                      className="px-2.5 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                      title={`Trade ${conf.company} via verified broker`}
-                    >
-                      <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Trade</span>
-                    </button>
+                    {(() => {
+                      const inst = resolveVerifiedInstrument(conf.company, conf.ticker);
+                      const isIndian = inst ? inst.country === 'IN' : true;
+                      const brokerTag = isIndian ? (selectedBroker === 'upstox' ? 'Upstox' : 'Groww') : 'US Equity';
+                      return (
+                        <button
+                          onClick={() => {
+                            setSelectedTradeArticle({
+                              id: `conflict-${conf.company}`,
+                              canonical_id: `conflict-${conf.company}`,
+                              title: `${conf.company} (${conf.ticker}) Narrative Divergence Conflict`,
+                              company: inst?.company || conf.company,
+                              ticker: inst?.ticker || conf.ticker,
+                              url: '',
+                              source: 'Sentiment Divergence Engine',
+                              published_at: new Date().toISOString(),
+                              is_duplicate: false,
+                              is_demo: false,
+                            });
+                            setTradeModalOpen(true);
+                          }}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer border ${
+                            isIndian
+                              ? selectedBroker === 'upstox'
+                                ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border-blue-500/30'
+                                : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30'
+                              : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+                          }`}
+                          title={`Trade ${conf.company} via ${isIndian ? (selectedBroker === 'upstox' ? 'Upstox Pro' : 'Groww') : 'broker'}`}
+                        >
+                          <TrendingUp className="w-3.5 h-3.5" />
+                          <span>Trade ({brokerTag})</span>
+                        </button>
+                      );
+                    })()}
                     <Link
                       to={`/companies?company=${encodeURIComponent(conf.company)}`}
                       className="px-3 py-1.5 bg-navy-800 hover:bg-navy-750 text-slate-200 rounded-lg text-xs font-semibold border border-navy-700 transition-colors flex items-center gap-1"
@@ -249,6 +265,7 @@ export const ConflictDetectorPage: React.FC = () => {
           setSelectedTradeArticle(null);
         }}
         article={selectedTradeArticle}
+        initialBroker={selectedBroker}
       />
     </div>
   );

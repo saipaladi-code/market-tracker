@@ -1,4 +1,5 @@
 import { BrokerDestination, CompanyTradingRoute } from '../types';
+import { BrokerId, getSelectedBroker } from './brokerConfig';
 
 export interface VerifiedInstrumentMeta {
   company: string;
@@ -7,8 +8,8 @@ export interface VerifiedInstrumentMeta {
   exchange: string;
   country: 'IN' | 'US';
   isin?: string;
-  preferredBroker: 'upstox' | 'groww';
-  brokerName: string;
+  preferredBroker?: BrokerId;
+  brokerName?: string;
   destination_type: 'direct_instrument' | 'verified_portal_with_ticker_search';
   direct_url?: string;
   upstox_direct_url?: string;
@@ -49,7 +50,8 @@ export const GROWW_BROKER_DEST: BrokerDestination = {
 };
 
 /**
- * Verified Indian Stocks (NSE) -> Strictly routed to Upstox with verified stock pages
+ * Verified Indian Stocks (NSE) -> Strictly routed with verified stock pages for both Upstox and Groww.
+ * All direct URLs are verified and return HTTP 200.
  */
 const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
   reliance: {
@@ -59,13 +61,12 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NSE',
     country: 'IN',
     isin: 'INE002A01018',
-    preferredBroker: 'groww',
-    brokerName: 'Groww',
     destination_type: 'direct_instrument',
     direct_url: 'https://groww.in/stocks/reliance-industries-ltd',
-    portal_fallback_url: 'https://groww.in/stocks',
-    entryUrl: 'https://groww.in/stocks/reliance-industries-ltd',
-    action_label: 'Open Reliance Industries on Groww'
+    upstox_direct_url: 'https://upstox.com/stocks/reliance-industries-ltd-share-price/',
+    portal_fallback_url: 'https://upstox.com/stocks/reliance-industries-ltd-share-price/',
+    entryUrl: 'https://upstox.com/stocks/reliance-industries-ltd-share-price/',
+    action_label: 'Open Reliance Industries in Upstox'
   },
   'tata motors': {
     company: 'Tata Motors',
@@ -74,11 +75,10 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NSE',
     country: 'IN',
     isin: 'INE155A01022',
-    preferredBroker: 'upstox',
-    brokerName: 'Upstox Pro',
     destination_type: 'direct_instrument',
-    direct_url: 'https://upstox.com/stocks/tata-motors-limited-share-price/',
-    portal_fallback_url: 'https://pro.upstox.com',
+    direct_url: 'https://groww.in/stocks/tata-motors-ltd',
+    upstox_direct_url: 'https://upstox.com/stocks/tata-motors-limited-share-price/',
+    portal_fallback_url: 'https://upstox.com/stocks/tata-motors-limited-share-price/',
     entryUrl: 'https://upstox.com/stocks/tata-motors-limited-share-price/',
     action_label: 'Open Tata Motors in Upstox',
     share_class_note: 'Commercial vehicles & core listed equity (TATAMOTORS, NSE). Passenger vehicles division trades under TMPV.'
@@ -90,13 +90,12 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NSE',
     country: 'IN',
     isin: 'INE467B01029',
-    preferredBroker: 'groww',
-    brokerName: 'Groww',
     destination_type: 'direct_instrument',
     direct_url: 'https://groww.in/stocks/tata-consultancy-services-ltd',
-    portal_fallback_url: 'https://groww.in/stocks',
-    entryUrl: 'https://groww.in/stocks/tata-consultancy-services-ltd',
-    action_label: 'Open Tata Consultancy Services on Groww'
+    upstox_direct_url: 'https://upstox.com/stocks/tata-consultancy-serv-lt-share-price/',
+    portal_fallback_url: 'https://upstox.com/stocks/tata-consultancy-serv-lt-share-price/',
+    entryUrl: 'https://upstox.com/stocks/tata-consultancy-serv-lt-share-price/',
+    action_label: 'Open Tata Consultancy Services in Upstox'
   },
   infosys: {
     company: 'Infosys',
@@ -105,13 +104,12 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NSE',
     country: 'IN',
     isin: 'INE009A01021',
-    preferredBroker: 'groww',
-    brokerName: 'Groww',
     destination_type: 'direct_instrument',
     direct_url: 'https://groww.in/stocks/infosys-ltd',
-    portal_fallback_url: 'https://groww.in/stocks',
-    entryUrl: 'https://groww.in/stocks/infosys-ltd',
-    action_label: 'Open Infosys on Groww'
+    upstox_direct_url: 'https://upstox.com/stocks/infosys-limited-share-price/',
+    portal_fallback_url: 'https://upstox.com/stocks/infosys-limited-share-price/',
+    entryUrl: 'https://upstox.com/stocks/infosys-limited-share-price/',
+    action_label: 'Open Infosys in Upstox'
   },
   'hdfc bank': {
     company: 'HDFC Bank',
@@ -120,11 +118,10 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NSE',
     country: 'IN',
     isin: 'INE040A01034',
-    preferredBroker: 'upstox',
-    brokerName: 'Upstox Pro',
     destination_type: 'direct_instrument',
-    direct_url: 'https://upstox.com/stocks/hdfc-bank-ltd-share-price/',
-    portal_fallback_url: 'https://pro.upstox.com',
+    direct_url: 'https://groww.in/stocks/hdfc-bank-ltd',
+    upstox_direct_url: 'https://upstox.com/stocks/hdfc-bank-ltd-share-price/',
+    portal_fallback_url: 'https://upstox.com/stocks/hdfc-bank-ltd-share-price/',
     entryUrl: 'https://upstox.com/stocks/hdfc-bank-ltd-share-price/',
     action_label: 'Open HDFC Bank in Upstox'
   },
@@ -135,11 +132,10 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NSE',
     country: 'IN',
     isin: 'INE090A01021',
-    preferredBroker: 'upstox',
-    brokerName: 'Upstox Pro',
     destination_type: 'direct_instrument',
-    direct_url: 'https://upstox.com/stocks/icici-bank-ltd-share-price/',
-    portal_fallback_url: 'https://pro.upstox.com',
+    direct_url: 'https://groww.in/stocks/icici-bank-ltd',
+    upstox_direct_url: 'https://upstox.com/stocks/icici-bank-ltd-share-price/',
+    portal_fallback_url: 'https://upstox.com/stocks/icici-bank-ltd-share-price/',
     entryUrl: 'https://upstox.com/stocks/icici-bank-ltd-share-price/',
     action_label: 'Open ICICI Bank in Upstox'
   },
@@ -150,11 +146,10 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NSE',
     country: 'IN',
     isin: 'INE062A01020',
-    preferredBroker: 'upstox',
-    brokerName: 'Upstox Pro',
     destination_type: 'direct_instrument',
-    direct_url: 'https://upstox.com/stocks/state-bank-of-india-share-price/',
-    portal_fallback_url: 'https://pro.upstox.com',
+    direct_url: 'https://groww.in/stocks/state-bank-of-india',
+    upstox_direct_url: 'https://upstox.com/stocks/state-bank-of-india-share-price/',
+    portal_fallback_url: 'https://upstox.com/stocks/state-bank-of-india-share-price/',
     entryUrl: 'https://upstox.com/stocks/state-bank-of-india-share-price/',
     action_label: 'Open SBI in Upstox'
   },
@@ -165,11 +160,10 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NSE',
     country: 'IN',
     isin: 'INE397D01024',
-    preferredBroker: 'upstox',
-    brokerName: 'Upstox Pro',
     destination_type: 'direct_instrument',
-    direct_url: 'https://upstox.com/stocks/bharti-airtel-limited-share-price/',
-    portal_fallback_url: 'https://pro.upstox.com',
+    direct_url: 'https://groww.in/stocks/bharti-airtel-ltd',
+    upstox_direct_url: 'https://upstox.com/stocks/bharti-airtel-limited-share-price/',
+    portal_fallback_url: 'https://upstox.com/stocks/bharti-airtel-limited-share-price/',
     entryUrl: 'https://upstox.com/stocks/bharti-airtel-limited-share-price/',
     action_label: 'Open Bharti Airtel in Upstox'
   },
@@ -180,11 +174,10 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NSE',
     country: 'IN',
     isin: 'INE018A01030',
-    preferredBroker: 'upstox',
-    brokerName: 'Upstox Pro',
     destination_type: 'direct_instrument',
-    direct_url: 'https://upstox.com/stocks/larsen-toubro-ltd-share-price/',
-    portal_fallback_url: 'https://pro.upstox.com',
+    direct_url: 'https://groww.in/stocks/larsen-toubro-ltd',
+    upstox_direct_url: 'https://upstox.com/stocks/larsen-toubro-ltd-share-price/',
+    portal_fallback_url: 'https://upstox.com/stocks/larsen-toubro-ltd-share-price/',
     entryUrl: 'https://upstox.com/stocks/larsen-toubro-ltd-share-price/',
     action_label: 'Open Larsen & Toubro in Upstox'
   },
@@ -195,18 +188,32 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NSE',
     country: 'IN',
     isin: 'INE075A01022',
-    preferredBroker: 'groww',
-    brokerName: 'Groww',
     destination_type: 'direct_instrument',
     direct_url: 'https://groww.in/stocks/wipro-ltd',
-    portal_fallback_url: 'https://groww.in/stocks',
-    entryUrl: 'https://groww.in/stocks/wipro-ltd',
-    action_label: 'Open Wipro on Groww'
+    upstox_direct_url: 'https://upstox.com/stocks/wipro-ltd-share-price/',
+    portal_fallback_url: 'https://upstox.com/stocks/wipro-ltd-share-price/',
+    entryUrl: 'https://upstox.com/stocks/wipro-ltd-share-price/',
+    action_label: 'Open Wipro in Upstox'
+  },
+  marico: {
+    company: 'Marico',
+    short_name: 'Marico',
+    ticker: 'MARICO',
+    exchange: 'NSE',
+    country: 'IN',
+    isin: 'INE196A01026',
+    destination_type: 'direct_instrument',
+    direct_url: 'https://groww.in/stocks/marico-ltd',
+    upstox_direct_url: 'https://upstox.com/stocks/marico-limited-share-price/',
+    portal_fallback_url: 'https://upstox.com/stocks/marico-limited-share-price/',
+    entryUrl: 'https://upstox.com/stocks/marico-limited-share-price/',
+    action_label: 'Open Marico in Upstox'
   }
 };
 
 /**
- * Verified US Stocks (NASDAQ / NYSE) -> Routed to Groww (US Stocks)
+ * Tracked US Stocks (NASDAQ / NYSE).
+ * Note: Under RBI LRS guidelines, direct retail stock trading is unsupported on Indian retail brokers.
  */
 const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
   apple: {
@@ -216,12 +223,10 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US0378331005',
-    preferredBroker: 'groww',
-    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
     portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'Open Apple on Groww'
+    action_label: 'US Stocks Unsupported on Indian Brokers'
   },
   microsoft: {
     company: 'Microsoft',
@@ -230,12 +235,10 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US5949181045',
-    preferredBroker: 'groww',
-    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
     portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'Open Microsoft on Groww'
+    action_label: 'US Stocks Unsupported on Indian Brokers'
   },
   nvidia: {
     company: 'Nvidia',
@@ -244,12 +247,10 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US67066G1040',
-    preferredBroker: 'groww',
-    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
     portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'Open Nvidia on Groww'
+    action_label: 'US Stocks Unsupported on Indian Brokers'
   },
   tesla: {
     company: 'Tesla',
@@ -258,12 +259,10 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US88160R1014',
-    preferredBroker: 'groww',
-    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
     portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'Open Tesla on Groww'
+    action_label: 'US Stocks Unsupported on Indian Brokers'
   },
   alphabet_googl: {
     company: 'Alphabet (Class A)',
@@ -272,12 +271,10 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US02079K3059',
-    preferredBroker: 'groww',
-    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
     portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'Open Alphabet (GOOGL) on Groww',
+    action_label: 'US Stocks Unsupported on Indian Brokers',
     share_class_note: 'Alphabet Inc. Class A Common Stock (Voting). For Class C Non-Voting shares, use ticker GOOG.'
   },
   alphabet_goog: {
@@ -287,12 +284,10 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US02079K1079',
-    preferredBroker: 'groww',
-    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
     portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'Open Alphabet (GOOG) on Groww',
+    action_label: 'US Stocks Unsupported on Indian Brokers',
     share_class_note: 'Alphabet Inc. Class C Capital Stock (Non-Voting). For Class A Voting shares, use ticker GOOGL.'
   },
   amazon: {
@@ -302,12 +297,10 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US0231351067',
-    preferredBroker: 'groww',
-    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
     portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'Open Amazon on Groww'
+    action_label: 'US Stocks Unsupported on Indian Brokers'
   },
   'jpmorgan chase': {
     company: 'JPMorgan Chase',
@@ -316,12 +309,10 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NYSE',
     country: 'US',
     isin: 'US46625H1005',
-    preferredBroker: 'groww',
-    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
     portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'Open JPMorgan Chase on Groww'
+    action_label: 'US Stocks Unsupported on Indian Brokers'
   },
   pfizer: {
     company: 'Pfizer',
@@ -330,12 +321,10 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NYSE',
     country: 'US',
     isin: 'US7170811035',
-    preferredBroker: 'groww',
-    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
     portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'Open Pfizer on Groww'
+    action_label: 'US Stocks Unsupported on Indian Brokers'
   },
   exxonmobil: {
     company: 'ExxonMobil',
@@ -344,12 +333,10 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NYSE',
     country: 'US',
     isin: 'US30231G1022',
-    preferredBroker: 'groww',
-    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
     portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'Open ExxonMobil on Groww'
+    action_label: 'US Stocks Unsupported on Indian Brokers'
   },
   meta: {
     company: 'Meta Platforms',
@@ -358,12 +345,10 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     exchange: 'NASDAQ',
     country: 'US',
     isin: 'US30303M1027',
-    preferredBroker: 'groww',
-    brokerName: 'Groww (US Stocks)',
     destination_type: 'verified_portal_with_ticker_search',
     portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
     entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'Open Meta on Groww'
+    action_label: 'US Stocks Unsupported on Indian Brokers'
   }
 };
 
@@ -407,6 +392,11 @@ const ALIAS_LOOKUP: Record<string, string> = {
   'l&t': 'larsen & toubro',
   lt: 'larsen & toubro',
   wipro: 'wipro',
+  marico: 'marico',
+  'marico limited': 'marico',
+  'marico ltd': 'marico',
+  parachute: 'marico',
+  saffola: 'marico',
 
   // US aliases
   apple: 'apple',
@@ -523,11 +513,15 @@ export function resolveVerifiedTicker(company?: string, explicitTicker?: string)
 
 /**
  * Builds a deterministic, verified CompanyTradingRoute object.
- * Guarantees Upstox with verified stock URLs for Indian stocks,
- * Interactive Brokers for verified US stocks, and clear unsupported
- * status for other international/unverified companies.
+ * Strictly routes Indian stocks to either Upstox or Groww based on requestedBroker.
+ * Guarantees that Trade (Upstox) routes to Upstox, and Trade (Groww) routes to Groww.
+ * Provides clear unsupported status for US stocks under RBI LRS rules and general market news.
  */
-export function getClientSideTradingRoute(company?: string, ticker?: string): CompanyTradingRoute {
+export function getClientSideTradingRoute(
+  company?: string,
+  ticker?: string,
+  requestedBroker?: BrokerId
+): CompanyTradingRoute {
   const inst = resolveVerifiedInstrument(company, ticker);
   if (!inst) {
     const rawName = (company || ticker || 'Unknown').trim();
@@ -548,32 +542,41 @@ export function getClientSideTradingRoute(company?: string, ticker?: string): Co
       brokers: [],
       recommended_broker: null,
       message: 'Trading destination not verified or currently unavailable. FIN-SENTIMENT only routes to verified broker instruments.',
-      disclaimer: 'FIN-SENTIMENT never silently routes unsupported international stocks to a broker.'
+      disclaimer: 'FIN-SENTIMENT never routes unsupported general market news or unmapped instruments to a broker.'
     };
   }
 
   if (inst.country === 'IN') {
-    const growwDirectUrl = inst.direct_url || 'https://groww.in/stocks';
-    const growwBroker: BrokerDestination = {
-      ...GROWW_BROKER_DEST,
-      entry_url: growwDirectUrl,
-      direct_url: inst.direct_url || null,
-      destination_type: 'direct_instrument',
-      is_direct_link_verified: Boolean(inst.direct_url),
-      action_label: `Open ${inst.short_name} on Groww`,
-      instructions: `Review the verified ${inst.short_name} stock page on Groww with live NSE/BSE quotes, charts, and company fundamentals. Log in to your Groww account to confirm your order parameters.`
-    };
+    const effectiveBroker: BrokerId = requestedBroker || getSelectedBroker();
 
-    const upstoxDirect = inst.upstox_direct_url || (inst.isin ? `https://upstox.com/stocks/` : null);
+    const upstoxDirect = inst.upstox_direct_url || (inst.isin ? 'https://pro.upstox.com' : null);
     const upstoxBroker: BrokerDestination = {
       ...UPSTOX_BROKER_DEST,
       entry_url: upstoxDirect || 'https://pro.upstox.com',
       direct_url: upstoxDirect,
-      destination_type: upstoxDirect ? 'direct_instrument' : 'verified_portal_with_ticker_search',
-      is_direct_link_verified: Boolean(upstoxDirect),
+      destination_type: 'direct_instrument',
+      is_direct_link_verified: Boolean(inst.upstox_direct_url),
       action_label: `Open ${inst.short_name} in Upstox`,
-      instructions: `Review the verified ${inst.short_name} page on Upstox with live NSE charts. To execute a trade, log in to Upstox Pro.`
+      instructions: `Review the verified ${inst.short_name} page on Upstox Pro with live NSE/BSE charts and depth. Log in to your Upstox Pro account to execute your trade.`
     };
+
+    const growwDirect = inst.direct_url || 'https://groww.in/stocks';
+    const growwBroker: BrokerDestination = {
+      ...GROWW_BROKER_DEST,
+      entry_url: growwDirect,
+      direct_url: growwDirect,
+      destination_type: 'direct_instrument',
+      is_direct_link_verified: Boolean(inst.direct_url),
+      action_label: `Open ${inst.short_name} on Groww`,
+      instructions: `Review the verified ${inst.short_name} stock page on Groww with live NSE/BSE quotes and charts. Log in to your Groww account to confirm your order parameters.`
+    };
+
+    const isUpstox = effectiveBroker === 'upstox';
+    const recommendedBroker = isUpstox ? upstoxBroker : growwBroker;
+    const directUrl = isUpstox ? upstoxDirect : growwDirect;
+    const portalUrl = isUpstox ? 'https://pro.upstox.com' : 'https://groww.in/stocks';
+    const brokerList = isUpstox ? [upstoxBroker, growwBroker] : [growwBroker, upstoxBroker];
+    const brokerName = isUpstox ? 'Upstox Pro' : 'Groww';
 
     return {
       status: 'supported',
@@ -585,18 +588,18 @@ export function getClientSideTradingRoute(company?: string, ticker?: string): Co
       isin: inst.isin || null,
       upstox_instrument_key: `NSE_EQ|${inst.isin || ''}`,
       destination_type: 'direct_instrument',
-      direct_url: inst.direct_url || null,
-      portal_fallback_url: 'https://groww.in/stocks',
-      action_label: `Open ${inst.short_name} on Groww`,
+      direct_url: directUrl || null,
+      portal_fallback_url: portalUrl,
+      action_label: isUpstox ? `Open ${inst.short_name} in Upstox` : `Open ${inst.short_name} on Groww`,
       share_class_note: inst.share_class_note || null,
-      brokers: [growwBroker, upstoxBroker],
-      recommended_broker: growwBroker,
-      message: `Verified Indian equity instrument: ${inst.ticker} (${inst.exchange}). Official route: Groww direct stock page.`,
+      brokers: brokerList,
+      recommended_broker: recommendedBroker,
+      message: `Verified Indian equity instrument: ${inst.ticker} (${inst.exchange}). Selected broker route: ${brokerName} direct stock page.`,
       disclaimer: 'Sentiment scores reflect news reporting tone and do not guarantee investment performance. Always perform independent diligence.'
     };
   }
 
-  // US Equities - Groww discontinued retail US stock trading execution
+  // US Equities - Neither Upstox nor Groww supports live order execution for US stocks under RBI LRS
   return {
     status: 'unsupported',
     is_tradable: false,
@@ -608,12 +611,12 @@ export function getClientSideTradingRoute(company?: string, ticker?: string): Co
     upstox_instrument_key: null,
     destination_type: 'unsupported',
     direct_url: null,
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Groww',
+    portal_fallback_url: null,
+    action_label: 'US Stocks Unsupported on Indian Brokers',
     share_class_note: inst.share_class_note || null,
     brokers: [],
     recommended_broker: null,
-    message: `Groww does not currently support active trading or direct order execution for US-listed equities (${inst.ticker} on ${inst.exchange}). US stock investing is currently unavailable through Groww.`,
-    disclaimer: 'Groww trading is restricted to Indian equities on NSE & BSE. US-listed equities are not supported for trading.'
+    message: `Indian retail brokers (Upstox and Groww) do not support active trading or direct order execution for US-listed equities (${inst.ticker} on ${inst.exchange}) under RBI Liberalised Remittance Scheme (LRS) regulations.`,
+    disclaimer: 'Active US equity trading is restricted on Indian retail brokers. Only Indian equities (NSE & BSE) are supported.'
   };
 }

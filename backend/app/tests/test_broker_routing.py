@@ -169,4 +169,58 @@ def test_broker_capabilities_endpoint():
     data = res.json()
     broker_ids = [b["broker_id"] for b in data["brokers"]]
     assert "groww" in broker_ids
+    assert "upstox" in broker_ids
+    assert "ibkr" not in broker_ids
     assert "compliance_statement" in data
+
+def test_indian_stock_routing_upstox_direct_navigation():
+    """
+    TEST A & C & D:
+    Verifies that when Upstox is requested, Indian stocks route to Upstox Pro with
+    verified direct stock instrument pages rather than generic homepages.
+    """
+    upstox_samples = [
+        ("ICICI Bank", "ICICIBANK", "https://upstox.com/stocks/icici-bank-ltd-share-price/"),
+        ("Reliance Industries", "RELIANCE", "https://upstox.com/stocks/reliance-industries-ltd-share-price/"),
+        ("Tata Consultancy Services", "TCS", "https://upstox.com/stocks/tata-consultancy-serv-lt-share-price/"),
+        ("Infosys", "INFY", "https://upstox.com/stocks/infosys-limited-share-price/"),
+        ("Tata Motors", "TATAMOTORS", "https://upstox.com/stocks/tata-motors-limited-share-price/"),
+        ("HDFC Bank", "HDFCBANK", "https://upstox.com/stocks/hdfc-bank-ltd-share-price/"),
+        ("Marico", "MARICO", "https://upstox.com/stocks/marico-limited-share-price/"),
+    ]
+
+    for comp_query, expected_ticker, expected_url in upstox_samples:
+        res = client.get("/api/trading/route", params={"company": comp_query, "broker": "upstox"})
+        assert res.status_code == 200, f"Failed for {comp_query}"
+        data = res.json()
+        assert data["is_tradable"] is True, f"Expected {comp_query} to be tradable"
+        assert data["ticker"] == expected_ticker
+        assert data["exchange"] == "NSE"
+        assert data["country"] == "IN"
+        assert data["destination_type"] == "direct_instrument"
+        assert data["direct_url"] == expected_url, f"Expected {expected_url}, got {data['direct_url']}"
+        assert data["portal_fallback_url"] == "https://pro.upstox.com"
+        assert "Upstox" in data["action_label"]
+        assert data["recommended_broker"]["broker_id"] == "upstox"
+        assert data["recommended_broker"]["entry_url"] == expected_url
+
+def test_indian_stock_routing_groww_direct_with_marico():
+    """
+    TEST B:
+    Verifies that when Groww is requested, Indian stocks route to Groww with
+    verified direct stock instrument pages.
+    """
+    groww_samples = [
+        ("ICICI Bank", "ICICIBANK", "https://groww.in/stocks/icici-bank-ltd"),
+        ("Marico", "MARICO", "https://groww.in/stocks/marico-ltd"),
+    ]
+
+    for comp_query, expected_ticker, expected_url in groww_samples:
+        res = client.get("/api/trading/route", params={"company": comp_query, "broker": "groww"})
+        assert res.status_code == 200, f"Failed for {comp_query}"
+        data = res.json()
+        assert data["is_tradable"] is True
+        assert data["ticker"] == expected_ticker
+        assert data["direct_url"] == expected_url
+        assert data["recommended_broker"]["broker_id"] == "groww"
+        assert "on Groww" in data["action_label"]
