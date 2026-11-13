@@ -7,11 +7,13 @@ class ConflictDetectorService:
         self.min_negative = min_negative
         self.min_conflict_score = min_conflict_score
 
-    def detect_conflicts(self, articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def detect_conflicts(self, articles: List[Dict[str, Any]], min_conflict_score: Optional[float] = None) -> List[Dict[str, Any]]:
         """
         Groups articles by company and identifies active Bullish/Bearish sentiment divergence.
         Only distinct (non-duplicate) articles are evaluated to ensure fair weighting.
+        Excludes broad non-company entities such as 'General Market' or 'Unknown'.
         """
+        effective_min_score = min_conflict_score if min_conflict_score is not None else self.min_conflict_score
         by_company: Dict[str, Dict[str, Any]] = {}
 
         for article in articles:
@@ -19,7 +21,11 @@ class ConflictDetectorService:
             if article.get("is_duplicate"):
                 continue
 
-            company = article.get("company", "Unknown")
+            company = (article.get("company") or "").strip()
+            # Explicitly exclude non-company entities
+            if not company or company.lower() in ("general market", "unknown", "none", "*"):
+                continue
+
             sentiment = (article.get("sentiment") or "neutral").lower()
 
             if company not in by_company:
@@ -52,7 +58,7 @@ class ConflictDetectorService:
                 # If 9 positive and 1 negative: conflict score = 2 * (1 / 10) = 0.20
                 conflict_score = round((2.0 * min(pos_count, neg_count)) / total_directional, 2)
 
-                if conflict_score >= self.min_conflict_score:
+                if conflict_score >= effective_min_score:
                     explanation = (
                         f"Mixed-News Sentiment Signal: {company} exhibits notable opposing coverage with "
                         f"{pos_count} positive and {neg_count} negative headlines currently recorded. "

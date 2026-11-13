@@ -304,9 +304,13 @@ def demo_login(response: Response):
 # ==============================================================================
 
 @app.get("/api/dashboard/stats")
-def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
-    """Aggregates all top-level stats for the main analytics dashboard."""
-    articles = news_service.fetch_articles()
+def get_dashboard_stats(
+    timeframe: str = Query(default="live", description="Analytics timeframe: 'live', '24h', '7d', or 'all'"),
+    force_refresh: bool = Query(default=False, description="Whether to trigger an immediate live news refresh"),
+    current_user: dict = Depends(get_current_user)
+):
+    """Aggregates all top-level stats for the main analytics dashboard across the requested timeframe."""
+    articles = news_service.fetch_articles(force_refresh=force_refresh, timeframe=timeframe)
     
     # Exclude duplicates from main metrics to prevent inflated counts
     clean_articles = [a for a in articles if not a.get("is_duplicate")]
@@ -336,8 +340,8 @@ def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     
     sources = sorted([{"source": k, "count": v} for k, v in by_source.items()], key=lambda x: x["count"], reverse=True)[:6]
 
-    # Mixed-sentiment conflicts
-    conflicts = conflict_service.detect_conflicts(articles)
+    # Mixed-sentiment conflicts dynamically detected on clean articles for this timeframe
+    conflicts = conflict_service.detect_conflicts(clean_articles)
 
     is_demo_dataset = any(a.get("is_demo", False) for a in clean_articles)
 
@@ -357,7 +361,8 @@ def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         "top_discussed_companies": top_discussed,
         "news_sources": sources,
         "active_conflicts_count": len(conflicts),
-        "active_conflicts": conflicts[:3],
+        "active_conflicts": conflicts,
+        "timeframe": timeframe,
         "is_demo_dataset": is_demo_dataset,
         "feed_status": news_service.get_feed_status(),
         "last_updated": news_service.get_last_synced_iso(),
@@ -373,11 +378,12 @@ def get_news(
     query: Optional[str] = Query(default=None),
     today_only: Optional[bool] = Query(default=None),
     date: Optional[str] = Query(default=None),
+    timeframe: Optional[str] = Query(default=None, description="Timeframe filter: 'live', '24h', '7d', 'all'"),
     current_user: dict = Depends(get_current_user)
 ):
     articles, total, is_demo, feed_status, last_synced, filter_date, provider = news_service.query_articles(
         query=query, company=company, sentiment=sentiment, page=page, page_size=page_size,
-        today_only=today_only, date=date
+        today_only=today_only, date=date, timeframe=timeframe
     )
     return NewsResponse(
         articles=articles,
@@ -410,18 +416,30 @@ def search_news(req: NewsSearchRequest, current_user: dict = Depends(get_current
     )
 
 @app.api_route("/api/news/refresh", methods=["GET", "POST"])
-def refresh_news(background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
-    """Triggers live ingestion in background to avoid gateway timeouts, and returns current articles."""
-    articles = news_service.fetch_articles(force_refresh=False)
-    background_tasks.add_task(news_service.ingest_live_news, force=True)
+def refresh_news(
+    background_tasks: BackgroundTasks,
+    timeframe: Optional[str] = Query(default="live"),
+    current_user: dict = Depends(get_current_user)
+):
+    """Forces fresh live news ingestion and recalculates stats for the requested timeframe."""
+    news_service.ingest_live_news(force=True)
+    articles = news_service.fetch_articles(force_refresh=True, timeframe=timeframe)
+    clean_articles = [a for a in articles if not a.get("is_duplicate")]
+    conflicts = conflict_service.detect_conflicts(clean_articles)
     new_alerts = alert_service.evaluate_and_generate_alerts(articles)
     return {
         "message": "News refresh initiated and live feed synchronized.",
+        "status": "refreshed",
+        "total_articles": len(clean_articles),
         "articles_count": len(articles),
+        "total_including_duplicates": len(articles),
+        "active_conflicts_count": len(conflicts),
         "new_alerts_count": len(new_alerts),
         "is_demo_dataset": any(a.get("is_demo") for a in articles) if articles else bool(settings.USE_DEMO_DATA),
         "feed_status": news_service.get_feed_status(),
-        "last_synced": news_service.get_last_synced_iso()
+        "last_synced": news_service.get_last_synced_iso(),
+        "last_updated": news_service.get_last_synced_iso(),
+        "timeframe": timeframe
     }
 
 @app.get("/api/news/{article_id}/explain", response_model=SentimentAnalysisResult)
@@ -569,19 +587,22 @@ def analyze_headlines_batch(req: BatchAnalyzeRequest, current_user: dict = Depen
         raise HTTPException(status_code=500, detail=f"Batch inference failed: {str(e)}")
 
 @app.get("/api/companies", response_model=List[CompanySentimentSummary])
-def get_companies(current_user: dict = Depends(get_current_user)):
-    """Lists all monitored companies with sentiment statistics and conflict indicators."""
-    articles = news_service.fetch_articles()
-    conflicts = {c["company"]: True for c in conflict_service.detect_conflicts(articles)}
+def get_companies(
+    timeframe: str = Query(default="live", description="Analytics timeframe: 'live', '24h', '7d', 'all'"),
+    current_user: dict = Depends(get_current_user)
+):
+    """Lists all monitored companies with sentiment statistics and conflict indicators for the requested timeframe."""
+    articles = news_service.fetch_articles(timeframe=timeframe)
+    clean_articles = [a for a in articles if not a.get("is_duplicate")]
+    conflicts = {c["company"]: True for c in conflict_service.detect_conflicts(clean_articles)}
 
     company_stats = {}
     for company_name, kws in SUPPORTED_COMPANIES.items():
         ticker = COMPANY_TICKER_MAP.get(company_name, kws[0])
         sector = sector_service.get_sector_for_company(company_name)
         comp_arts = [
-            a for a in articles 
+            a for a in clean_articles 
             if (canonicalize_company(a.get("company")) or a.get("company", "")).lower() == company_name.lower()
-            and not a.get("is_duplicate")
         ]
         total = len(comp_arts)
 
@@ -617,9 +638,13 @@ def get_companies(current_user: dict = Depends(get_current_user)):
     return sorted(list(company_stats.values()), key=lambda x: x.total_articles, reverse=True)
 
 @app.get("/api/companies/{company}/sentiment")
-def get_company_sentiment_detail(company: str = Path(...), current_user: dict = Depends(get_current_user)):
+def get_company_sentiment_detail(
+    company: str = Path(...),
+    timeframe: str = Query(default="live"),
+    current_user: dict = Depends(get_current_user)
+):
     """Detailed view for an individual company including headlines, timeline, and conflict score."""
-    articles = news_service.fetch_articles()
+    articles = news_service.fetch_articles(timeframe=timeframe)
     target_comp = canonicalize_company(company) or company
     comp_arts = [
         a for a in articles
@@ -643,7 +668,7 @@ def get_company_sentiment_detail(company: str = Path(...), current_user: dict = 
     neg = sum(1 for a in clean_arts if (a.get("sentiment") or "").lower() == "negative")
     neu = total - (pos + neg)
 
-    conflicts = conflict_service.detect_conflicts(comp_arts)
+    conflicts = conflict_service.detect_conflicts(clean_arts)
     active_conflict = conflicts[0] if conflicts else None
 
     # History timeline records
@@ -665,24 +690,37 @@ def get_company_sentiment_detail(company: str = Path(...), current_user: dict = 
     }
 
 @app.get("/api/sentiment/history")
-def get_sentiment_history(company: Optional[str] = Query(default=None), current_user: dict = Depends(get_current_user)):
+def get_sentiment_history(
+    company: Optional[str] = Query(default=None),
+    timeframe: Optional[str] = Query(default=None),
+    current_user: dict = Depends(get_current_user)
+):
     """Returns stored historical sentiment progression."""
     query = {"company": company} if company and company.lower() != "all" else None
-    history = db.find("sentiment_history", query, limit=50)
+    limit = 100 if timeframe == "all" else 50
+    history = db.find("sentiment_history", query, limit=limit)
     history.sort(key=lambda x: x.get("timestamp", ""))
     return history
 
 @app.get("/api/sentiment/sectors", response_model=List[SectorSentiment])
-def get_sector_sentiments(current_user: dict = Depends(get_current_user)):
-    """Returns the market sector heatmap aggregations."""
-    articles = news_service.fetch_articles()
+def get_sector_sentiments(
+    timeframe: str = Query(default="live", description="Analytics timeframe: 'live', '24h', '7d', 'all'"),
+    current_user: dict = Depends(get_current_user)
+):
+    """Returns the market sector heatmap aggregations for the requested timeframe."""
+    articles = news_service.fetch_articles(timeframe=timeframe)
     return sector_service.calculate_sector_heatmaps(articles)
 
 @app.get("/api/conflicts", response_model=List[ConflictSignal])
-def get_conflicts(current_user: dict = Depends(get_current_user)):
-    """Returns all companies currently exhibiting Bullish/Bearish sentiment divergence."""
-    articles = news_service.fetch_articles()
-    return conflict_service.detect_conflicts(articles)
+def get_conflicts(
+    timeframe: str = Query(default="live", description="Analytics timeframe: 'live', '24h', '7d', 'all'"),
+    threshold: Optional[float] = Query(default=None, description="Minimum divergence sensitivity score (0.0 - 1.0)"),
+    current_user: dict = Depends(get_current_user)
+):
+    """Returns all companies currently exhibiting Bullish/Bearish sentiment divergence for the requested timeframe."""
+    articles = news_service.fetch_articles(timeframe=timeframe)
+    clean_articles = [a for a in articles if not a.get("is_duplicate")]
+    return conflict_service.detect_conflicts(clean_articles, min_conflict_score=threshold)
 
 @app.get("/api/alerts", response_model=List[AlertRecord])
 def get_alerts(unread_only: bool = Query(default=False), current_user: dict = Depends(get_current_user)):

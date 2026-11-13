@@ -368,9 +368,14 @@ export const api = {
   },
 
   // Dashboard Stats
-  getDashboardStats: async (): Promise<DashboardStats> => {
+  getDashboardStats: async (timeframe?: string, forceRefresh?: boolean): Promise<DashboardStats> => {
     try {
-      const res = await client.get('/api/dashboard/stats');
+      const res = await client.get('/api/dashboard/stats', {
+        params: {
+          timeframe: timeframe || 'live',
+          force_refresh: Boolean(forceRefresh),
+        },
+      });
       setOfflineStatus(false);
       return res.data;
     } catch (err) {
@@ -397,6 +402,7 @@ export const api = {
     query?: string;
     today_only?: boolean;
     date?: string;
+    timeframe?: string;
   }): Promise<NewsResponse> => {
     try {
       const res = await client.get<NewsResponse>('/api/news', { params });
@@ -532,9 +538,9 @@ export const api = {
   },
 
   // Companies
-  getCompanies: async (): Promise<CompanySummary[]> => {
+  getCompanies: async (timeframe?: string): Promise<CompanySummary[]> => {
     try {
-      const res = await client.get('/api/companies');
+      const res = await client.get('/api/companies', { params: { timeframe: timeframe || 'live' } });
       setOfflineStatus(false);
       return res.data;
     } catch (err) {
@@ -543,9 +549,11 @@ export const api = {
     }
   },
 
-  getCompanyDetail: async (company: string) => {
+  getCompanyDetail: async (company: string, timeframe?: string) => {
     try {
-      const res = await client.get(`/api/companies/${encodeURIComponent(company)}/sentiment`);
+      const res = await client.get(`/api/companies/${encodeURIComponent(company)}/sentiment`, {
+        params: { timeframe: timeframe || 'live' }
+      });
       setOfflineStatus(false);
       return res.data;
     } catch (err) {
@@ -579,9 +587,14 @@ export const api = {
   },
 
   // Conflict Detector
-  getConflicts: async (): Promise<ConflictSignal[]> => {
+  getConflicts: async (timeframe?: string, threshold?: number): Promise<ConflictSignal[]> => {
     try {
-      const res = await client.get('/api/conflicts');
+      const res = await client.get('/api/conflicts', {
+        params: {
+          timeframe: timeframe || 'live',
+          threshold: threshold !== undefined ? threshold : undefined
+        }
+      });
       setOfflineStatus(false);
       return res.data;
     } catch (err) {
@@ -591,9 +604,11 @@ export const api = {
   },
 
   // Sectors Heatmap
-  getSectors: async (): Promise<SectorSentiment[]> => {
+  getSectors: async (timeframe?: string): Promise<SectorSentiment[]> => {
     try {
-      const res = await client.get('/api/sentiment/sectors');
+      const res = await client.get('/api/sentiment/sectors', {
+        params: { timeframe: timeframe || 'live' }
+      });
       setOfflineStatus(false);
       return res.data;
     } catch (err) {
@@ -603,9 +618,9 @@ export const api = {
   },
 
   // History & Alerts
-  getHistory: async (company?: string) => {
+  getHistory: async (company?: string, timeframe?: string) => {
     try {
-      const res = await client.get('/api/sentiment/history', { params: { company } });
+      const res = await client.get('/api/sentiment/history', { params: { company, timeframe } });
       setOfflineStatus(false);
       return res.data;
     } catch (err) {

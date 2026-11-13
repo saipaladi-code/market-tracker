@@ -1066,11 +1066,12 @@ class NewsService:
         t = threading.Thread(target=worker, daemon=True)
         t.start()
 
-    def fetch_articles(self, force_refresh: bool = False, query: Optional[str] = None) -> List[Dict[str, Any]]:
+    def fetch_articles(self, force_refresh: bool = False, query: Optional[str] = None, timeframe: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Retrieves articles from database or fetches fresh articles from providers.
         Respects provider rate limits via CACHE_TTL_SECONDS while ensuring today's
         live news is immediately available when date changes or DB is fresh.
+        Supports explicit timeframe filtering: 'live', '24h', '7d', and 'all'.
         """
         # If demo mode is forced via settings, use the curated demo dataset
         if settings.USE_DEMO_DATA:
@@ -1080,8 +1081,9 @@ class NewsService:
         now_utc = self.get_utc_now()
         now_kol = self.get_kolkata_now()
 
-        # Query existing genuine articles from storage (excluding demo articles)
-        existing_articles = db.find("news_articles", {"is_demo": False}, limit=1000, sort=[("published_at", -1)])
+        # For 'all' history, query entire genuine corpus without 1000-article truncation limit
+        query_limit = 15000 if timeframe == "all" else 1000
+        existing_articles = db.find("news_articles", {"is_demo": False}, limit=query_limit, sort=[("published_at", -1)])
 
         # Count articles published today in Asia/Kolkata
         today_articles_count = sum(
@@ -1095,42 +1097,41 @@ class NewsService:
             if existing_articles:
                 dt_first = parse_publication_datetime(existing_articles[0].get("published_at"))
                 self._last_successful_fetch = dt_first or now_utc
-            return existing_articles
+        else:
+            should_fetch = (
+                force_refresh or
+                self._last_fetch_time is None or
+                (now_utc - self._last_fetch_time).total_seconds() > self.CACHE_TTL_SECONDS or
+                today_articles_count == 0
+            )
 
-        should_fetch = (
-            force_refresh or
-            self._last_fetch_time is None or
-            (now_utc - self._last_fetch_time).total_seconds() > self.CACHE_TTL_SECONDS or
-            today_articles_count == 0
-        )
+            if should_fetch:
+                with self._fetch_lock:
+                    # Re-check under lock in case another concurrent request just completed ingestion
+                    now_check = self.get_utc_now()
+                    now_kol_check = self.get_kolkata_now()
+                    fresh_db = db.find("news_articles", {"is_demo": False}, limit=query_limit, sort=[("published_at", -1)])
+                    fresh_today_count = sum(
+                        1 for a in fresh_db
+                        if self.is_published_today_kolkata(a.get("published_at"), now_kol_check)
+                    )
+                    still_needed = (
+                        force_refresh or
+                        self._last_fetch_time is None or
+                        (now_check - self._last_fetch_time).total_seconds() > self.CACHE_TTL_SECONDS or
+                        (fresh_today_count == 0 and len(fresh_db) == 0)
+                    )
 
-        if should_fetch:
-            with self._fetch_lock:
-                # Re-check under lock in case another concurrent request just completed ingestion
-                now_check = self.get_utc_now()
-                now_kol_check = self.get_kolkata_now()
-                fresh_db = db.find("news_articles", {"is_demo": False}, limit=1000, sort=[("published_at", -1)])
-                fresh_today_count = sum(
-                    1 for a in fresh_db
-                    if self.is_published_today_kolkata(a.get("published_at"), now_kol_check)
-                )
-                still_needed = (
-                    force_refresh or
-                    self._last_fetch_time is None or
-                    (now_check - self._last_fetch_time).total_seconds() > self.CACHE_TTL_SECONDS or
-                    (fresh_today_count == 0 and len(fresh_db) == 0)
-                )
-
-                if still_needed:
-                    self._last_fetch_time = now_check
-                    if fresh_db and not force_refresh:
-                        self._trigger_background_ingest(query=query)
-                        existing_articles = fresh_db
+                    if still_needed:
+                        self._last_fetch_time = now_check
+                        if fresh_db and not force_refresh:
+                            self._trigger_background_ingest(query=query)
+                            existing_articles = fresh_db
+                        else:
+                            self.ingest_live_news(force=force_refresh, query=query)
+                            existing_articles = db.find("news_articles", {"is_demo": False}, limit=query_limit, sort=[("published_at", -1)])
                     else:
-                        self.ingest_live_news(force=force_refresh, query=query)
-                        existing_articles = db.find("news_articles", {"is_demo": False}, limit=1000, sort=[("published_at", -1)])
-                else:
-                    existing_articles = fresh_db
+                        existing_articles = fresh_db
 
         # Ensure all articles returned have verified ticker attached
         for a in existing_articles:
@@ -1143,6 +1144,36 @@ class NewsService:
                     if canon and canon in COMPANY_TICKER_MAP:
                         a["ticker"] = COMPANY_TICKER_MAP[canon]
 
+        # Apply timeframe filtering if explicitly specified
+        if timeframe:
+            tf = timeframe.strip().lower()
+            if tf == "all":
+                return existing_articles
+            elif tf == "7d":
+                cutoff_7d = now_utc - timedelta(days=7)
+                return [
+                    a for a in existing_articles
+                    if (parse_publication_datetime(a.get("published_at")) or datetime.min.replace(tzinfo=timezone.utc)) >= cutoff_7d
+                ]
+            elif tf == "24h":
+                cutoff_24h = now_utc - timedelta(hours=24)
+                return [
+                    a for a in existing_articles
+                    if (parse_publication_datetime(a.get("published_at")) or datetime.min.replace(tzinfo=timezone.utc)) >= cutoff_24h
+                ]
+            elif tf == "live":
+                live_articles = [
+                    a for a in existing_articles
+                    if self.is_published_today_kolkata(a.get("published_at"), now_kol)
+                ]
+                if len(live_articles) < 10:
+                    cutoff_session = now_utc - timedelta(hours=14)
+                    live_articles = [
+                        a for a in existing_articles
+                        if (parse_publication_datetime(a.get("published_at")) or datetime.min.replace(tzinfo=timezone.utc)) >= cutoff_session
+                    ]
+                return live_articles
+
         return existing_articles
 
     def query_articles(
@@ -1153,13 +1184,14 @@ class NewsService:
         page: int = 1,
         page_size: int = 20,
         today_only: Optional[bool] = None,
-        date: Optional[str] = None
+        date: Optional[str] = None,
+        timeframe: Optional[str] = None
     ) -> NewsQueryResult:
         """
         Filters live articles with date, company, sentiment, and keyword criteria.
         Default feed strictly represents the current calendar date in Asia/Kolkata (+05:30).
         """
-        all_articles = self.fetch_articles(query=query)
+        all_articles = self.fetch_articles(query=query, timeframe=timeframe if timeframe in ("all", "7d", "24h", "live") else None)
 
         now_utc = self.get_utc_now()
         now_kol = self.get_kolkata_now()
@@ -1204,8 +1236,20 @@ class NewsService:
             if dt_utc > now_utc + timedelta(minutes=5):
                 continue
 
-            # Calendar day filter (Asia/Kolkata)
-            if target_date:
+            # Calendar day or explicit timeframe filter
+            if timeframe:
+                tf_clean = timeframe.strip().lower()
+                if tf_clean == "24h":
+                    if dt_utc < now_utc - timedelta(hours=24):
+                        continue
+                elif tf_clean == "7d":
+                    if dt_utc < now_utc - timedelta(days=7):
+                        continue
+                elif tf_clean == "live":
+                    if not self.is_published_today_kolkata(pub_str, now_kol) and dt_utc < now_utc - timedelta(hours=14):
+                        continue
+                # tf_clean == "all": no date filter applied
+            elif target_date:
                 art_kolkata_date = dt_utc.astimezone(KOLKATA_TZ).strftime("%Y-%m-%d")
                 if art_kolkata_date != target_date:
                     continue
@@ -1263,8 +1307,8 @@ class NewsService:
             filtered.append(a)
 
         # Fallback to recent genuine articles if today's calendar date has zero articles yet
-        effective_filter_date = target_date or today_str
-        if not filtered and target_date == today_str and not query and not company and not sentiment:
+        effective_filter_date = target_date or (timeframe.upper() if timeframe else today_str)
+        if not filtered and target_date == today_str and not query and not company and not sentiment and not timeframe:
             filtered = [
                 a for a in all_articles
                 if not (not settings.USE_DEMO_DATA and a.get("is_demo", False))

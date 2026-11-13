@@ -22,15 +22,17 @@ import { resolveVerifiedInstrument } from '../utils/tickerLookup';
 export const ConflictDetectorPage: React.FC = () => {
   const [conflicts, setConflicts] = useState<ConflictSignal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [timeframe, setTimeframe] = useState<'live' | '24h' | '7d' | 'all'>('live');
   const [threshold, setThreshold] = useState<number>(20); // 20% min divergence
+  const [visibleCount, setVisibleCount] = useState<number>(6);
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
   const [selectedBroker, , hasExplicitBroker] = useBrokerPreference();
 
-  const loadConflicts = async () => {
+  const loadConflicts = async (tf: 'live' | '24h' | '7d' | 'all' = timeframe) => {
     try {
       setLoading(true);
-      const data = await api.getConflicts();
+      const data = await api.getConflicts(tf, threshold / 100);
       setConflicts(data);
     } catch (err) {
       console.error('Failed to load conflicts:', err);
@@ -40,10 +42,12 @@ export const ConflictDetectorPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadConflicts();
-  }, []);
+    loadConflicts(timeframe);
+    setVisibleCount(6);
+  }, [timeframe, threshold]);
 
   const filteredConflicts = conflicts.filter((c) => (c.conflict_score * 100) >= threshold);
+  const displayedConflicts = filteredConflicts.slice(0, visibleCount);
 
   return (
     <div className="space-y-6 pb-12">
@@ -69,13 +73,34 @@ export const ConflictDetectorPage: React.FC = () => {
             </div>
           </div>
 
-          <button
-            onClick={loadConflicts}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-navy-850 hover:bg-navy-800 text-slate-300 border border-navy-750 rounded-xl text-xs font-semibold self-start md:self-auto cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
-            <span>Recompute</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+            {/* Timeframe selector */}
+            <div className="bg-navy-950 p-1 rounded-xl border border-navy-750 flex items-center text-xs">
+              {(['live', '24h', '7d', 'all'] as const).map((tf) => (
+                <button
+                  key={tf}
+                  disabled={loading}
+                  onClick={() => setTimeframe(tf)}
+                  className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                    timeframe === tf
+                      ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 disabled:opacity-50'
+                  }`}
+                >
+                  {tf === 'live' ? 'Live Session' : tf === '24h' ? '24h Window' : tf === '7d' ? '7D Scope' : 'All History'}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => loadConflicts(timeframe)}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-navy-850 hover:bg-navy-800 disabled:opacity-60 text-slate-300 border border-navy-750 rounded-xl text-xs font-semibold cursor-pointer disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-blue-400 ${loading ? 'animate-spin' : ''}`} />
+              <span>Recompute</span>
+            </button>
+          </div>
         </div>
 
         <p className="text-xs text-slate-300 leading-relaxed max-w-3xl">
@@ -104,7 +129,7 @@ export const ConflictDetectorPage: React.FC = () => {
           </div>
 
           <span className="text-[11px] text-slate-400 font-mono">
-            Showing {filteredConflicts.length} of {conflicts.length} flagged securities
+            Showing {Math.min(displayedConflicts.length, filteredConflicts.length)} of {filteredConflicts.length} flagged securities ({conflicts.length} discovered in {timeframe.toUpperCase()})
           </span>
         </div>
       </div>
@@ -124,7 +149,7 @@ export const ConflictDetectorPage: React.FC = () => {
       ) : (
         /* Conflict Cards Stream */
         <div className="space-y-4">
-          {filteredConflicts.map((conf) => (
+          {displayedConflicts.map((conf) => (
             <div
               key={conf.company}
               className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-5 sm:p-6 space-y-5 hover:border-navy-700 transition-all shadow-sm min-w-0 break-words"
@@ -259,6 +284,18 @@ export const ConflictDetectorPage: React.FC = () => {
               </div>
             </div>
           ))}
+
+          {visibleCount < filteredConflicts.length && (
+            <div className="pt-4 text-center">
+              <button
+                onClick={() => setVisibleCount((prev) => prev + 6)}
+                className="px-6 py-2.5 rounded-xl bg-navy-900 hover:bg-navy-850 border border-navy-750 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
+              >
+                <span>Load More Divergent Securities ({filteredConflicts.length - visibleCount} remaining)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       )}
       {/* Broker Trade Routing Modal */}

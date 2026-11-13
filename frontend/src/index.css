@@ -93,8 +93,9 @@
 
 /* ==============================================================================
    UNIVERSAL MULTILINGUAL TRANSLATION ENGINE STYLING
-   Suppresses Google native toolbars, balloon frames, and shifts while maintaining
-   sleek custom FIN-SENTIMENT typography, brand styles, and ticker protection.
+   Suppresses Google native toolbars, balloon frames, rotating spinner icons,
+   and layout shifts while maintaining sleek custom FIN-SENTIMENT typography,
+   brand styles, and ticker protection.
    ============================================================================== */
 .goog-te-banner-frame.skiptranslate,
 .goog-te-banner-frame,
@@ -102,13 +103,26 @@ iframe.goog-te-banner-frame,
 #goog-gt-tt,
 .goog-te-balloon-frame,
 .goog-tooltip,
-.goog-tooltip:hover {
+.goog-tooltip:hover,
+.goog-te-spinner-pos,
+.goog-te-spinner,
+.goog-te-gadget-icon,
+.goog-te-gadget-simple,
+.goog-te-combo,
+.goog-logo-link,
+[class*="VIpgJd"],
+[id*="goog-gt-"],
+.VIpgJd-ZVi9od-aZ2wEe-wOHMyf,
+.VIpgJd-ZVi9od-aZ2wEe-wOHMyf-ti6hGc {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
   height: 0 !important;
   width: 0 !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
 }
 
 body {
@@ -121,6 +135,13 @@ body {
   visibility: hidden !important;
   height: 0 !important;
   overflow: hidden !important;
+}
+
+.skiptranslate:not(#google_translate_element) {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .skiptranslate iframe {

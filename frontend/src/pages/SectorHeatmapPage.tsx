@@ -20,11 +20,12 @@ export const SectorHeatmapPage: React.FC = () => {
   const [sectors, setSectors] = useState<SectorSentiment[]>([]);
   const [selectedSector, setSelectedSector] = useState<SectorSentiment | null>(null);
   const [loading, setLoading] = useState(true);
+  const [timeframe, setTimeframe] = useState<'live' | '24h' | '7d' | 'all'>('live');
 
-  const loadSectors = async () => {
+  const loadSectors = async (tf: 'live' | '24h' | '7d' | 'all' = timeframe) => {
     try {
       setLoading(true);
-      const data = await api.getSectors();
+      const data = await api.getSectors(tf);
       setSectors(data);
       if (data.length > 0) {
         setSelectedSector(data[0]);
@@ -37,8 +38,8 @@ export const SectorHeatmapPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadSectors();
-  }, []);
+    loadSectors(timeframe);
+  }, [timeframe]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -62,13 +63,34 @@ export const SectorHeatmapPage: React.FC = () => {
             </p>
           </div>
 
-          <button
-            onClick={loadSectors}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-navy-850 hover:bg-navy-800 text-slate-300 border border-navy-750 rounded-xl text-xs font-semibold self-start md:self-auto cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
-            <span>Recalculate Matrix</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+            {/* Timeframe selector */}
+            <div className="bg-navy-950 p-1 rounded-xl border border-navy-750 flex items-center text-xs">
+              {(['live', '24h', '7d', 'all'] as const).map((tf) => (
+                <button
+                  key={tf}
+                  disabled={loading}
+                  onClick={() => setTimeframe(tf)}
+                  className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                    timeframe === tf
+                      ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 disabled:opacity-50'
+                  }`}
+                >
+                  {tf === 'live' ? 'Live Session' : tf === '24h' ? '24h Window' : tf === '7d' ? '7D Scope' : 'All History'}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => loadSectors(timeframe)}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-navy-850 hover:bg-navy-800 disabled:opacity-60 text-slate-300 border border-navy-750 rounded-xl text-xs font-semibold cursor-pointer disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-blue-400 ${loading ? 'animate-spin' : ''}`} />
+              <span>Recalculate Matrix</span>
+            </button>
+          </div>
         </div>
       </div>
 

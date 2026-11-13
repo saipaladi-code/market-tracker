@@ -56,6 +56,8 @@ export const DashboardPage: React.FC = () => {
   const [recentNews, setRecentNews] = useState<Article[]>(MOCK_ARTICLES.slice(0, 6));
   const [historyData, setHistoryData] = useState<any[]>(MOCK_HISTORY);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSwitchingFilter, setIsSwitchingFilter] = useState(false);
   const [timeframe, setTimeframe] = useState<'live' | '24h' | '7d' | 'all'>('live');
   const [showBackendModal, setShowBackendModal] = useState(false);
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
@@ -63,45 +65,45 @@ export const DashboardPage: React.FC = () => {
   const [selectedBroker, , hasExplicitBroker] = useBrokerPreference();
   const navigate = useNavigate();
 
-  const loadData = async () => {
+  const loadData = async (targetTf: 'live' | '24h' | '7d' | 'all' = timeframe, forceRefresh = false) => {
     try {
-      setLoading(true);
+      if (forceRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsSwitchingFilter(true);
+      }
+
       const [statsData, newsData, historyList] = await Promise.allSettled([
-        api.getDashboardStats(),
-        api.getNews({ page: 1, page_size: 6 }),
-        api.getHistory(),
+        api.getDashboardStats(targetTf, forceRefresh),
+        api.getNews({ page: 1, page_size: 6, timeframe: targetTf }),
+        api.getHistory(undefined, targetTf),
       ]);
 
       if (statsData.status === 'fulfilled' && statsData.value) {
         setStats(statsData.value);
-      } else {
+      } else if (!stats || stats === MOCK_DASHBOARD_STATS) {
         setStats(MOCK_DASHBOARD_STATS);
       }
 
       if (newsData.status === 'fulfilled' && newsData.value) {
         setRecentNews(newsData.value.articles || []);
-      } else {
-        setRecentNews(MOCK_ARTICLES.slice(0, 6));
       }
 
       if (historyList.status === 'fulfilled' && Array.isArray(historyList.value) && historyList.value.length > 0) {
         setHistoryData(historyList.value);
-      } else {
-        setHistoryData(MOCK_HISTORY);
       }
     } catch (err: any) {
       console.warn('Dashboard synchronization fallback:', err);
-      setStats(MOCK_DASHBOARD_STATS);
-      setRecentNews(MOCK_ARTICLES.slice(0, 6));
-      setHistoryData(MOCK_HISTORY);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
+      setIsSwitchingFilter(false);
     }
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    loadData(timeframe, false);
+  }, [timeframe]);
 
   if (loading && !stats) {
     return (
@@ -158,7 +160,7 @@ export const DashboardPage: React.FC = () => {
               <span>Configure Backend</span>
             </button>
             <button
-              onClick={loadData}
+              onClick={() => loadData(timeframe, true)}
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -172,7 +174,7 @@ export const DashboardPage: React.FC = () => {
       <BackendConfigModal
         isOpen={showBackendModal}
         onClose={() => setShowBackendModal(false)}
-        onSave={loadData}
+        onSave={() => loadData(timeframe, true)}
       />
       {/* Top Section / Header Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-navy-900/90 border border-navy-750/80 rounded-2xl p-5 backdrop-blur-md">
@@ -200,11 +202,12 @@ export const DashboardPage: React.FC = () => {
             {(['live', '24h', '7d', 'all'] as const).map((tf) => (
               <button
                 key={tf}
+                disabled={isRefreshing || isSwitchingFilter}
                 onClick={() => setTimeframe(tf)}
-                className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
                   timeframe === tf
                     ? 'bg-blue-600 text-white font-semibold shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    : 'text-slate-400 hover:text-slate-200 disabled:opacity-50'
                 }`}
               >
                 {tf === 'live' ? 'Live Session' : tf === '24h' ? '24h Window' : tf === '7d' ? '7D Scope' : 'All History'}
@@ -213,12 +216,13 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           <button
-            onClick={loadData}
-            className="flex items-center gap-2 px-4 py-2 bg-navy-850 hover:bg-navy-800 text-slate-200 border border-navy-750 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+            onClick={() => loadData(timeframe, true)}
+            disabled={isRefreshing || isSwitchingFilter}
+            className="flex items-center gap-2 px-4 py-2 bg-navy-850 hover:bg-navy-800 disabled:opacity-60 text-slate-200 border border-navy-750 rounded-xl text-xs font-semibold transition-all cursor-pointer disabled:cursor-not-allowed"
             title="Refresh current analytics metrics"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
-            <span>Refresh</span>
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
           </button>
 
           <Link
@@ -357,7 +361,7 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {stats.active_conflicts.map((conf) => (
+            {stats.active_conflicts.slice(0, 6).map((conf) => (
               <div
                 key={conf.company}
                 className="p-4 bg-navy-950/80 rounded-xl border border-navy-750 flex flex-col justify-between space-y-3 hover:border-navy-700 transition-colors"
@@ -366,7 +370,7 @@ export const DashboardPage: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-white text-sm">{conf.company}</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-navy-800 text-slate-300 border border-navy-700 notranslate" translate="no">{conf.ticker}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-navy-800 text-slate-300 border border-navy-750 notranslate" translate="no">{conf.ticker}</span>
                     </div>
                     <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 font-mono text-[10px] font-bold border border-amber-500/30">
                       {(conf.conflict_score * 100).toFixed(0)}% Divergence
@@ -407,6 +411,18 @@ export const DashboardPage: React.FC = () => {
               </div>
             ))}
           </div>
+
+          {stats.active_conflicts.length > 6 && (
+            <div className="pt-2 text-center">
+              <Link
+                to="/conflicts"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-navy-950 hover:bg-navy-800 border border-navy-750 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                <span>View all {stats.active_conflicts.length} conflicted securities in Conflict Detector</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          )}
         </div>
       )}
 
