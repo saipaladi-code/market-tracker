@@ -138,18 +138,20 @@ function resolveNavigation(company, ticker, requestedBroker = 'upstox') {
     }
   }
 
-  // 2. Check US Instruments -> Unsupported on Indian retail brokers under RBI LRS
+  // 2. Check US Instruments -> Supported via Upstox Global Access and Groww US Stocks
   for (const c of candidates) {
     if (US_INSTRUMENTS[c]) {
+      const isUpstox = requestedBroker === 'upstox';
+      const inst = US_INSTRUMENTS[c];
       return {
         broker: requestedBroker,
-        isSupported: false,
-        destinationType: 'unsupported',
+        isSupported: true,
+        destinationType: 'verified_portal_with_ticker_search',
         directUrl: null,
-        portalUrl: null,
-        actionLabel: 'US Stocks Unsupported on Indian Brokers',
-        ticker: US_INSTRUMENTS[c].ticker,
-        reason: 'RBI LRS regulations restrict active trading on Indian retail brokers'
+        portalUrl: isUpstox ? 'https://upstox.com/us-stocks/' : 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+        actionLabel: isUpstox ? `Open ${c} on Upstox` : `Open ${c} on Groww`,
+        ticker: inst.ticker,
+        availableBrokers: ['upstox', 'groww']
       };
     }
   }
@@ -224,16 +226,23 @@ assert.equal(iciciGroww.broker, 'groww');
 assert.match(iciciGroww.directUrl, /groww\.in/);
 assert.doesNotMatch(iciciGroww.directUrl, /upstox\.com/);
 
-// TEST 4: US stocks unsupported status
-console.log('Test 4: US stocks unsupported status under RBI LRS...');
+// TEST 4: US stocks supported on both Upstox Global Access and Groww US Stocks
+console.log('Test 4: US stocks supported routing (Upstox Global Access & Groww US Stocks)...');
 const usList = ['Apple (AAPL)', 'Tesla (TSLA)', 'Microsoft (MSFT)', 'Amazon (AMZN)', 'NVIDIA (NVDA)', 'Meta', 'Pfizer'];
 for (const stock of usList) {
-  const res = resolveNavigation(stock, null, 'upstox');
-  assert.equal(res.isSupported, false);
-  assert.equal(res.destinationType, 'unsupported');
-  assert.equal(res.directUrl, null);
+  const resUpstox = resolveNavigation(stock, null, 'upstox');
+  assert.equal(resUpstox.isSupported, true);
+  assert.equal(resUpstox.destinationType, 'verified_portal_with_ticker_search');
+  assert.match(resUpstox.portalUrl, /upstox\.com\/us-stocks/);
+  assert.deepEqual(resUpstox.availableBrokers, ['upstox', 'groww']);
+
+  const resGroww = resolveNavigation(stock, null, 'groww');
+  assert.equal(resGroww.isSupported, true);
+  assert.equal(resGroww.destinationType, 'verified_portal_with_ticker_search');
+  assert.match(resGroww.portalUrl, /groww\.in\/us-stocks/);
+  assert.deepEqual(resGroww.availableBrokers, ['upstox', 'groww']);
 }
-console.log('  -> US stocks clearly flagged as unsupported for active trading on Indian retail brokers.');
+console.log('  -> US stocks verified supported on Upstox Global Access & Groww US Stocks.');
 
 // TEST 5: General market & macroeconomic news suppression
 console.log('Test 5: General market news suppression...');

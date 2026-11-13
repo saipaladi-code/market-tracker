@@ -73,10 +73,10 @@ class BrokerNavigationService {
 
     if (destinationPreference === 'portal') {
       if (brokerId === 'upstox') {
-        return 'https://pro.upstox.com';
+        return route.country === 'US' ? 'https://upstox.com/us-stocks/' : 'https://pro.upstox.com';
       }
       if (brokerId === 'groww') {
-        return 'https://groww.in/stocks';
+        return route.country === 'US' ? 'https://groww.in/us-stocks/popular-us-stocks-and-etfs' : 'https://groww.in/stocks';
       }
       if (route.portal_fallback_url) {
         return route.portal_fallback_url;
@@ -86,7 +86,9 @@ class BrokerNavigationService {
     return (
       matchingBroker.direct_url ||
       matchingBroker.entry_url ||
-      (brokerId === 'upstox' ? 'https://pro.upstox.com' : 'https://groww.in/stocks')
+      (brokerId === 'upstox'
+        ? (route.country === 'US' ? 'https://upstox.com/us-stocks/' : 'https://pro.upstox.com')
+        : (route.country === 'US' ? 'https://groww.in/us-stocks/popular-us-stocks-and-etfs' : 'https://groww.in/stocks'))
     );
   }
 

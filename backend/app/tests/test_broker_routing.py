@@ -45,11 +45,11 @@ def test_indian_stock_routing_groww_direct_navigation():
         assert broker["is_direct_link_verified"] is True
         assert expected_ticker in broker["instructions"]
 
-def test_international_us_stock_groww_unsupported():
+def test_international_us_stock_routing_upstox_and_groww_supported():
     """
-    Verifies that US stocks (Apple, Amazon, Nvidia, Tesla, etc.) are correctly identified
-    with ticker and exchange metadata, but clearly classified as unsupported on Groww
-    since Groww discontinued retail US stock trading under LRS guidelines.
+    Verifies that US stocks (Apple, Microsoft, Tesla, Amazon, NVIDIA, etc.)
+    are supported with valid trading destinations on both Upstox Global Access
+    and Groww US Stocks.
     """
     us_samples = [
         ("Apple (AAPL)", "AAPL", "Apple"),
@@ -64,13 +64,20 @@ def test_international_us_stock_groww_unsupported():
         res = client.get("/api/trading/route", params={"company": comp_query})
         assert res.status_code == 200, f"Failed for {comp_query}"
         data = res.json()
-        assert data["is_tradable"] is False, f"Expected {comp_query} to be untradable on Groww"
+        assert data["is_tradable"] is True, f"Expected {comp_query} to be tradable"
         assert data["ticker"] == expected_ticker
         assert data["country"] == "US"
-        assert data["destination_type"] == "unsupported"
-        assert data["direct_url"] is None
-        assert data["portal_fallback_url"] == "https://groww.in/us-stocks/popular-us-stocks-and-etfs"
-        assert "unsupported" in data["message"].lower() or "unavailable" in data["message"].lower()
+        assert data["status"] == "supported"
+        assert data["destination_type"] == "verified_portal_with_ticker_search"
+        assert data["portal_fallback_url"] in (
+            "https://groww.in/us-stocks/popular-us-stocks-and-etfs",
+            "https://upstox.com/us-stocks/"
+        )
+        # Both Upstox and Groww options must be present
+        broker_ids = [b["broker_id"] for b in data["brokers"]]
+        assert "upstox" in broker_ids
+        assert "groww" in broker_ids
+        assert "ibkr" not in broker_ids
 
 def test_alphabet_share_classes_differentiation():
     """Verifies that Alphabet share classes (GOOGL vs GOOG) are differentiated accurately."""
@@ -144,9 +151,10 @@ def test_composite_ticker_and_company_parameters():
     res_us = client.get("/api/trading/route", params={"company": "Apple Inc", "ticker": "AAPL"})
     assert res_us.status_code == 200
     data_us = res_us.json()
-    assert data_us["is_tradable"] is False
+    assert data_us["is_tradable"] is True
+    assert data_us["status"] == "supported"
     assert data_us["ticker"] == "AAPL"
-    assert data_us["destination_type"] == "unsupported"
+    assert len(data_us["brokers"]) == 2
 
 def test_supported_instruments_endpoint():
     """Verifies listing of all verified Indian and International instruments."""

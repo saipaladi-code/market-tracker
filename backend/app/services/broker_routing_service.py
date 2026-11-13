@@ -39,6 +39,36 @@ GROWW_BASE_BROKER = BrokerDestination(
     compliance_notice="FIN-SENTIMENT is an informational analytics platform. Orders must be authorized directly by the user on Groww. We never store brokerage credentials or automate trading."
 )
 
+UPSTOX_US_BASE_BROKER = BrokerDestination(
+    broker_id="upstox",
+    broker_name="Upstox Global Access",
+    country="US",
+    market_coverage="US Stocks & ETFs (NASDAQ & NYSE)",
+    entry_url="https://upstox.com/us-stocks/",
+    direct_url=None,
+    destination_type="verified_portal_with_ticker_search",
+    is_direct_link_verified=False,
+    requires_user_login=True,
+    action_label="Open on Upstox",
+    instructions="Continue to Upstox's US Stocks platform to review the selected security. Search for the ticker symbol to view quotes, fundamentals, and invest via global investing.",
+    compliance_notice="Orders must be authenticated and submitted directly on Upstox. FIN-SENTIMENT never stores brokerage credentials or automates trading."
+)
+
+GROWW_US_BASE_BROKER = BrokerDestination(
+    broker_id="groww",
+    broker_name="Groww US Stocks",
+    country="US",
+    market_coverage="US Stocks & ETFs (NASDAQ & NYSE)",
+    entry_url="https://groww.in/us-stocks/popular-us-stocks-and-etfs",
+    direct_url=None,
+    destination_type="verified_portal_with_ticker_search",
+    is_direct_link_verified=False,
+    requires_user_login=True,
+    action_label="Open on Groww",
+    instructions="Continue to Groww's US Stocks platform to review the selected security. Search for the ticker symbol to view live quotes and invest via global investing.",
+    compliance_notice="FIN-SENTIMENT is an informational analytics platform. Orders must be authorized directly by the user on Groww. We never store brokerage credentials or automate trading."
+)
+
 # Verified Indian Stock Instruments (NSE / BSE)
 # Upstox is the preferred and verified broker for all Indian equities.
 # All URLs below have been tested and verified (HTTP 200 OK) on official Upstox public pages.
@@ -516,26 +546,55 @@ class BrokerRoutingService:
                 disclaimer="Sentiment scores reflect news reporting tone and do not guarantee investment performance. Always perform independent diligence."
             )
 
-        # RULE 2: US stocks on Groww - Groww does NOT support active trading for US-listed equities
+        # RULE 2: US stocks (NASDAQ / NYSE) - Upstox Global Access & Groww US Stocks both supported
         elif (country == "US" or exchange in ("NASDAQ", "NYSE")) and inst.get("is_verified_us", False):
+            groww_portal = "https://groww.in/us-stocks/popular-us-stocks-and-etfs"
+            upstox_portal = "https://upstox.com/us-stocks/"
+
+            groww_broker = GROWW_US_BASE_BROKER.model_copy()
+            groww_broker.action_label = f"Open {short_name} on Groww"
+            groww_broker.instructions = (
+                f"Continue to Groww's US Stocks platform to review {short_name} ({ticker}). "
+                f"Use the search bar on Groww to locate {ticker} and review US equity investing details."
+            )
+
+            upstox_broker = UPSTOX_US_BASE_BROKER.model_copy()
+            upstox_broker.action_label = f"Open {short_name} on Upstox"
+            upstox_broker.instructions = (
+                f"Continue to Upstox's US Stocks platform to review {short_name} ({ticker}). "
+                f"Use the search bar on Upstox to locate {ticker} and review quotes, fundamentals, and invest via global investing."
+            )
+
+            selected_broker_id = (broker or "").strip().lower()
+            if selected_broker_id == "upstox":
+                primary_broker = upstox_broker
+                secondary_broker = groww_broker
+                portal_url = upstox_portal
+                action_label = f"Open {short_name} on Upstox"
+            else:
+                primary_broker = groww_broker
+                secondary_broker = upstox_broker
+                portal_url = groww_portal
+                action_label = f"Open {short_name} on Groww"
+
             return CompanyTradingRoute(
-                status="unsupported",
-                is_tradable=False,
+                status="supported",
+                is_tradable=True,
                 company=company,
                 ticker=ticker,
                 exchange=exchange,
                 country=country,
                 isin=inst.get("isin"),
                 upstox_instrument_key=None,
-                destination_type="unsupported",
+                destination_type="verified_portal_with_ticker_search",
                 direct_url=None,
-                portal_fallback_url="https://groww.in/us-stocks/popular-us-stocks-and-etfs",
-                action_label="US Stocks Unsupported on Groww",
+                portal_fallback_url=portal_url,
+                action_label=action_label,
                 share_class_note=share_class_note,
-                brokers=[],
-                recommended_broker=None,
-                message=f"Groww does not currently support active trading or direct order execution for US-listed equities ({ticker} on {exchange}). US stock investing is currently unavailable through Groww.",
-                disclaimer="Groww trading is restricted to Indian equities on NSE & BSE. US-listed equities are not supported for trading."
+                brokers=[primary_broker, secondary_broker],
+                recommended_broker=primary_broker,
+                message=f"Verified US equity instrument: {ticker} ({exchange}). Available via Upstox Global Access and Groww US Stocks.",
+                disclaimer="Trading in foreign securities involves currency and market risks under applicable guidelines. FIN-SENTIMENT provides analytical sentiment tracking and does not execute trades."
             )
 
         # RULE 3: Other international stocks MUST NOT silently route to Groww or any broker

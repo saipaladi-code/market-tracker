@@ -213,7 +213,7 @@ const INDIAN_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
 
 /**
  * Tracked US Stocks (NASDAQ / NYSE).
- * Note: Under RBI LRS guidelines, direct retail stock trading is unsupported on Indian retail brokers.
+ * Upstox Global Access and Groww US Stocks provide foreign equity investment platforms.
  */
 const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
   apple: {
@@ -224,9 +224,9 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     country: 'US',
     isin: 'US0378331005',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Indian Brokers'
+    portal_fallback_url: 'https://upstox.com/us-stocks/',
+    entryUrl: 'https://upstox.com/us-stocks/',
+    action_label: 'Open in Global Trading'
   },
   microsoft: {
     company: 'Microsoft',
@@ -236,9 +236,9 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     country: 'US',
     isin: 'US5949181045',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Indian Brokers'
+    portal_fallback_url: 'https://upstox.com/us-stocks/',
+    entryUrl: 'https://upstox.com/us-stocks/',
+    action_label: 'Open in Global Trading'
   },
   nvidia: {
     company: 'Nvidia',
@@ -248,9 +248,9 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     country: 'US',
     isin: 'US67066G1040',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Indian Brokers'
+    portal_fallback_url: 'https://upstox.com/us-stocks/',
+    entryUrl: 'https://upstox.com/us-stocks/',
+    action_label: 'Open in Global Trading'
   },
   tesla: {
     company: 'Tesla',
@@ -260,9 +260,9 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     country: 'US',
     isin: 'US88160R1014',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Indian Brokers'
+    portal_fallback_url: 'https://upstox.com/us-stocks/',
+    entryUrl: 'https://upstox.com/us-stocks/',
+    action_label: 'Open in Global Trading'
   },
   alphabet_googl: {
     company: 'Alphabet (Class A)',
@@ -272,9 +272,9 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     country: 'US',
     isin: 'US02079K3059',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Indian Brokers',
+    portal_fallback_url: 'https://upstox.com/us-stocks/',
+    entryUrl: 'https://upstox.com/us-stocks/',
+    action_label: 'Open in Global Trading',
     share_class_note: 'Alphabet Inc. Class A Common Stock (Voting). For Class C Non-Voting shares, use ticker GOOG.'
   },
   alphabet_goog: {
@@ -285,9 +285,9 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     country: 'US',
     isin: 'US02079K1079',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Indian Brokers',
+    portal_fallback_url: 'https://upstox.com/us-stocks/',
+    entryUrl: 'https://upstox.com/us-stocks/',
+    action_label: 'Open in Global Trading',
     share_class_note: 'Alphabet Inc. Class C Capital Stock (Non-Voting). For Class A Voting shares, use ticker GOOGL.'
   },
   amazon: {
@@ -298,9 +298,9 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     country: 'US',
     isin: 'US0231351067',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Indian Brokers'
+    portal_fallback_url: 'https://upstox.com/us-stocks/',
+    entryUrl: 'https://upstox.com/us-stocks/',
+    action_label: 'Open in Global Trading'
   },
   'jpmorgan chase': {
     company: 'JPMorgan Chase',
@@ -310,9 +310,9 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     country: 'US',
     isin: 'US46625H1005',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Indian Brokers'
+    portal_fallback_url: 'https://upstox.com/us-stocks/',
+    entryUrl: 'https://upstox.com/us-stocks/',
+    action_label: 'Open in Global Trading'
   },
   pfizer: {
     company: 'Pfizer',
@@ -322,9 +322,9 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     country: 'US',
     isin: 'US7170811035',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Indian Brokers'
+    portal_fallback_url: 'https://upstox.com/us-stocks/',
+    entryUrl: 'https://upstox.com/us-stocks/',
+    action_label: 'Open in Global Trading'
   },
   exxonmobil: {
     company: 'ExxonMobil',
@@ -334,9 +334,9 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     country: 'US',
     isin: 'US30231G1022',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Indian Brokers'
+    portal_fallback_url: 'https://upstox.com/us-stocks/',
+    entryUrl: 'https://upstox.com/us-stocks/',
+    action_label: 'Open in Global Trading'
   },
   meta: {
     company: 'Meta Platforms',
@@ -346,9 +346,9 @@ const US_INSTRUMENTS: Record<string, VerifiedInstrumentMeta> = {
     country: 'US',
     isin: 'US30303M1027',
     destination_type: 'verified_portal_with_ticker_search',
-    portal_fallback_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    entryUrl: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
-    action_label: 'US Stocks Unsupported on Indian Brokers'
+    portal_fallback_url: 'https://upstox.com/us-stocks/',
+    entryUrl: 'https://upstox.com/us-stocks/',
+    action_label: 'Open in Global Trading'
   }
 };
 
@@ -546,8 +546,9 @@ export function getClientSideTradingRoute(
     };
   }
 
+  const effectiveBroker: BrokerId = requestedBroker || getSelectedBroker();
+
   if (inst.country === 'IN') {
-    const effectiveBroker: BrokerId = requestedBroker || getSelectedBroker();
 
     const upstoxDirect = inst.upstox_direct_url || (inst.isin ? 'https://pro.upstox.com' : null);
     const upstoxBroker: BrokerDestination = {
@@ -599,24 +600,58 @@ export function getClientSideTradingRoute(
     };
   }
 
-  // US Equities - Neither Upstox nor Groww supports live order execution for US stocks under RBI LRS
+  // US Equities (NASDAQ / NYSE) - Upstox Global Access & Groww US Stocks both supported
+  const upstoxUsBroker: BrokerDestination = {
+    broker_id: 'upstox',
+    broker_name: 'Upstox Global Access',
+    country: 'US',
+    market_coverage: 'US Stocks & ETFs (NASDAQ & NYSE)',
+    entry_url: 'https://upstox.com/us-stocks/',
+    direct_url: null,
+    destination_type: 'verified_portal_with_ticker_search',
+    is_direct_link_verified: false,
+    requires_user_login: true,
+    action_label: `Open ${inst.short_name} on Upstox`,
+    instructions: `Continue to Upstox's US Stocks platform to review ${inst.short_name} (${inst.ticker}). Search for ${inst.ticker} to view quotes, fundamentals, and invest via global investing.`,
+    compliance_notice: 'Orders must be authenticated and submitted directly on Upstox. FIN-SENTIMENT never stores brokerage credentials or automates trading.'
+  };
+
+  const growwUsBroker: BrokerDestination = {
+    broker_id: 'groww',
+    broker_name: 'Groww US Stocks',
+    country: 'US',
+    market_coverage: 'US Stocks & ETFs (NASDAQ & NYSE)',
+    entry_url: 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
+    direct_url: null,
+    destination_type: 'verified_portal_with_ticker_search',
+    is_direct_link_verified: false,
+    requires_user_login: true,
+    action_label: `Open ${inst.short_name} on Groww`,
+    instructions: `Continue to Groww's US Stocks platform to review ${inst.short_name} (${inst.ticker}). Search for ${inst.ticker} to view global investment options and details.`,
+    compliance_notice: 'FIN-SENTIMENT is an informational analytics platform. Orders must be authorized directly by the user on Groww. We never store brokerage credentials or automate trading.'
+  };
+
+  const isUpstox = effectiveBroker === 'upstox';
+  const recommendedBroker = isUpstox ? upstoxUsBroker : growwUsBroker;
+  const portalUrl = isUpstox ? 'https://upstox.com/us-stocks/' : 'https://groww.in/us-stocks/popular-us-stocks-and-etfs';
+
   return {
-    status: 'unsupported',
-    is_tradable: false,
+    status: 'supported',
+    is_tradable: true,
     company: inst.company,
     ticker: inst.ticker,
     exchange: inst.exchange,
     country: 'US',
     isin: inst.isin || null,
     upstox_instrument_key: null,
-    destination_type: 'unsupported',
+    destination_type: 'verified_portal_with_ticker_search',
     direct_url: null,
-    portal_fallback_url: null,
-    action_label: 'US Stocks Unsupported on Indian Brokers',
+    portal_fallback_url: portalUrl,
+    action_label: isUpstox ? `Open ${inst.short_name} on Upstox` : `Open ${inst.short_name} on Groww`,
     share_class_note: inst.share_class_note || null,
-    brokers: [],
-    recommended_broker: null,
-    message: `Indian retail brokers (Upstox and Groww) do not support active trading or direct order execution for US-listed equities (${inst.ticker} on ${inst.exchange}) under RBI Liberalised Remittance Scheme (LRS) regulations.`,
-    disclaimer: 'Active US equity trading is restricted on Indian retail brokers. Only Indian equities (NSE & BSE) are supported.'
+    brokers: isUpstox ? [upstoxUsBroker, growwUsBroker] : [growwUsBroker, upstoxUsBroker],
+    recommended_broker: recommendedBroker,
+    message: `Verified US equity instrument: ${inst.ticker} (${inst.exchange}). Available via Upstox Global Access and Groww US Stocks.`,
+    disclaimer: 'Trading in foreign securities involves currency and market risks under applicable guidelines. FIN-SENTIMENT provides analytical sentiment tracking and does not execute trades.'
   };
 }
