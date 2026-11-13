@@ -96,16 +96,56 @@ const INDIAN_INSTRUMENTS = {
 };
 
 const US_INSTRUMENTS = {
-  apple: { ticker: 'AAPL' },
-  microsoft: { ticker: 'MSFT' },
-  tesla: { ticker: 'TSLA' },
-  amazon: { ticker: 'AMZN' },
-  nvidia: { ticker: 'NVDA' },
-  alphabet: { ticker: 'GOOGL' },
-  meta: { ticker: 'META' },
-  'jpmorgan chase': { ticker: 'JPM' },
-  pfizer: { ticker: 'PFE' },
-  exxonmobil: { ticker: 'XOM' }
+  apple: {
+    ticker: 'AAPL',
+    growwUrl: 'https://groww.in/us-stocks/AAPL',
+    upstoxUrl: 'https://upstox.com/us-stocks/aapl-share-price/'
+  },
+  microsoft: {
+    ticker: 'MSFT',
+    growwUrl: 'https://groww.in/us-stocks/MSFT',
+    upstoxUrl: 'https://upstox.com/us-stocks/msft-share-price/'
+  },
+  tesla: {
+    ticker: 'TSLA',
+    growwUrl: 'https://groww.in/us-stocks/TSLA',
+    upstoxUrl: 'https://upstox.com/us-stocks/tsla-share-price/'
+  },
+  amazon: {
+    ticker: 'AMZN',
+    growwUrl: 'https://groww.in/us-stocks/AMZN',
+    upstoxUrl: 'https://upstox.com/us-stocks/amzn-share-price/'
+  },
+  nvidia: {
+    ticker: 'NVDA',
+    growwUrl: 'https://groww.in/us-stocks/NVDA',
+    upstoxUrl: 'https://upstox.com/us-stocks/nvda-share-price/'
+  },
+  alphabet: {
+    ticker: 'GOOGL',
+    growwUrl: 'https://groww.in/us-stocks/GOOGL',
+    upstoxUrl: 'https://upstox.com/us-stocks/googl-share-price/'
+  },
+  meta: {
+    ticker: 'META',
+    growwUrl: 'https://groww.in/us-stocks/META',
+    upstoxUrl: 'https://upstox.com/us-stocks/meta-share-price/'
+  },
+  'jpmorgan chase': {
+    ticker: 'JPM',
+    growwUrl: 'https://groww.in/us-stocks/JPM',
+    upstoxUrl: 'https://upstox.com/us-stocks/jpm-share-price/'
+  },
+  pfizer: {
+    ticker: 'PFE',
+    growwUrl: 'https://groww.in/us-stocks/PFE',
+    upstoxUrl: 'https://upstox.com/us-stocks/pfe-share-price/'
+  },
+  exxonmobil: {
+    ticker: 'XOM',
+    growwUrl: 'https://groww.in/us-stocks/XOM',
+    upstoxUrl: 'https://upstox.com/us-stocks/xom-share-price/'
+  }
 };
 
 function normalizeText(text) {
@@ -138,7 +178,7 @@ function resolveNavigation(company, ticker, requestedBroker = 'upstox') {
     }
   }
 
-  // 2. Check US Instruments -> Supported via Upstox Global Access and Groww US Stocks
+  // 2. Check US Instruments -> Supported via Upstox Global Access and Groww US Stocks with verified direct pages
   for (const c of candidates) {
     if (US_INSTRUMENTS[c]) {
       const isUpstox = requestedBroker === 'upstox';
@@ -146,12 +186,14 @@ function resolveNavigation(company, ticker, requestedBroker = 'upstox') {
       return {
         broker: requestedBroker,
         isSupported: true,
-        destinationType: 'verified_portal_with_ticker_search',
-        directUrl: null,
+        destinationType: 'direct_instrument',
+        directUrl: isUpstox ? inst.upstoxUrl : inst.growwUrl,
         portalUrl: isUpstox ? 'https://upstox.com/us-stocks/' : 'https://groww.in/us-stocks/popular-us-stocks-and-etfs',
         actionLabel: isUpstox ? `Open ${c} on Upstox` : `Open ${c} on Groww`,
         ticker: inst.ticker,
-        availableBrokers: ['upstox', 'groww']
+        availableBrokers: ['upstox', 'groww'],
+        upstoxUrl: inst.upstoxUrl,
+        growwUrl: inst.growwUrl
       };
     }
   }
@@ -226,23 +268,25 @@ assert.equal(iciciGroww.broker, 'groww');
 assert.match(iciciGroww.directUrl, /groww\.in/);
 assert.doesNotMatch(iciciGroww.directUrl, /upstox\.com/);
 
-// TEST 4: US stocks supported on both Upstox Global Access and Groww US Stocks
+// TEST 4: US stocks supported on both Upstox Global Access and Groww US Stocks with direct pages
 console.log('Test 4: US stocks supported routing (Upstox Global Access & Groww US Stocks)...');
 const usList = ['Apple (AAPL)', 'Tesla (TSLA)', 'Microsoft (MSFT)', 'Amazon (AMZN)', 'NVIDIA (NVDA)', 'Meta', 'Pfizer'];
 for (const stock of usList) {
   const resUpstox = resolveNavigation(stock, null, 'upstox');
   assert.equal(resUpstox.isSupported, true);
-  assert.equal(resUpstox.destinationType, 'verified_portal_with_ticker_search');
+  assert.equal(resUpstox.destinationType, 'direct_instrument');
+  assert.match(resUpstox.directUrl, /upstox\.com\/us-stocks\/[a-z0-9\-]+-share-price\//);
   assert.match(resUpstox.portalUrl, /upstox\.com\/us-stocks/);
   assert.deepEqual(resUpstox.availableBrokers, ['upstox', 'groww']);
 
   const resGroww = resolveNavigation(stock, null, 'groww');
   assert.equal(resGroww.isSupported, true);
-  assert.equal(resGroww.destinationType, 'verified_portal_with_ticker_search');
+  assert.equal(resGroww.destinationType, 'direct_instrument');
+  assert.match(resGroww.directUrl, /groww\.in\/us-stocks\/[A-Z0-9]+/);
   assert.match(resGroww.portalUrl, /groww\.in\/us-stocks/);
   assert.deepEqual(resGroww.availableBrokers, ['upstox', 'groww']);
 }
-console.log('  -> US stocks verified supported on Upstox Global Access & Groww US Stocks.');
+console.log('  -> US stocks verified supported with direct stock pages on Upstox & Groww.');
 
 // TEST 5: General market & macroeconomic news suppression
 console.log('Test 5: General market news suppression...');

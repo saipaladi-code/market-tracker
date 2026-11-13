@@ -245,7 +245,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                 </div>
 
                 <div className="p-3 rounded-lg bg-navy-950 border border-navy-800">
-                  <span className="text-[10px] text-slate-400 font-mono uppercase block">Symbol</span>
+                  <span className="text-[10px] text-slate-400 font-mono uppercase block">Ticker</span>
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-sm font-bold text-white font-mono notranslate" translate="no">
                       {route.ticker}
@@ -263,7 +263,7 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                 <div className="p-3 rounded-lg bg-navy-950 border border-navy-800">
                   <span className="text-[10px] text-slate-400 font-mono uppercase block">Exchange</span>
                   <span className="text-sm font-bold text-emerald-400 font-mono mt-1 block">
-                    {route.exchange} {route.country ? `(${route.country})` : ''}
+                    {route.exchange}
                   </span>
                 </div>
 
@@ -309,13 +309,13 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                         </span>
                       </div>
                       <span className="px-2 py-0.5 rounded text-[10px] font-mono border bg-blue-500/20 text-blue-300 border-blue-500/30">
-                        {isUSStock ? 'Global Access' : 'Direct Stock Link'}
+                        {upstoxBroker?.is_direct_link_verified ? 'Direct Stock Link' : (isUSStock ? 'Global Access' : 'Portal Entry')}
                       </span>
                     </div>
 
                     <p className="text-xs text-slate-300 leading-relaxed">
                       {isUSStock
-                        ? "Continue to Upstox's US Stocks platform to review the selected security."
+                        ? `Continue to Upstox's US Stocks platform to review live NASDAQ/NYSE quotes, charts, and fundamentals for ${route.company}.`
                         : `Continue to Upstox Pro to review real-time NSE charts, market depth, and execute your order for ${route.company}.`}
                     </p>
 
@@ -357,13 +357,13 @@ export const TradeRoutingModal: React.FC<TradeRoutingModalProps> = ({
                         </span>
                       </div>
                       <span className="px-2 py-0.5 rounded text-[10px] font-mono border bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
-                        {isUSStock ? 'US Stocks' : 'Direct Stock Link'}
+                        {growwBroker?.is_direct_link_verified ? 'Direct Stock Link' : (isUSStock ? 'US Stocks' : 'Portal Entry')}
                       </span>
                     </div>
 
                     <p className="text-xs text-slate-300 leading-relaxed">
                       {isUSStock
-                        ? "Continue to Groww's US Stocks platform to review the selected security."
+                        ? `Continue to Groww US Stocks to review live quotes, interactive charts, and execute your trade for ${route.company}.`
                         : `Continue to Groww to review real-time NSE quotes, interactive charts, and execute your trade for ${route.company}.`}
                     </p>
 

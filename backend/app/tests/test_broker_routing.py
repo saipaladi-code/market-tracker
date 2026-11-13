@@ -48,7 +48,7 @@ def test_indian_stock_routing_groww_direct_navigation():
 def test_international_us_stock_routing_upstox_and_groww_supported():
     """
     Verifies that US stocks (Apple, Microsoft, Tesla, Amazon, NVIDIA, etc.)
-    are supported with valid trading destinations on both Upstox Global Access
+    are supported with verified direct stock pages on both Upstox Global Access
     and Groww US Stocks.
     """
     us_samples = [
@@ -57,10 +57,11 @@ def test_international_us_stock_routing_upstox_and_groww_supported():
         ("Microsoft (MSFT)", "MSFT", "Microsoft"),
         ("Tesla (TSLA)", "TSLA", "Tesla"),
         ("Amazon (AMZN)", "AMZN", "Amazon"),
-        ("NVIDIA (NVDA)", "NVDA", "Nvidia")
+        ("NVIDIA (NVDA)", "NVDA", "NVIDIA")
     ]
 
     for comp_query, expected_ticker, short_name in us_samples:
+        # Default / Upstox route
         res = client.get("/api/trading/route", params={"company": comp_query})
         assert res.status_code == 200, f"Failed for {comp_query}"
         data = res.json()
@@ -68,16 +69,28 @@ def test_international_us_stock_routing_upstox_and_groww_supported():
         assert data["ticker"] == expected_ticker
         assert data["country"] == "US"
         assert data["status"] == "supported"
-        assert data["destination_type"] == "verified_portal_with_ticker_search"
-        assert data["portal_fallback_url"] in (
-            "https://groww.in/us-stocks/popular-us-stocks-and-etfs",
-            "https://upstox.com/us-stocks/"
-        )
-        # Both Upstox and Groww options must be present
-        broker_ids = [b["broker_id"] for b in data["brokers"]]
-        assert "upstox" in broker_ids
-        assert "groww" in broker_ids
-        assert "ibkr" not in broker_ids
+        assert data["destination_type"] == "direct_instrument"
+        assert data["direct_url"] == f"https://upstox.com/us-stocks/{expected_ticker.lower()}-share-price/"
+        assert data["portal_fallback_url"] == "https://upstox.com/us-stocks/"
+
+        # Both Upstox and Groww broker options must be present with verified direct URLs
+        broker_map = {b["broker_id"]: b for b in data["brokers"]}
+        assert "upstox" in broker_map
+        assert "groww" in broker_map
+        assert "ibkr" not in broker_map
+
+        assert broker_map["upstox"]["is_direct_link_verified"] is True
+        assert broker_map["upstox"]["direct_url"] == f"https://upstox.com/us-stocks/{expected_ticker.lower()}-share-price/"
+        assert broker_map["groww"]["is_direct_link_verified"] is True
+        assert broker_map["groww"]["direct_url"] == f"https://groww.in/us-stocks/{expected_ticker.upper()}"
+
+        # Groww route explicitly requested
+        res_groww = client.get("/api/trading/route", params={"company": comp_query, "broker": "groww"})
+        assert res_groww.status_code == 200
+        data_groww = res_groww.json()
+        assert data_groww["destination_type"] == "direct_instrument"
+        assert data_groww["direct_url"] == f"https://groww.in/us-stocks/{expected_ticker.upper()}"
+        assert data_groww["recommended_broker"]["broker_id"] == "groww"
 
 def test_alphabet_share_classes_differentiation():
     """Verifies that Alphabet share classes (GOOGL vs GOOG) are differentiated accurately."""

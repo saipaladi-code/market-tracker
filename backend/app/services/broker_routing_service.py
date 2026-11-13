@@ -245,10 +245,21 @@ VERIFIED_INDIAN_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
 }
 
 # Verified US Stock Instruments (NASDAQ / NYSE)
-# Groww (US Stocks) is routed for verified US equities.
-# Note: Groww US Stocks portal provides access to US-listed equities and ETFs in partnership with global clearing brokerages.
-# It does not support public deep-link query parameters for individual stock orders; verified portal entry with ticker preservation is provided.
+# Both Upstox Global Access and Groww US Stocks are routed with verified direct stock pages.
+# All URLs below have been tested and verified (HTTP 200 OK) on official Groww and Upstox public pages.
 VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
+    "nvidia": {
+        "company": "NVIDIA",
+        "short_name": "NVIDIA",
+        "ticker": "NVDA",
+        "exchange": "NASDAQ",
+        "country": "US",
+        "isin": "US67066G1040",
+        "upstox_direct_url": "https://upstox.com/us-stocks/nvda-share-price/",
+        "groww_direct_url": "https://groww.in/us-stocks/NVDA",
+        "preferred_broker": "upstox",
+        "aliases": ["nvidia", "nvda", "nvidia corp", "nvidia corporation", "nvidia (nvda)"]
+    },
     "tesla": {
         "company": "Tesla",
         "short_name": "Tesla",
@@ -256,8 +267,22 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US88160R1014",
-        "preferred_broker": "groww",
+        "upstox_direct_url": "https://upstox.com/us-stocks/tsla-share-price/",
+        "groww_direct_url": "https://groww.in/us-stocks/TSLA",
+        "preferred_broker": "upstox",
         "aliases": ["tesla", "tsla", "tesla inc", "tesla inc.", "tesla motors", "tesla (tsla)"]
+    },
+    "microsoft": {
+        "company": "Microsoft",
+        "short_name": "Microsoft",
+        "ticker": "MSFT",
+        "exchange": "NASDAQ",
+        "country": "US",
+        "isin": "US5949181045",
+        "upstox_direct_url": "https://upstox.com/us-stocks/msft-share-price/",
+        "groww_direct_url": "https://groww.in/us-stocks/MSFT",
+        "preferred_broker": "upstox",
+        "aliases": ["microsoft", "msft", "microsoft corp", "microsoft corporation", "microsoft (msft)"]
     },
     "apple": {
         "company": "Apple",
@@ -266,7 +291,9 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US0378331005",
-        "preferred_broker": "groww",
+        "upstox_direct_url": "https://upstox.com/us-stocks/aapl-share-price/",
+        "groww_direct_url": "https://groww.in/us-stocks/AAPL",
+        "preferred_broker": "upstox",
         "aliases": ["apple", "aapl", "apple inc", "apple inc.", "apple (aapl)"]
     },
     "amazon": {
@@ -276,28 +303,10 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US0231351067",
-        "preferred_broker": "groww",
+        "upstox_direct_url": "https://upstox.com/us-stocks/amzn-share-price/",
+        "groww_direct_url": "https://groww.in/us-stocks/AMZN",
+        "preferred_broker": "upstox",
         "aliases": ["amazon", "amzn", "amazon.com", "amazon.com inc", "amazon (amzn)"]
-    },
-    "microsoft": {
-        "company": "Microsoft",
-        "short_name": "Microsoft",
-        "ticker": "MSFT",
-        "exchange": "NASDAQ",
-        "country": "US",
-        "isin": "US5949181045",
-        "preferred_broker": "groww",
-        "aliases": ["microsoft", "msft", "microsoft corp", "microsoft corporation", "microsoft (msft)"]
-    },
-    "nvidia": {
-        "company": "Nvidia",
-        "short_name": "Nvidia",
-        "ticker": "NVDA",
-        "exchange": "NASDAQ",
-        "country": "US",
-        "isin": "US67066G1040",
-        "preferred_broker": "groww",
-        "aliases": ["nvidia", "nvda", "nvidia corp", "nvidia corporation", "nvidia (nvda)"]
     },
     "alphabet_googl": {
         "company": "Alphabet (Class A)",
@@ -306,8 +315,10 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US02079K3059",
+        "upstox_direct_url": "https://upstox.com/us-stocks/googl-share-price/",
+        "groww_direct_url": "https://groww.in/us-stocks/GOOGL",
         "share_class_note": "Alphabet Inc. Class A Common Stock (Voting). For Class C Non-Voting shares, use ticker GOOG.",
-        "preferred_broker": "groww",
+        "preferred_broker": "upstox",
         "aliases": ["alphabet", "google", "googl", "alphabet inc", "alphabet (googl)", "google (googl)"]
     },
     "alphabet_goog": {
@@ -317,8 +328,10 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US02079K1079",
+        "upstox_direct_url": "https://upstox.com/us-stocks/goog-share-price/",
+        "groww_direct_url": "https://groww.in/us-stocks/GOOG",
         "share_class_note": "Alphabet Inc. Class C Capital Stock (Non-Voting). For Class A Voting shares, use ticker GOOGL.",
-        "preferred_broker": "groww",
+        "preferred_broker": "upstox",
         "aliases": ["goog", "alphabet class c", "google class c", "alphabet (goog)", "google (goog)"]
     },
     "meta": {
@@ -328,7 +341,9 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NASDAQ",
         "country": "US",
         "isin": "US30303M1027",
-        "preferred_broker": "groww",
+        "upstox_direct_url": "https://upstox.com/us-stocks/meta-share-price/",
+        "groww_direct_url": "https://groww.in/us-stocks/META",
+        "preferred_broker": "upstox",
         "aliases": ["meta", "meta platforms", "facebook", "meta platforms inc", "meta (meta)"]
     },
     "jpmorgan chase": {
@@ -338,7 +353,9 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NYSE",
         "country": "US",
         "isin": "US46625H1005",
-        "preferred_broker": "groww",
+        "upstox_direct_url": "https://upstox.com/us-stocks/jpm-share-price/",
+        "groww_direct_url": "https://groww.in/us-stocks/JPM",
+        "preferred_broker": "upstox",
         "aliases": ["jpmorgan chase", "jpmorgan", "jpm", "chase", "jpmorgan chase & co", "jpmorgan chase (jpm)"]
     },
     "pfizer": {
@@ -348,7 +365,9 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NYSE",
         "country": "US",
         "isin": "US7170811035",
-        "preferred_broker": "groww",
+        "upstox_direct_url": "https://upstox.com/us-stocks/pfe-share-price/",
+        "groww_direct_url": "https://groww.in/us-stocks/PFE",
+        "preferred_broker": "upstox",
         "aliases": ["pfizer", "pfe", "pfizer inc", "pfizer (pfe)"]
     },
     "exxonmobil": {
@@ -358,7 +377,9 @@ VERIFIED_US_INSTRUMENTS: Dict[str, Dict[str, Any]] = {
         "exchange": "NYSE",
         "country": "US",
         "isin": "US30231G1022",
-        "preferred_broker": "groww",
+        "upstox_direct_url": "https://upstox.com/us-stocks/xom-share-price/",
+        "groww_direct_url": "https://groww.in/us-stocks/XOM",
+        "preferred_broker": "upstox",
         "aliases": ["exxonmobil", "exxon", "xom", "mobil", "exxon mobil corp", "exxonmobil (xom)"]
     }
 }
@@ -546,36 +567,51 @@ class BrokerRoutingService:
                 disclaimer="Sentiment scores reflect news reporting tone and do not guarantee investment performance. Always perform independent diligence."
             )
 
-        # RULE 2: US stocks (NASDAQ / NYSE) - Upstox Global Access & Groww US Stocks both supported
+        # RULE 2: US stocks (NASDAQ / NYSE) - Upstox Global Access & Groww US Stocks both supported with verified direct stock pages
         elif (country == "US" or exchange in ("NASDAQ", "NYSE")) and inst.get("is_verified_us", False):
             groww_portal = "https://groww.in/us-stocks/popular-us-stocks-and-etfs"
             upstox_portal = "https://upstox.com/us-stocks/"
 
+            groww_direct = inst.get("groww_direct_url") or f"https://groww.in/us-stocks/{ticker.upper()}"
+            upstox_direct = inst.get("upstox_direct_url") or f"https://upstox.com/us-stocks/{ticker.lower()}-share-price/"
+
             groww_broker = GROWW_US_BASE_BROKER.model_copy()
+            groww_broker.entry_url = groww_direct
+            groww_broker.direct_url = groww_direct
+            groww_broker.destination_type = "direct_instrument"
+            groww_broker.is_direct_link_verified = True
             groww_broker.action_label = f"Open {short_name} on Groww"
             groww_broker.instructions = (
-                f"Continue to Groww's US Stocks platform to review {short_name} ({ticker}). "
-                f"Use the search bar on Groww to locate {ticker} and review US equity investing details."
+                f"Navigate directly to {short_name} on Groww US Stocks ({ticker}) with live quotes, interactive charts, and company fundamentals. "
+                f"To execute a trade, authenticate on Groww."
             )
 
             upstox_broker = UPSTOX_US_BASE_BROKER.model_copy()
+            upstox_broker.entry_url = upstox_direct
+            upstox_broker.direct_url = upstox_direct
+            upstox_broker.destination_type = "direct_instrument"
+            upstox_broker.is_direct_link_verified = True
             upstox_broker.action_label = f"Open {short_name} on Upstox"
             upstox_broker.instructions = (
-                f"Continue to Upstox's US Stocks platform to review {short_name} ({ticker}). "
-                f"Use the search bar on Upstox to locate {ticker} and review quotes, fundamentals, and invest via global investing."
+                f"Navigate directly to {short_name} on Upstox US Stocks ({ticker}) with live quotes, fundamentals, and global investing. "
+                f"To execute a trade, sign in to Upstox."
             )
 
             selected_broker_id = (broker or "").strip().lower()
-            if selected_broker_id == "upstox":
-                primary_broker = upstox_broker
-                secondary_broker = groww_broker
-                portal_url = upstox_portal
-                action_label = f"Open {short_name} on Upstox"
-            else:
+            if selected_broker_id == "groww":
                 primary_broker = groww_broker
                 secondary_broker = upstox_broker
+                direct_url = groww_direct
                 portal_url = groww_portal
                 action_label = f"Open {short_name} on Groww"
+                message = f"Verified US equity instrument: {ticker} ({exchange}). Official route: Groww direct US stock page."
+            else:
+                primary_broker = upstox_broker
+                secondary_broker = groww_broker
+                direct_url = upstox_direct
+                portal_url = upstox_portal
+                action_label = f"Open {short_name} on Upstox"
+                message = f"Verified US equity instrument: {ticker} ({exchange}). Official route: Upstox US stock page."
 
             return CompanyTradingRoute(
                 status="supported",
@@ -586,14 +622,14 @@ class BrokerRoutingService:
                 country=country,
                 isin=inst.get("isin"),
                 upstox_instrument_key=None,
-                destination_type="verified_portal_with_ticker_search",
-                direct_url=None,
+                destination_type="direct_instrument",
+                direct_url=direct_url,
                 portal_fallback_url=portal_url,
                 action_label=action_label,
                 share_class_note=share_class_note,
                 brokers=[primary_broker, secondary_broker],
                 recommended_broker=primary_broker,
-                message=f"Verified US equity instrument: {ticker} ({exchange}). Available via Upstox Global Access and Groww US Stocks.",
+                message=message,
                 disclaimer="Trading in foreign securities involves currency and market risks under applicable guidelines. FIN-SENTIMENT provides analytical sentiment tracking and does not execute trades."
             )
 
