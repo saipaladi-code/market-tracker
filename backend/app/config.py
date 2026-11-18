@@ -46,39 +46,9 @@ class Settings(BaseSettings):
     COOKIE_SECURE: Optional[bool] = None  # None = auto-detect
     COOKIE_SAMESITE: Optional[str] = None  # None = auto-detect ("none" for prod, "lax" for dev)
 
-    # Resend Transactional Email API Configuration (Primary HTTPS Provider — Port 443)
-    RESEND_API_KEY: Optional[str] = None
-    RESEND_FROM_EMAIL: Optional[str] = None
-    RESEND_SENDER_NAME: Optional[str] = None
-
-    @property
-    def resend_api_key(self) -> Optional[str]:
-        val = self.RESEND_API_KEY or os.getenv("RESEND_API_KEY")
-        return val.strip() if val and isinstance(val, str) and val.strip() else None
-
-    @property
-    def resend_sender_name(self) -> str:
-        val = self.RESEND_SENDER_NAME or os.getenv("RESEND_SENDER_NAME")
-        if val and isinstance(val, str) and val.strip():
-            return val.strip()
-        return "FIN-SENTIMENT"
-
-    @property
-    def resend_from_email_raw(self) -> str:
-        val = self.RESEND_FROM_EMAIL or os.getenv("RESEND_FROM_EMAIL")
-        if val and isinstance(val, str) and val.strip():
-            return val.strip()
-        return "onboarding@resend.dev"
-
-    @property
-    def resend_from_email(self) -> str:
-        raw = self.resend_from_email_raw
-        if "<" in raw and ">" in raw:
-            return raw
-        return f"{self.resend_sender_name} <{raw}>"
-
-    # Legacy Brevo configuration fields kept optional so existing .env files load cleanly
+    # Brevo Transactional Email API Configuration (Primary HTTPS Provider — Port 443)
     BREVO_API_KEY: Optional[str] = None
+    BREVO_SENDER_EMAIL: Optional[str] = None
     BREVO_FROM_EMAIL: Optional[str] = None
     BREVO_SENDER_NAME: Optional[str] = None
 
@@ -88,9 +58,19 @@ class Settings(BaseSettings):
         return val.strip() if val and isinstance(val, str) and val.strip() else None
 
     @property
-    def brevo_from_email(self) -> Optional[str]:
-        val = self.BREVO_FROM_EMAIL or os.getenv("BREVO_FROM_EMAIL")
+    def brevo_sender_email(self) -> Optional[str]:
+        val = (
+            self.BREVO_SENDER_EMAIL
+            or os.getenv("BREVO_SENDER_EMAIL")
+            or self.BREVO_FROM_EMAIL
+            or os.getenv("BREVO_FROM_EMAIL")
+        )
         return val.strip() if val and isinstance(val, str) and val.strip() else None
+
+    @property
+    def brevo_from_email(self) -> Optional[str]:
+        """Backward-compatible alias for brevo_sender_email."""
+        return self.brevo_sender_email
 
     @property
     def brevo_sender_name(self) -> str:
@@ -101,7 +81,7 @@ class Settings(BaseSettings):
 
     @property
     def is_email_service_configured(self) -> bool:
-        return bool(self.resend_api_key)
+        return bool(self.brevo_api_key and self.brevo_sender_email)
 
     @property
     def frontend_url(self) -> str:

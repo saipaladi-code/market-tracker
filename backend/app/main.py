@@ -199,14 +199,13 @@ def get_health():
             "has_key": bool(settings.GEMINI_API_KEY)
         },
         "email_service": {
-            "provider": "Resend Transactional Email API" if settings.resend_api_key else "Unconfigured",
+            "provider": "Brevo Transactional Email API" if settings.brevo_api_key else "Unconfigured",
             "configured": settings.is_email_service_configured,
-            "has_api_key": bool(settings.resend_api_key),
-            "sender_configured": bool(settings.resend_from_email_raw),
-            "using_onboarding_sender": settings.resend_from_email_raw == "onboarding@resend.dev",
+            "has_api_key": bool(settings.brevo_api_key),
+            "sender_configured": bool(settings.brevo_sender_email),
             "transport": "HTTPS (Port 443)",
             "frontend_url": settings.frontend_url,
-            "build": "v4.0.0-resend-https"
+            "build": "v4.1.0-brevo-https"
         }
     }
 
@@ -225,7 +224,13 @@ def register_user(req: UserRegisterRequest, response: Response):
 @app.post("/api/auth/login", response_model=AuthResponse)
 def login_user(req: UserLoginRequest, request: Request, response: Response):
     """Validates user credentials, rate-limits brute force, and initiates session."""
-    client_ip = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    elif request.client:
+        client_ip = request.client.host
+    else:
+        client_ip = "unknown"
     res = auth_service.login_user(req.email, req.password, remember_me=req.remember_me, client_ip=client_ip)
     set_auth_cookie(response, res["token"], remember_me=req.remember_me)
     return res
