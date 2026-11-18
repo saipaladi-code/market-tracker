@@ -35,6 +35,15 @@ import { TradeRoutingModal } from '../components/TradeRoutingModal';
 import { resolveVerifiedTicker, resolveVerifiedInstrument } from '../utils/tickerLookup';
 import { useBrokerPreference } from '../utils/brokerConfig';
 
+const getTickerLogoFontClass = (ticker?: string): string => {
+  const len = (ticker || '').trim().length;
+  if (len <= 4) return 'text-base sm:text-lg tracking-tight';
+  if (len <= 6) return 'text-xs sm:text-sm tracking-tight';
+  if (len <= 8) return 'text-[10px] sm:text-[11px] tracking-tighter';
+  if (len <= 10) return 'text-[8.5px] sm:text-[9.5px] tracking-tighter';
+  return 'text-[8px] tracking-tighter leading-tight break-all';
+};
+
 export const CompanyAnalysisPage: React.FC = () => {
   const [companies, setCompanies] = useState<CompanySummary[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string>('Nvidia');
@@ -103,27 +112,27 @@ export const CompanyAnalysisPage: React.FC = () => {
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
-      <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-6 backdrop-blur-md">
+      <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-4 sm:p-6 backdrop-blur-md">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-mono font-bold uppercase tracking-wider">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-mono font-bold uppercase tracking-wider shrink-0">
                 SECURITIES SURVEILLANCE
               </span>
               <span className="text-xs text-slate-400 font-mono">
                 {companies.length} Tracked Institutional Equities
               </span>
             </div>
-            <h2 className="text-xl font-extrabold text-white tracking-tight">
+            <h2 className="text-xl font-extrabold text-white tracking-tight leading-snug break-words">
               Company Sentiment Deep Dive
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
               In-depth tonal distribution, narrative conflict detection, and individual headline coverage.
             </p>
           </div>
 
           {/* Quick search input */}
-          <div className="relative max-w-xs w-full">
+          <div className="relative md:max-w-xs w-full shrink-0">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
@@ -144,16 +153,16 @@ export const CompanyAnalysisPage: React.FC = () => {
             <button
               key={c.company}
               onClick={() => setSelectedCompany(c.company)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border flex items-center gap-2 cursor-pointer ${
+              className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border flex items-center gap-2 cursor-pointer ${
                 isSelected
                   ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20'
                   : 'bg-navy-900/90 border-navy-750 text-slate-300 hover:bg-navy-850 hover:text-white'
               }`}
             >
-              <span className="font-mono">{c.ticker}</span>
+              <span className="font-mono font-bold notranslate" translate="no">{c.ticker}</span>
               <span className={isSelected ? 'text-white' : 'text-slate-400'}>{c.company}</span>
               {c.has_conflict && (
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Active mixed-sentiment conflict" />
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" title="Active mixed-sentiment conflict" />
               )}
             </button>
           );
@@ -167,29 +176,46 @@ export const CompanyAnalysisPage: React.FC = () => {
       ) : activeSummary ? (
         <div className="space-y-6">
           {/* Active Company Hero Metric Banner */}
-          <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-6 shadow-sm">
+          <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-4 sm:p-6 shadow-sm">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-navy-800">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-white font-mono font-extrabold text-xl shadow-lg shadow-blue-500/20">
-                  {activeSummary.ticker}
+              <div className="flex items-start sm:items-center gap-3.5 sm:gap-4 min-w-0 flex-1">
+                <div
+                  className={`w-16 h-16 sm:w-[72px] sm:h-[72px] shrink-0 overflow-hidden px-1 sm:px-1.5 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-white font-mono font-extrabold shadow-lg shadow-blue-500/20 select-none notranslate ${getTickerLogoFontClass(activeSummary.ticker)}`}
+                  translate="no"
+                  title={activeSummary.ticker}
+                >
+                  <span className="max-w-full text-center leading-none whitespace-nowrap">
+                    {activeSummary.ticker}
+                  </span>
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xl font-bold text-white">{activeSummary.company}</h3>
-                    <span className="px-2 py-0.5 rounded-md bg-navy-800 text-slate-300 border border-navy-700 text-xs font-mono">
-                      {activeSummary.sector}
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 min-w-0">
+                    <h3 className="text-lg sm:text-xl font-bold text-white leading-snug break-words min-w-0">
+                      {activeSummary.company}
+                    </h3>
+                    {activeSummary.sector && (
+                      <span className="px-2.5 py-0.5 rounded-md bg-navy-800 text-slate-300 border border-navy-700 text-xs font-mono shrink-0 max-w-full break-words leading-snug">
+                        {activeSummary.sector}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400 leading-relaxed">
+                    <span className="font-mono font-semibold text-blue-300/90 notranslate" translate="no">
+                      {activeSummary.ticker}
+                    </span>
+                    <span className="hidden sm:inline text-slate-600" aria-hidden="true">•</span>
+                    <span>
+                      Total Ingested Articles:{' '}
+                      <strong className="text-white font-mono">{activeSummary.total_articles} distinct</strong>
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Total Ingested Articles: <strong className="text-white font-mono">{activeSummary.total_articles} distinct</strong>
-                  </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap shrink-0">
                 {activeSummary.has_conflict && (
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-medium">
-                    <GitCompareArrows className="w-4 h-4 text-amber-400" />
+                    <GitCompareArrows className="w-4 h-4 text-amber-400 shrink-0" />
                     <span>Mixed-Sentiment Polarization Detected</span>
                   </div>
                 )}
@@ -213,11 +239,11 @@ export const CompanyAnalysisPage: React.FC = () => {
                         });
                         setTradeModalOpen(true);
                       }}
-                      className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
+                      className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer shadow-sm shrink-0"
                       title={`Trade ${heroInst?.company || activeSummary.company} via ${heroInst?.brokerName || 'broker'}`}
                     >
-                      <TrendingUp className="w-4 h-4 text-emerald-400" />
-                      <span>Trade {heroInst?.ticker || activeSummary.ticker} ({heroBroker})</span>
+                      <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span className="notranslate" translate="no">Trade {heroInst?.ticker || activeSummary.ticker} ({heroBroker})</span>
                     </button>
                   );
                 })()}
@@ -276,15 +302,15 @@ export const CompanyAnalysisPage: React.FC = () => {
 
           {/* Active Conflict Spotlight if present */}
           {companyDetail?.conflict && (
-            <div className="bg-navy-900/90 border border-amber-500/30 rounded-2xl p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <GitCompareArrows className="w-5 h-5 text-amber-400" />
-                  <h4 className="text-sm font-bold text-white">
+            <div className="bg-navy-900/90 border border-amber-500/30 rounded-2xl p-4 sm:p-5 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <GitCompareArrows className="w-5 h-5 text-amber-400 shrink-0" />
+                  <h4 className="text-sm font-bold text-white leading-snug break-words min-w-0">
                     Narrative Divergence Analysis ({activeSummary.company})
                   </h4>
                 </div>
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-xs font-bold border border-amber-500/30">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-xs font-bold border border-amber-500/30 shrink-0">
                   Conflict Score: {(companyDetail.conflict.conflict_score * 100).toFixed(0)}%
                 </span>
               </div>
@@ -296,10 +322,10 @@ export const CompanyAnalysisPage: React.FC = () => {
 
           {/* Company Historical Trend if available */}
           {companyDetail?.history && companyDetail.history.length > 1 && (
-            <div className="bg-navy-900/90 border border-navy-750 rounded-2xl p-5 space-y-4 shadow-sm">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-cyan-400" />
-                <span>Historical Sentiment Progression ({activeSummary.company})</span>
+            <div className="bg-navy-900/90 border border-navy-750 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2 min-w-0">
+                <Clock className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span className="break-words leading-snug min-w-0">Historical Sentiment Progression ({activeSummary.company})</span>
               </h4>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
@@ -319,10 +345,10 @@ export const CompanyAnalysisPage: React.FC = () => {
           )}
 
           {/* Company Related Articles Feed */}
-          <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-5 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+          <div className="bg-navy-900/90 border border-navy-750/90 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 break-words leading-snug">
                   Published Headlines for {activeSummary.company}
                 </h4>
                 <p className="text-[11px] text-slate-500 font-mono">
