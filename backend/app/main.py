@@ -199,13 +199,14 @@ def get_health():
             "has_key": bool(settings.GEMINI_API_KEY)
         },
         "email_service": {
-            "provider": "Brevo Transactional Email API" if settings.brevo_api_key else ("SMTP" if settings.smtp_host else "Unconfigured"),
+            "provider": "Resend Transactional Email API" if settings.resend_api_key else "Unconfigured",
             "configured": settings.is_email_service_configured,
-            "has_api_key": bool(settings.brevo_api_key),
-            "sender_configured": bool(settings.brevo_from_email or settings.smtp_from_email),
-            "transport": "HTTPS (Port 443)" if settings.brevo_api_key else "SMTP (Raw Sockets)",
+            "has_api_key": bool(settings.resend_api_key),
+            "sender_configured": bool(settings.resend_from_email_raw),
+            "using_onboarding_sender": settings.resend_from_email_raw == "onboarding@resend.dev",
+            "transport": "HTTPS (Port 443)",
             "frontend_url": settings.frontend_url,
-            "build": "v3.1.0-brevo-https"
+            "build": "v4.0.0-resend-https"
         }
     }
 

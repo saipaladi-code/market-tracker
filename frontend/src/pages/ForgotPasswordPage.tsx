@@ -230,7 +230,7 @@ export const ForgotPasswordPage: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-slate-200 text-xs leading-relaxed">
-                    Brevo has confirmed successful delivery to your mail server. Please check your inbox and spam folder.
+                    Your password reset email has been confirmed delivered to your mail server. Please check your inbox and spam folder.
                   </p>
                   {result.recipient_masked && (
                     <p className="text-[11px] text-emerald-400/80 font-mono">
@@ -270,10 +270,10 @@ export const ForgotPasswordPage: React.FC = () => {
                       ) : (
                         <Clock className="w-4 h-4 shrink-0" />
                       )}
-                      <span>{result.title || 'Recovery Request Accepted'}</span>
+                      <span>{result.title || 'Password Reset Request Received'}</span>
                     </div>
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                      IN TRANSIT
+                      {result.message_id ? 'IN TRANSIT' : 'RECEIVED'}
                     </span>
                   </div>
                   <p className="text-slate-200 text-xs leading-relaxed">

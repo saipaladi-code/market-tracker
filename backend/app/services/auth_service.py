@@ -2,6 +2,7 @@ import os
 import json
 import urllib.request
 import urllib.parse
+import urllib.error
 import re
 import secrets
 import hashlib
@@ -29,6 +30,15 @@ class AuthService:
         local_part, domain = email.split("@", 1)
         visible_chars = min(2, len(local_part))
         return f"{local_part[:visible_chars]}***@{domain}"
+
+    def _sanitize_error_text(self, text: Any) -> str:
+        """Scrubs potential API keys, bearer tokens, and reset tokens from error strings before logging or returning."""
+        s = str(text or "")
+        s = re.sub(r"\bre_[A-Za-z0-9_\-]{6,}\b", "[REDACTED_RESEND_KEY]", s)
+        s = re.sub(r"\bxkeysib-[A-Za-z0-9_\-]{6,}\b", "[REDACTED_KEY]", s)
+        s = re.sub(r"Bearer\s+[A-Za-z0-9._\-]{6,}", "Bearer [REDACTED]", s, flags=re.IGNORECASE)
+        s = re.sub(r"token=[A-Za-z0-9._\-]{6,}", "token=[REDACTED]", s, flags=re.IGNORECASE)
+        return s
 
     def _ensure_recipient_not_blocked_in_brevo(self, email: str, api_key: str) -> bool:
         """
@@ -254,132 +264,89 @@ class AuthService:
         request_origin: Optional[str] = None
     ) -> Dict[str, Any]:
         normalized_email = (email or "").strip().lower()
-        import re
         email_pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
         if not normalized_email or not email_pattern.match(normalized_email):
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Please enter a valid email address.")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Please enter a valid email address."
+            )
 
-        # Rate limit password reset requests: allow 15 attempts per 5 minutes to prevent developer lockout
+        # Rate limit password reset requests per IP + email
         rate_key = f"pwd_reset:{client_ip}:{normalized_email}"
         auth_rate_limiter.check_rate_limit(rate_key, max_attempts=15, window_seconds=300, action_name="password reset")
         auth_rate_limiter.record_attempt(rate_key)
 
-        # 1. DATABASE VERIFICATION: Search MongoDB users collection first
+        # 1. Verify email service (Resend) configuration before disclosing anything
+        if not settings.resend_api_key:
+            auth_rate_limiter.reset_key(rate_key)
+            logger.error("[RESEND_CONFIG_ERROR] RESEND_API_KEY environment variable is missing.")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Password reset email service is not configured. Please configure RESEND_API_KEY on the server."
+            )
+
+        # 2. DATABASE VERIFICATION: Search MongoDB users collection
         try:
             user = db.find_user_by_email(normalized_email)
         except Exception as db_err:
-            logger.error(f"[DATABASE_ERROR] Database lookup failure during password recovery: {db_err}", exc_info=True)
+            logger.error(f"[DATABASE_ERROR] Database lookup failure during password recovery: {self._sanitize_error_text(db_err)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Database service is currently unavailable. Please try again later."
             )
 
-        # 2. IF EMAIL DOES NOT EXIST: Reject immediately without token or Brevo dispatch
-        if not user:
-            masked_email = self._mask_email(normalized_email)
-            logger.info(
-                f"[AUTH_DIAGNOSTIC] Password recovery rejected: account not found for {masked_email}. "
-                f"No reset token generated; no Brevo email dispatched."
-            )
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="This email address is not registered with FIN-SENTIMENT. Please check your email address or create a new account."
-            )
+        # Uniform non-enumerating success payload (never exposes whether an account exists)
+        generic_success_response: Dict[str, Any] = {
+            "title": "Password Reset Request Received",
+            "message": "If an account exists for that email address, a password reset link has been sent. Please check your inbox and spam folder.",
+            "status": "accepted",
+            "delivery_status": "accepted",
+            "message_id": None,
+            "recipient_masked": None,
+            "smtp_configured": True,
+            "dev_reset_token": None
+        }
 
-        # 3. DYNAMIC MONGODB RECIPIENT SELECTION:
-        # Retrieve recipient email strictly and dynamically from the matching MongoDB user document.
-        # NEVER hardcode saipaladi73@gmail.com as recipient.
-        # NEVER use BREVO_FROM_EMAIL as recipient (BREVO_FROM_EMAIL is strictly the sender address).
-        # NEVER use the first user in the database or a default/fallback recipient.
+        # 3. IF EMAIL DOES NOT EXIST: Return uniform generic response without generating token or calling Resend
+        if not user:
+            logger.info(
+                f"[AUTH_DIAGNOSTIC] Password reset requested for unregistered email "
+                f"({self._mask_email(normalized_email)}). No token created; no Resend email dispatched."
+            )
+            return generic_success_response
+
+        # 4. DYNAMIC MONGODB RECIPIENT SELECTION:
         recipient_email = (
             user.get("email")
             or user.get("user_email")
             or user.get("work_email")
             or normalized_email
         ).strip().lower()
-
         user_id = str(user.get("id") or user.get("_id") or "")
         recipient_name = (user.get("full_name") or user.get("name") or "").strip()
 
-        # Safe diagnostic logging verifying the MongoDB lookup match and dynamic recipient selection
         logger.info(
-            f"[AUTH_DIAGNOSTIC] Password recovery user verified: "
+            f"[AUTH_DIAGNOSTIC] Password recovery initiated via Resend: "
             f"user_id={user_id}, "
-            f"submitted_email={self._mask_email(normalized_email)}, "
-            f"mongo_recipient_email={self._mask_email(recipient_email)}, "
-            f"account_found=True, "
-            f"sender_configured={bool(settings.brevo_from_email)}"
+            f"recipient={self._mask_email(recipient_email)}, "
+            f"sender_configured={bool(settings.resend_from_email_raw)}"
         )
 
-        # 4. Verify outbound email service configuration
-        explicit_from = getattr(settings, "BREVO_FROM_EMAIL", None) or os.getenv("BREVO_FROM_EMAIL")
-        if explicit_from and not settings.brevo_api_key:
-            auth_rate_limiter.reset_key(rate_key)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to send password recovery email: BREVO_API_KEY environment variable is missing on Render. Please configure BREVO_API_KEY in your Render dashboard."
-            )
-        is_configured = settings.is_email_service_configured
-        is_dev = not os.getenv("RENDER")
-
-        if not is_configured:
-            if is_dev:
-                # In local dev / test environment without Brevo configured, generate dev token for manual testing
-                raw_token = secrets.token_urlsafe(32)
-                token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-                expires_at = datetime.utcnow() + timedelta(minutes=15)
-                try:
-                    db.update_many(
-                        "password_resets",
-                        {"$or": [{"email": recipient_email}, {"email": normalized_email}, {"user_id": user_id}], "used": False},
-                        {"used": True, "invalidated_at": datetime.utcnow().isoformat() + "Z"}
-                    )
-                except Exception:
-                    pass
-                reset_doc = {
-                    "token_hash": token_hash,
-                    "user_id": user_id,
-                    "email": recipient_email,
-                    "expires_at": expires_at.isoformat() + "Z",
-                    "used": False,
-                    "created_at": datetime.utcnow().isoformat() + "Z"
-                }
-                db.insert_one("password_resets", reset_doc)
-                return {
-                    "title": "Recovery Email Sent (Testing Mode)",
-                    "message": "A password reset link has been sent to your registered email address. Please check your inbox and spam folder.",
-                    "status": "email_unconfigured",
-                    "smtp_configured": False,
-                    "dev_reset_token": raw_token
-                }
-
-            auth_rate_limiter.reset_key(rate_key)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to send password recovery email: BREVO_API_KEY environment variable is missing on Render. Please configure BREVO_API_KEY in your Render dashboard."
-            )
-
-        if not settings.brevo_from_email:
-            auth_rate_limiter.reset_key(rate_key)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to send password recovery email: BREVO_FROM_EMAIL environment variable is missing on Render. Please configure your verified Brevo sender email in your Render dashboard."
-            )
-
-        # 5. Invalidate any previous active tokens for this user account in MongoDB
+        # 5. Invalidate any previous active single-use reset tokens for this user account
+        now_utc = datetime.utcnow()
         try:
             db.update_many(
                 "password_resets",
                 {"$or": [{"email": recipient_email}, {"email": normalized_email}, {"user_id": user_id}], "used": False},
-                {"used": True, "invalidated_at": datetime.utcnow().isoformat() + "Z"}
+                {"used": True, "invalidated_at": now_utc.isoformat() + "Z"}
             )
         except Exception as e:
-            logger.warning(f"Could not invalidate prior reset tokens: {e}")
+            logger.warning(f"Could not invalidate prior reset tokens: {self._sanitize_error_text(e)}")
 
-        # 6. Generate secure, unique single-use password-reset token (valid 15 minutes)
+        # 6. Generate cryptographically secure single-use reset token (expires in 15 minutes; only SHA-256 hash stored)
         raw_token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-        expires_at = datetime.utcnow() + timedelta(minutes=15)
+        expires_at = now_utc + timedelta(minutes=15)
 
         reset_doc = {
             "token_hash": token_hash,
@@ -387,63 +354,62 @@ class AuthService:
             "email": recipient_email,
             "expires_at": expires_at.isoformat() + "Z",
             "used": False,
-            "created_at": datetime.utcnow().isoformat() + "Z"
+            "created_at": now_utc.isoformat() + "Z"
         }
         db.insert_one("password_resets", reset_doc)
 
-        # 7. Send recovery email dynamically to matching registered user's email via Brevo HTTPS API
+        # 7. Dispatch password reset email via Resend HTTPS API (Port 443)
         base_url = self.get_recovery_base_url(request_origin)
         try:
-            dispatch_res = self._dispatch_reset_email_brevo(
+            dispatch_res = self._dispatch_reset_email_resend(
                 to_email=recipient_email,
                 to_name=recipient_name or None,
                 raw_token=raw_token,
                 base_url=base_url
             )
         except Exception as e:
+            # Invalidate the unused token since email delivery failed
+            try:
+                db.update_one(
+                    "password_resets",
+                    {"token_hash": token_hash},
+                    {"used": True, "invalidated_at": datetime.utcnow().isoformat() + "Z"}
+                )
+            except Exception:
+                pass
             auth_rate_limiter.reset_key(rate_key)
-            err_msg = str(e)
+            safe_err = self._sanitize_error_text(str(e))
             logger.error(
-                f"[BREVO_DISPATCH_ERROR] Failed to dispatch password recovery email via Brevo HTTPS: "
-                f"recipient={self._mask_email(recipient_email)}, error={err_msg}",
-                exc_info=True
+                f"[RESEND_DISPATCH_ERROR] Failed to send password reset email via Resend: "
+                f"recipient={self._mask_email(recipient_email)}, error={safe_err}"
             )
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to send password recovery email: {err_msg}"
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Failed to send password reset email: {safe_err}"
             )
 
-        message_id = dispatch_res.get("messageId") or f"<gen-{secrets.token_hex(8)}>"
+        message_id = dispatch_res.get("messageId") or f"resend-{secrets.token_hex(8)}"
         initial_status = dispatch_res.get("delivery_status") or "accepted"
 
-        # Record email delivery attempt in MongoDB email_deliveries collection for audit and real-time tracking
+        # Record delivery audit trail in MongoDB (never stores raw token or API key)
         try:
             db.insert_one("email_deliveries", {
                 "message_id": message_id,
+                "provider": "resend",
                 "user_id": user_id,
                 "email": recipient_email,
                 "recipient_masked": self._mask_email(recipient_email),
                 "token_hash": token_hash,
                 "delivery_status": initial_status,
-                "delivery_detail": "Request accepted by Brevo Transactional Email API; transmission queued to recipient mail server.",
+                "delivery_detail": "Request accepted by Resend Email API.",
                 "failure_reason": None,
                 "created_at": datetime.utcnow().isoformat() + "Z",
                 "updated_at": datetime.utcnow().isoformat() + "Z"
             })
         except Exception as log_err:
-            logger.warning(f"Failed to record email_deliveries entry: {log_err}")
+            logger.warning(f"Failed to record email_deliveries entry: {self._sanitize_error_text(log_err)}")
 
-        # Rule 6: Return accurate non-deceptive status ("Recovery Request Accepted", not claiming delivered before confirmed)
-        return {
-            "title": "Recovery Request Accepted",
-            "message": "Your password recovery request has been accepted by our email service and is currently being processed for delivery. Please check your inbox and spam folder shortly.",
-            "status": "accepted",
-            "delivery_status": initial_status,
-            "message_id": message_id,
-            "recipient_masked": self._mask_email(recipient_email),
-            "smtp_configured": True,
-            "dev_reset_token": None
-        }
+        return generic_success_response
 
     def reset_password(self, raw_token: str, new_password: str) -> Dict[str, Any]:
         """
@@ -517,6 +483,202 @@ class AuthService:
             "message": "Password updated successfully. You may now sign in with your new password.",
             "status": "success"
         }
+
+    def _dispatch_reset_email_resend(
+        self,
+        to_email: str,
+        to_name: Optional[str],
+        raw_token: str,
+        base_url: str
+    ) -> Dict[str, Any]:
+        """
+        Dispatches an HTML + plain-text password reset email via the official Resend HTTPS API (Port 443).
+        Official Documentation: https://resend.com/docs/api-reference/emails/send-email
+        API Endpoint: POST https://api.resend.com/emails
+        """
+        api_key = settings.resend_api_key
+        if not api_key:
+            raise RuntimeError("RESEND_API_KEY is not configured in backend environment variables.")
+
+        from_header = settings.resend_from_email
+        if not from_header or "@" not in from_header:
+            raise RuntimeError(
+                "RESEND_FROM_EMAIL is invalid. Configure a verified Resend sender (e.g. 'FIN-SENTIMENT <onboarding@resend.dev>' or your verified domain)."
+            )
+
+        clean_recipient = (to_email or "").strip().lower()
+        if not clean_recipient or "@" not in clean_recipient:
+            raise ValueError("Invalid recipient email address for password reset dispatch.")
+
+        reset_url = f"{base_url.rstrip('/')}/reset-password?token={raw_token}"
+        greeting = f"Hello {to_name.strip()}," if (to_name and to_name.strip()) else "Hello,"
+
+        text_content = (
+            f"{greeting}\n\n"
+            "We received a request to reset your FIN-SENTIMENT account password.\n"
+            "Open the link below to create a new password:\n"
+            f"{reset_url}\n\n"
+            "This single-use link expires in 15 minutes.\n"
+            "If you did not request this password reset, you can safely ignore this email.\n\n"
+            "Regards,\n"
+            "FIN-SENTIMENT Team\n"
+        )
+
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset your FIN-SENTIMENT password</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #070b14; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #070b14; padding: 40px 16px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="100%" style="max-width: 540px; background-color: #0f172a; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+                    <tr>
+                        <td style="padding: 32px 32px 20px 32px; border-bottom: 1px solid #1e293b;">
+                            <span style="font-size: 18px; font-weight: 800; color: #ffffff; letter-spacing: 0.05em;">FIN-SENTIMENT</span>
+                            <span style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">SECURITY</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 32px;">
+                            <h2 style="font-size: 20px; font-weight: 700; color: #ffffff; margin: 0 0 16px 0;">Reset your FIN-SENTIMENT password</h2>
+                            <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">{greeting}</p>
+                            <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 24px 0;">We received a request to reset your FIN-SENTIMENT account password. Click the button below to create a new password.</p>
+                            <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 28px 0;">
+                                <tr>
+                                    <td align="center" style="border-radius: 8px; background: linear-gradient(135deg, #2563eb, #06b6d4);">
+                                        <a href="{reset_url}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 14px 32px; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 8px; letter-spacing: 0.025em;">RESET PASSWORD</a>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="color: #f59e0b; font-size: 12px; font-weight: 600; line-height: 1.5; margin: 20px 0 12px 0;">This single-use link expires in 15 minutes.</p>
+                            <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin: 0 0 24px 0;">If you did not request this password reset, you can safely ignore this email.</p>
+                            <div style="border-top: 1px solid #1e293b; padding-top: 20px; margin-top: 24px;">
+                                <p style="color: #64748b; font-size: 11px; line-height: 1.5; margin: 0 0 8px 0;">If the button above does not work, copy and paste this link into your browser:</p>
+                                <p style="margin: 0; word-break: break-all;"><a href="{reset_url}" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; font-size: 11px; text-decoration: underline;">{reset_url}</a></p>
+                            </div>
+                            <div style="margin-top: 24px;">
+                                <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 0;">Regards,<br><strong style="color: #ffffff;">FIN-SENTIMENT Team</strong></p>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+
+        payload = {
+            "from": from_header,
+            "to": [clean_recipient],
+            "subject": "Reset your FIN-SENTIMENT password",
+            "html": html_content,
+            "text": text_content,
+        }
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "FIN-SENTIMENT-Auth/2.0",
+        }
+
+        def _handle_resend_error(status_code: int, raw_body: str):
+            try:
+                err_json = json.loads(raw_body) if raw_body else {}
+                err_detail = err_json.get("message") or err_json.get("error") or err_json.get("name") or raw_body
+            except Exception:
+                err_detail = raw_body or f"HTTP {status_code}"
+
+            safe_detail = self._sanitize_error_text(err_detail)
+            logger.error(
+                f"[AUTH_DIAGNOSTIC] Password reset Resend API failure: "
+                f"provider=resend, recipient={self._mask_email(clean_recipient)}, "
+                f"status={status_code}, error={safe_detail}"
+            )
+
+            if status_code == 401:
+                raise RuntimeError(
+                    f"Resend API authentication failed (401 Unauthorized). Please verify RESEND_API_KEY configuration. Details: {safe_detail}"
+                )
+            elif status_code == 403:
+                raise RuntimeError(
+                    f"Resend API rejected email delivery (403 Forbidden): {safe_detail}. "
+                    "Verify your sender domain in Resend and ensure RESEND_FROM_EMAIL uses a verified domain (or onboarding@resend.dev for authorized testing)."
+                )
+            elif status_code == 422:
+                raise RuntimeError(
+                    f"Resend API validation error (422): {safe_detail}. Please verify RESEND_FROM_EMAIL and recipient formatting."
+                )
+            elif status_code == 429:
+                raise RuntimeError(
+                    f"Resend API rate limit exceeded (429 Too Many Requests): {safe_detail}. Please try again shortly."
+                )
+            raise RuntimeError(f"Resend API error ({status_code}): {safe_detail}")
+
+        try:
+            import httpx
+            with httpx.Client(timeout=10.0) as client:
+                res = client.post(
+                    "https://api.resend.com/emails",
+                    json=payload,
+                    headers=headers,
+                )
+                if res.status_code in (200, 201, 202):
+                    res_json = res.json()
+                    message_id = res_json.get("id") or res_json.get("messageId")
+                    logger.info(
+                        f"[AUTH_DIAGNOSTIC] Password reset Resend dispatch succeeded: "
+                        f"provider=resend, recipient={self._mask_email(clean_recipient)}, "
+                        f"resend_status={res.status_code}, message_id={message_id}, "
+                        f"timestamp={datetime.utcnow().isoformat()}Z"
+                    )
+                    return {
+                        "messageId": message_id,
+                        "provider": "resend",
+                        "delivery_status": "accepted",
+                    }
+                _handle_resend_error(res.status_code, res.text)
+        except ImportError:
+            req_bytes = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=req_bytes,
+                headers=headers,
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    resp_data = json.loads(resp.read().decode("utf-8"))
+                    message_id = resp_data.get("id") or resp_data.get("messageId")
+                    logger.info(
+                        f"[AUTH_DIAGNOSTIC] Password reset Resend dispatch succeeded: "
+                        f"provider=resend, recipient={self._mask_email(clean_recipient)}, "
+                        f"resend_status={resp.status}, message_id={message_id}, "
+                        f"timestamp={datetime.utcnow().isoformat()}Z"
+                    )
+                    return {
+                        "messageId": message_id,
+                        "provider": "resend",
+                        "delivery_status": "accepted",
+                    }
+            except urllib.error.HTTPError as he:
+                err_text = he.read().decode("utf-8", errors="replace")
+                _handle_resend_error(he.code, err_text)
+            except Exception as ue:
+                safe_ue = self._sanitize_error_text(str(ue))
+                logger.error(f"Resend HTTPS connection failure: {safe_ue}")
+                raise RuntimeError(f"Failed to connect to Resend API: {safe_ue}") from ue
+        except RuntimeError:
+            raise
+        except Exception as e:
+            safe_e = self._sanitize_error_text(str(e))
+            logger.error(f"Resend dispatch unexpected error: {safe_e}")
+            raise RuntimeError(f"Resend delivery error: {safe_e}") from e
 
     def _dispatch_reset_email_brevo(self, to_email: str, to_name: Optional[str], raw_token: str, base_url: str) -> Dict[str, Any]:
         """
@@ -852,9 +1014,8 @@ class AuthService:
 
     def get_delivery_status(self, message_id: str) -> Dict[str, Any]:
         """
-        Inspects real-time Brevo transactional email event logs for a given message ID.
-        Determines whether the message is: accepted, delivered, deferred, blocked, hard_bounced, soft_bounced, or rejected.
-        Updates persistent database delivery tracking record in MongoDB.
+        Inspects transactional email delivery status for a given message ID (Resend primary).
+        Updates persistent database delivery tracking record in MongoDB when provider status is available.
         """
         clean_id = (message_id or "").strip()
         if not clean_id:
@@ -862,13 +1023,67 @@ class AuthService:
 
         delivery_rec = db.find_one("email_deliveries", {"message_id": clean_id})
         recipient_masked = delivery_rec.get("recipient_masked") if delivery_rec else None
+        rec_provider = (delivery_rec.get("provider") if delivery_rec else None) or ("resend" if settings.resend_api_key else "brevo")
+
+        if rec_provider == "resend" and settings.resend_api_key:
+            try:
+                import httpx
+                url = f"https://api.resend.com/emails/{urllib.parse.quote(clean_id)}"
+                headers = {
+                    "Authorization": f"Bearer {settings.resend_api_key}",
+                    "Accept": "application/json",
+                }
+                with httpx.Client(timeout=8.0) as client:
+                    res = client.get(url, headers=headers)
+                    if res.status_code == 200:
+                        data = res.json()
+                        last_ev = (data.get("last_event") or "accepted").lower()
+                        status_map = {
+                            "delivered": ("delivered", "Confirmed delivered to recipient mailbox."),
+                            "bounced": ("hard_bounced", "Recipient email bounced by receiving mail server."),
+                            "complained": ("blocked", "Recipient marked email as spam."),
+                            "delivery_delayed": ("deferred", "Delivery temporarily delayed by receiving mail server."),
+                            "sent": ("accepted", "Sent by Resend email service."),
+                        }
+                        final_status, final_detail = status_map.get(
+                            last_ev, ("accepted", "Accepted by Resend Email API.")
+                        )
+                        if delivery_rec:
+                            db.update_one(
+                                "email_deliveries",
+                                {"message_id": clean_id},
+                                {
+                                    "delivery_status": final_status,
+                                    "delivery_detail": final_detail,
+                                    "updated_at": datetime.utcnow().isoformat() + "Z",
+                                },
+                            )
+                        return {
+                            "message_id": clean_id,
+                            "delivery_status": final_status,
+                            "detail": final_detail,
+                            "failure_reason": final_detail if final_status in ("hard_bounced", "blocked") else None,
+                            "recipient_masked": recipient_masked,
+                            "timestamp": datetime.utcnow().isoformat() + "Z",
+                        }
+            except Exception as e:
+                logger.debug(f"Resend delivery status query skipped: {self._sanitize_error_text(e)}")
+
+            return {
+                "message_id": clean_id,
+                "delivery_status": (delivery_rec.get("delivery_status") if delivery_rec else None) or "accepted",
+                "detail": (delivery_rec.get("delivery_detail") if delivery_rec else None) or "Accepted by Resend Email API.",
+                "failure_reason": delivery_rec.get("failure_reason") if delivery_rec else None,
+                "recipient_masked": recipient_masked,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            }
 
         api_key = settings.brevo_api_key
         if not api_key:
             return {
                 "message_id": clean_id,
-                "delivery_status": delivery_rec.get("delivery_status") if delivery_rec else "accepted",
-                "detail": delivery_rec.get("delivery_detail") if delivery_rec else "Processing",
+                "delivery_status": (delivery_rec.get("delivery_status") if delivery_rec else None) or "accepted",
+                "detail": (delivery_rec.get("delivery_detail") if delivery_rec else None) or "Processing",
                 "failure_reason": None,
                 "recipient_masked": recipient_masked,
                 "timestamp": datetime.utcnow().isoformat() + "Z"
@@ -876,7 +1091,6 @@ class AuthService:
 
         try:
             import httpx
-            import urllib.parse
             quoted = urllib.parse.quote(clean_id)
             url = f"https://api.brevo.com/v3/smtp/statistics/events?messageId={quoted}"
             headers = {"accept": "application/json", "api-key": api_key}
@@ -942,8 +1156,8 @@ class AuthService:
 
         return {
             "message_id": clean_id,
-            "delivery_status": delivery_rec.get("delivery_status") if delivery_rec else "accepted",
-            "detail": delivery_rec.get("delivery_detail") if delivery_rec else "Processing",
+            "delivery_status": (delivery_rec.get("delivery_status") if delivery_rec else None) or "accepted",
+            "detail": (delivery_rec.get("delivery_detail") if delivery_rec else None) or "Processing",
             "failure_reason": None,
             "recipient_masked": recipient_masked,
             "timestamp": datetime.utcnow().isoformat() + "Z"
