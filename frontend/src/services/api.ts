@@ -171,6 +171,25 @@ function setOfflineStatus(offline: boolean) {
 
 let cachedLiveNewsResponse: NewsResponse | null = getStoredCachedNews();
 
+const DASHBOARD_CACHE_TTL_MS = 30_000;
+const dashboardStatsCache = new Map<string, { ts: number; data: DashboardStats }>();
+const inFlightDashboardRequests = new Map<string, Promise<DashboardStats>>();
+
+function isAbortError(err: any): boolean {
+  return Boolean(
+    err &&
+    (err.code === 'ERR_CANCELED' ||
+      err.name === 'CanceledError' ||
+      err.name === 'AbortError' ||
+      axios.isCancel?.(err))
+  );
+}
+
+function clearDashboardCaches() {
+  dashboardStatsCache.clear();
+  inFlightDashboardRequests.clear();
+}
+
 export const api = {
   getBaseUrl: (): string => currentBaseUrl,
 
@@ -179,6 +198,7 @@ export const api = {
     try {
       localStorage.setItem(STORAGE_KEY, currentBaseUrl);
     } catch {}
+    clearDashboardCaches();
     client = createAxiosClient(currentBaseUrl);
   },
 
@@ -186,6 +206,7 @@ export const api = {
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {}
+    clearDashboardCaches();
     currentBaseUrl = getStoredApiUrl();
     client = createAxiosClient(currentBaseUrl);
   },
@@ -200,6 +221,7 @@ export const api = {
         localStorage.removeItem(USER_PROFILE_KEY);
       }
     } catch {}
+    clearDashboardCaches();
     client = createAxiosClient(currentBaseUrl);
   },
 
@@ -367,45 +389,104 @@ export const api = {
     }
   },
 
-  // Dashboard Stats
-  getDashboardStats: async (timeframe?: string, forceRefresh?: boolean): Promise<DashboardStats> => {
-    try {
-      const res = await client.get('/api/dashboard/stats', {
-        params: {
-          timeframe: timeframe || 'live',
-          force_refresh: Boolean(forceRefresh),
-        },
-      });
-      setOfflineStatus(false);
-      return res.data;
-    } catch (err) {
-      console.warn('Backend unavailable for dashboard stats:', err);
-      setOfflineStatus(true);
-      const effectiveCache = cachedLiveNewsResponse || getStoredCachedNews();
-      const status: FeedStatus = (effectiveCache && effectiveCache.articles && effectiveCache.articles.length > 0)
-        ? 'CACHED LIVE DATA'
-        : 'API ERROR';
-      return {
-        ...MOCK_DASHBOARD_STATS,
-        is_demo_dataset: false,
-        feed_status: status,
-      };
+  // Dashboard Stats (with optional unified bundle, short-TTL caching, deduplication, and AbortSignal cancellation)
+  getDashboardStats: async (
+    timeframe?: string,
+    forceRefresh?: boolean,
+    options?: { includeBundle?: boolean; signal?: AbortSignal }
+  ): Promise<DashboardStats> => {
+    const tf = (timeframe || 'live').toLowerCase();
+    const includeBundle = Boolean(options?.includeBundle);
+    const cacheKey = `${tf}:${includeBundle ? 'bundle' : 'basic'}`;
+    const bundleKey = `${tf}:bundle`;
+
+    if (forceRefresh) {
+      clearDashboardCaches();
+    } else {
+      const now = Date.now();
+      const cached = dashboardStatsCache.get(cacheKey) || (!includeBundle ? dashboardStatsCache.get(bundleKey) : undefined);
+      if (cached && now - cached.ts < DASHBOARD_CACHE_TTL_MS) {
+        return cached.data;
+      }
+
+      // Deduplicate identical or superset in-flight requests (only when caller didn't pass a dedicated abort signal)
+      if (!options?.signal) {
+        const existingPromise =
+          inFlightDashboardRequests.get(cacheKey) ||
+          (!includeBundle ? inFlightDashboardRequests.get(bundleKey) : undefined);
+        if (existingPromise) {
+          return existingPromise;
+        }
+      }
     }
+
+    const requestPromise = (async (): Promise<DashboardStats> => {
+      try {
+        const res = await client.get<DashboardStats>('/api/dashboard/stats', {
+          params: {
+            timeframe: tf,
+            force_refresh: Boolean(forceRefresh),
+            include_bundle: includeBundle,
+          },
+          signal: options?.signal,
+        });
+        setOfflineStatus(false);
+        const ts = Date.now();
+        dashboardStatsCache.set(cacheKey, { ts, data: res.data });
+        if (includeBundle) {
+          dashboardStatsCache.set(`${tf}:basic`, { ts, data: res.data });
+        }
+        return res.data;
+      } catch (err) {
+        if (isAbortError(err)) {
+          throw err;
+        }
+        console.warn('Backend unavailable for dashboard stats:', err);
+        setOfflineStatus(true);
+        const effectiveCache = cachedLiveNewsResponse || getStoredCachedNews();
+        const status: FeedStatus = (effectiveCache && effectiveCache.articles && effectiveCache.articles.length > 0)
+          ? 'CACHED LIVE DATA'
+          : 'API ERROR';
+        return {
+          ...MOCK_DASHBOARD_STATS,
+          is_demo_dataset: false,
+          feed_status: status,
+        };
+      }
+    })();
+
+    if (!options?.signal) {
+      inFlightDashboardRequests.set(cacheKey, requestPromise);
+      requestPromise.finally(() => {
+        if (inFlightDashboardRequests.get(cacheKey) === requestPromise) {
+          inFlightDashboardRequests.delete(cacheKey);
+        }
+      });
+    }
+
+    return requestPromise;
+  },
+
+  clearDashboardCache: () => {
+    clearDashboardCaches();
   },
 
   // News Explorer with honest multi-state live / cached / error handling
-  getNews: async (params?: {
-    page?: number;
-    page_size?: number;
-    company?: string;
-    sentiment?: string;
-    query?: string;
-    today_only?: boolean;
-    date?: string;
-    timeframe?: string;
-  }): Promise<NewsResponse> => {
+  getNews: async (
+    params?: {
+      page?: number;
+      page_size?: number;
+      company?: string;
+      sentiment?: string;
+      query?: string;
+      today_only?: boolean;
+      date?: string;
+      timeframe?: string;
+    },
+    signal?: AbortSignal
+  ): Promise<NewsResponse> => {
     try {
-      const res = await client.get<NewsResponse>('/api/news', { params });
+      const res = await client.get<NewsResponse>('/api/news', { params, signal });
       setOfflineStatus(false);
       if (res.data && !res.data.is_demo_dataset && res.data.articles && res.data.articles.length > 0) {
         cachedLiveNewsResponse = res.data;
@@ -413,6 +494,9 @@ export const api = {
       }
       return res.data;
     } catch (err: any) {
+      if (isAbortError(err)) {
+        throw err;
+      }
       console.warn('Backend unavailable for news:', err);
       setOfflineStatus(true);
 
@@ -462,6 +546,7 @@ export const api = {
 
   refreshNews: async () => {
     try {
+      clearDashboardCaches();
       const res = await client.post('/api/news/refresh');
       setOfflineStatus(false);
       return res.data;
@@ -618,12 +703,15 @@ export const api = {
   },
 
   // History & Alerts
-  getHistory: async (company?: string, timeframe?: string) => {
+  getHistory: async (company?: string, timeframe?: string, signal?: AbortSignal) => {
     try {
-      const res = await client.get('/api/sentiment/history', { params: { company, timeframe } });
+      const res = await client.get('/api/sentiment/history', { params: { company, timeframe }, signal });
       setOfflineStatus(false);
       return res.data;
     } catch (err) {
+      if (isAbortError(err)) {
+        throw err;
+      }
       setOfflineStatus(true);
       return MOCK_HISTORY;
     }

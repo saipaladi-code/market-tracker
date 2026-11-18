@@ -91,11 +91,18 @@ class DatabaseManager:
                 self.db.news_articles.create_index("canonical_id", unique=True, sparse=True)
                 self.db.news_articles.create_index("company")
                 self.db.news_articles.create_index("published_at")
+                # Compound indexes for high-speed timeframe filtering, deduplication, and sorting
+                self.db.news_articles.create_index([("is_demo", 1), ("published_at", -1)])
+                self.db.news_articles.create_index([("is_demo", 1), ("is_duplicate", 1), ("published_at", -1)])
+                self.db.news_articles.create_index([("is_demo", 1), ("company", 1), ("published_at", -1)])
+                self.db.news_articles.create_index([("is_demo", 1), ("sentiment", 1), ("published_at", -1)])
                 self.db.sentiment_results.create_index("article_id")
                 self.db.sentiment_history.create_index([("company", 1), ("timestamp", -1)])
+                self.db.sentiment_history.create_index([("timestamp", -1)])
                 self.db.alerts.create_index("timestamp")
                 # User and security indexes
                 self.db.users.create_index("email", unique=True, sparse=True)
+                self.db.users.create_index("id", sparse=True)
                 self.db.password_resets.create_index("token_hash", unique=True, sparse=True)
                 self.db.password_resets.create_index("expires_at")
             except Exception as e:
@@ -305,15 +312,61 @@ class DatabaseManager:
             self._write_local_db(db_data)
             return len(documents)
 
-    def find(self, collection_name: str, filter_dict: Optional[Dict[str, Any]] = None, limit: int = 100, sort: Optional[List[tuple]] = None) -> List[Dict[str, Any]]:
+    @staticmethod
+    def _matches_filter(item: Dict[str, Any], filter_dict: Optional[Dict[str, Any]]) -> bool:
+        if not filter_dict:
+            return True
+        for k, v in filter_dict.items():
+            val = item.get(k)
+            if isinstance(v, dict):
+                for op, target in v.items():
+                    if op == "$gte":
+                        if val is None or str(val) < str(target):
+                            return False
+                    elif op == "$gt":
+                        if val is None or str(val) <= str(target):
+                            return False
+                    elif op == "$lte":
+                        if val is None or str(val) > str(target):
+                            return False
+                    elif op == "$lt":
+                        if val is None or str(val) >= str(target):
+                            return False
+                    elif op == "$ne":
+                        if val == target:
+                            return False
+                    elif op == "$in":
+                        if val not in target:
+                            return False
+                    elif op == "$nin":
+                        if val in target:
+                            return False
+            else:
+                if val != v:
+                    return False
+        return True
+
+    def find(
+        self,
+        collection_name: str,
+        filter_dict: Optional[Dict[str, Any]] = None,
+        limit: int = 100,
+        sort: Optional[List[tuple]] = None,
+        projection: Optional[Dict[str, int]] = None,
+        skip: int = 0
+    ) -> List[Dict[str, Any]]:
         if self.is_cloud and self.db is not None:
-            cursor = self.db[collection_name].find(filter_dict or {})
+            cursor = self.db[collection_name].find(filter_dict or {}, projection)
             if sort:
                 cursor = cursor.sort(sort)
-            cursor = cursor.limit(limit)
+            if skip and skip > 0:
+                cursor = cursor.skip(skip)
+            if limit and limit > 0:
+                cursor = cursor.limit(limit)
             results = []
             for doc in cursor:
-                doc["_id"] = str(doc.get("_id"))
+                if "_id" in doc:
+                    doc["_id"] = str(doc.get("_id"))
                 results.append(doc)
             return results
         else:
@@ -322,19 +375,34 @@ class DatabaseManager:
             if not filter_dict:
                 filtered = list(items)
             else:
-                filtered = []
-                for item in items:
-                    matches = True
-                    for k, v in filter_dict.items():
-                        if item.get(k) != v:
-                            matches = False
-                            break
-                    if matches:
-                        filtered.append(item)
+                filtered = [item for item in items if self._matches_filter(item, filter_dict)]
             if sort:
                 for key, direction in reversed(sort):
                     filtered = sorted(filtered, key=lambda x: str(x.get(key, "")), reverse=(direction == -1))
-            return filtered[:limit]
+            if skip and skip > 0:
+                filtered = filtered[skip:]
+            if limit and limit > 0:
+                filtered = filtered[:limit]
+            if projection:
+                include_fields = {k for k, v in projection.items() if v}
+                exclude_fields = {k for k, v in projection.items() if not v}
+                projected = []
+                for item in filtered:
+                    if include_fields:
+                        d = {k: item[k] for k in include_fields if k in item}
+                        if "_id" not in exclude_fields and "_id" in item:
+                            d["_id"] = item["_id"]
+                        projected.append(d)
+                    else:
+                        projected.append({k: v for k, v in item.items() if k not in exclude_fields})
+                return projected
+            return filtered
+
+    def aggregate(self, collection_name: str, pipeline: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
+        """Executes a MongoDB aggregation pipeline when connected to MongoDB Atlas. Returns None in local JSON mode."""
+        if self.is_cloud and self.db is not None:
+            return list(self.db[collection_name].aggregate(pipeline))
+        return None
 
     def delete_many(self, collection_name: str, filter_dict: Dict[str, Any]) -> int:
         """Deletes matching documents from collection."""

@@ -307,67 +307,15 @@ def demo_login(response: Response):
 def get_dashboard_stats(
     timeframe: str = Query(default="live", description="Analytics timeframe: 'live', '24h', '7d', or 'all'"),
     force_refresh: bool = Query(default=False, description="Whether to trigger an immediate live news refresh"),
+    include_bundle: bool = Query(default=False, description="Optionally include recent_articles and sentiment_history in one round-trip"),
     current_user: dict = Depends(get_current_user)
 ):
     """Aggregates all top-level stats for the main analytics dashboard across the requested timeframe."""
-    articles = news_service.fetch_articles(force_refresh=force_refresh, timeframe=timeframe)
-    
-    # Exclude duplicates from main metrics to prevent inflated counts
-    clean_articles = [a for a in articles if not a.get("is_duplicate")]
-    total = len(clean_articles)
-    
-    pos_count = sum(1 for a in clean_articles if (a.get("sentiment") or "").lower() == "positive")
-    neg_count = sum(1 for a in clean_articles if (a.get("sentiment") or "").lower() == "negative")
-    neu_count = sum(1 for a in clean_articles if (a.get("sentiment") or "").lower() == "neutral")
-    
-    pos_pct = round((pos_count / total * 100), 1) if total > 0 else 0.0
-    neg_pct = round((neg_count / total * 100), 1) if total > 0 else 0.0
-    neu_pct = round((neu_count / total * 100), 1) if total > 0 else 0.0
-
-    # Company distribution
-    by_comp = {}
-    for a in clean_articles:
-        comp = a.get("company", "General Market")
-        by_comp[comp] = by_comp.get(comp, 0) + 1
-    
-    top_discussed = sorted([{"company": k, "count": v} for k, v in by_comp.items()], key=lambda x: x["count"], reverse=True)[:6]
-
-    # Source breakdown
-    by_source = {}
-    for a in clean_articles:
-        src = a.get("source", "Unknown")
-        by_source[src] = by_source.get(src, 0) + 1
-    
-    sources = sorted([{"source": k, "count": v} for k, v in by_source.items()], key=lambda x: x["count"], reverse=True)[:6]
-
-    # Mixed-sentiment conflicts dynamically detected on clean articles for this timeframe
-    conflicts = conflict_service.detect_conflicts(clean_articles)
-
-    is_demo_dataset = any(a.get("is_demo", False) for a in clean_articles)
-
-    return {
-        "total_articles": total,
-        "total_including_duplicates": len(articles),
-        "sentiment_counts": {
-            "positive": pos_count,
-            "negative": neg_count,
-            "neutral": neu_count
-        },
-        "sentiment_percentages": {
-            "positive": pos_pct,
-            "negative": neg_pct,
-            "neutral": neu_pct
-        },
-        "top_discussed_companies": top_discussed,
-        "news_sources": sources,
-        "active_conflicts_count": len(conflicts),
-        "active_conflicts": conflicts,
-        "timeframe": timeframe,
-        "is_demo_dataset": is_demo_dataset,
-        "feed_status": news_service.get_feed_status(),
-        "last_updated": news_service.get_last_synced_iso(),
-        "model_status": "ready" if finbert_service.is_ready() else finbert_service.status
-    }
+    return news_service.get_dashboard_stats(
+        timeframe=timeframe,
+        force_refresh=force_refresh,
+        include_bundle=include_bundle,
+    )
 
 @app.get("/api/news", response_model=NewsResponse)
 def get_news(
@@ -423,7 +371,8 @@ def refresh_news(
 ):
     """Forces fresh live news ingestion and recalculates stats for the requested timeframe."""
     news_service.ingest_live_news(force=True)
-    articles = news_service.fetch_articles(force_refresh=True, timeframe=timeframe)
+    news_service.invalidate_read_caches()
+    articles = news_service.fetch_articles(force_refresh=False, timeframe=timeframe)
     clean_articles = [a for a in articles if not a.get("is_duplicate")]
     conflicts = conflict_service.detect_conflicts(clean_articles)
     new_alerts = alert_service.evaluate_and_generate_alerts(articles)
@@ -695,12 +644,8 @@ def get_sentiment_history(
     timeframe: Optional[str] = Query(default=None),
     current_user: dict = Depends(get_current_user)
 ):
-    """Returns stored historical sentiment progression."""
-    query = {"company": company} if company and company.lower() != "all" else None
-    limit = 100 if timeframe == "all" else 50
-    history = db.find("sentiment_history", query, limit=limit)
-    history.sort(key=lambda x: x.get("timestamp", ""))
-    return history
+    """Returns stored historical sentiment progression filtered and sorted at the database level."""
+    return news_service.get_sentiment_history(company=company, timeframe=timeframe)
 
 @app.get("/api/sentiment/sectors", response_model=List[SectorSentiment])
 def get_sector_sentiments(

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
@@ -51,6 +51,15 @@ const COLORS = {
   negative: '#f43f5e', // Rose
 };
 
+type DashboardTimeframe = 'live' | '24h' | '7d' | 'all';
+
+const TIMEFRAME_LABELS: Record<DashboardTimeframe, string> = {
+  live: 'Live Session',
+  '24h': '24h Window',
+  '7d': '7D Scope',
+  all: 'All History',
+};
+
 export const DashboardPage: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats>(MOCK_DASHBOARD_STATS);
   const [recentNews, setRecentNews] = useState<Article[]>(MOCK_ARTICLES.slice(0, 6));
@@ -58,52 +67,153 @@ export const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSwitchingFilter, setIsSwitchingFilter] = useState(false);
-  const [timeframe, setTimeframe] = useState<'live' | '24h' | '7d' | 'all'>('live');
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [timeframe, setTimeframe] = useState<DashboardTimeframe>('live');
   const [showBackendModal, setShowBackendModal] = useState(false);
   const [selectedTradeArticle, setSelectedTradeArticle] = useState<Article | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
   const [selectedBroker, , hasExplicitBroker] = useBrokerPreference();
   const navigate = useNavigate();
 
-  const loadData = async (targetTf: 'live' | '24h' | '7d' | 'all' = timeframe, forceRefresh = false) => {
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef<number>(0);
+
+  const loadData = useCallback(async (targetTf: DashboardTimeframe, forceRefresh = false) => {
+    // Cancel any previous in-flight request to prevent outdated results on rapid filter switching
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const reqId = ++requestIdRef.current;
+
+    setFetchError(null);
+    if (forceRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setIsSwitchingFilter(true);
+    }
+
     try {
-      if (forceRefresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsSwitchingFilter(true);
+      // Single-round-trip unified bundle request (stats + top 6 recent articles + history)
+      const bundle = await api.getDashboardStats(targetTf, forceRefresh, {
+        includeBundle: true,
+        signal: controller.signal,
+      });
+
+      // Discard if a newer request superseded this one
+      if (reqId !== requestIdRef.current || controller.signal.aborted) {
+        return;
       }
 
-      const [statsData, newsData, historyList] = await Promise.allSettled([
-        api.getDashboardStats(targetTf, forceRefresh),
-        api.getNews({ page: 1, page_size: 6, timeframe: targetTf }),
-        api.getHistory(undefined, targetTf),
-      ]);
-
-      if (statsData.status === 'fulfilled' && statsData.value) {
-        setStats(statsData.value);
-      } else if (!stats || stats === MOCK_DASHBOARD_STATS) {
-        setStats(MOCK_DASHBOARD_STATS);
+      if (bundle) {
+        setStats(bundle);
       }
 
-      if (newsData.status === 'fulfilled' && newsData.value) {
-        setRecentNews(newsData.value.articles || []);
+      const hasBundledNews = Array.isArray(bundle?.recent_articles);
+      const hasBundledHistory = Array.isArray(bundle?.sentiment_history);
+
+      if (hasBundledNews) {
+        setRecentNews(bundle.recent_articles || []);
+      }
+      if (hasBundledHistory && bundle.sentiment_history && bundle.sentiment_history.length > 0) {
+        setHistoryData(bundle.sentiment_history);
       }
 
-      if (historyList.status === 'fulfilled' && Array.isArray(historyList.value) && historyList.value.length > 0) {
-        setHistoryData(historyList.value);
+      // Backwards-compatible fallback only if backend does not include bundle arrays
+      if (!hasBundledNews || !hasBundledHistory) {
+        const [newsRes, historyRes] = await Promise.allSettled([
+          !hasBundledNews
+            ? api.getNews({ page: 1, page_size: 6, timeframe: targetTf }, controller.signal)
+            : Promise.resolve(null),
+          !hasBundledHistory
+            ? api.getHistory(undefined, targetTf, controller.signal)
+            : Promise.resolve(null),
+        ]);
+
+        if (reqId !== requestIdRef.current || controller.signal.aborted) {
+          return;
+        }
+
+        if (!hasBundledNews && newsRes.status === 'fulfilled' && newsRes.value) {
+          setRecentNews(newsRes.value.articles || []);
+        }
+        if (!hasBundledHistory && historyRes.status === 'fulfilled' && Array.isArray(historyRes.value) && historyRes.value.length > 0) {
+          setHistoryData(historyRes.value);
+        }
       }
     } catch (err: any) {
-      console.warn('Dashboard synchronization fallback:', err);
+      // Silently ignore aborted/canceled requests triggered by rapid filter switching
+      if (
+        controller.signal.aborted ||
+        err?.code === 'ERR_CANCELED' ||
+        err?.name === 'CanceledError' ||
+        err?.name === 'AbortError'
+      ) {
+        return;
+      }
+      if (reqId === requestIdRef.current) {
+        console.warn('Dashboard synchronization error:', err);
+        setFetchError('Unable to refresh data for the selected time window. Please retry.');
+      }
     } finally {
-      setLoading(false);
-      setIsRefreshing(false);
-      setIsSwitchingFilter(false);
+      if (reqId === requestIdRef.current) {
+        setLoading(false);
+        setIsRefreshing(false);
+        setIsSwitchingFilter(false);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData(timeframe, false);
-  }, [timeframe]);
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [timeframe, loadData]);
+
+  const pieData = useMemo(
+    () => [
+      { name: 'Bullish (Positive)', value: stats.sentiment_counts.positive, color: COLORS.positive },
+      { name: 'Neutral', value: stats.sentiment_counts.neutral, color: COLORS.neutral },
+      { name: 'Bearish (Negative)', value: stats.sentiment_counts.negative, color: COLORS.negative },
+    ],
+    [stats.sentiment_counts.positive, stats.sentiment_counts.neutral, stats.sentiment_counts.negative]
+  );
+
+  const totalDeduplicated = useMemo(
+    () => stats.total_including_duplicates - stats.total_articles,
+    [stats.total_including_duplicates, stats.total_articles]
+  );
+
+  const dedupEfficiency = useMemo(
+    () =>
+      stats.total_including_duplicates > 0
+        ? Math.round((totalDeduplicated / stats.total_including_duplicates) * 100)
+        : 0,
+    [stats.total_including_duplicates, totalDeduplicated]
+  );
+
+  const enrichedRecentNews = useMemo(
+    () =>
+      recentNews.map((art) => {
+        const verifiedInst = resolveVerifiedInstrument(art.company, art.ticker);
+        const verifiedTicker = verifiedInst?.ticker || resolveVerifiedTicker(art.company, art.ticker);
+        const isTradable = Boolean(verifiedInst);
+        const isIndian = verifiedInst?.country === 'IN';
+        const brokerTag = isIndian
+          ? hasExplicitBroker
+            ? selectedBroker === 'upstox'
+              ? 'Upstox'
+              : 'Groww'
+            : 'Upstox / Groww'
+          : 'US Equity';
+        return { art, verifiedInst, verifiedTicker, isTradable, isIndian, brokerTag };
+      }),
+    [recentNews, selectedBroker, hasExplicitBroker]
+  );
 
   if (loading && !stats) {
     return (
@@ -119,17 +229,6 @@ export const DashboardPage: React.FC = () => {
       </div>
     );
   }
-
-  const pieData = [
-    { name: 'Bullish (Positive)', value: stats.sentiment_counts.positive, color: COLORS.positive },
-    { name: 'Neutral', value: stats.sentiment_counts.neutral, color: COLORS.neutral },
-    { name: 'Bearish (Negative)', value: stats.sentiment_counts.negative, color: COLORS.negative },
-  ];
-
-  const totalDeduplicated = stats.total_including_duplicates - stats.total_articles;
-  const dedupEfficiency = stats.total_including_duplicates > 0
-    ? Math.round((totalDeduplicated / stats.total_including_duplicates) * 100)
-    : 0;
 
   const isOffline = api.isOffline();
 
@@ -202,22 +301,29 @@ export const DashboardPage: React.FC = () => {
             {(['live', '24h', '7d', 'all'] as const).map((tf) => (
               <button
                 key={tf}
-                disabled={isRefreshing || isSwitchingFilter}
-                onClick={() => setTimeframe(tf)}
-                className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                disabled={isRefreshing}
+                onClick={() => {
+                  if (tf !== timeframe) {
+                    setTimeframe(tf);
+                  }
+                }}
+                className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
                   timeframe === tf
                     ? 'bg-blue-600 text-white font-semibold shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 disabled:opacity-50'
                 }`}
               >
-                {tf === 'live' ? 'Live Session' : tf === '24h' ? '24h Window' : tf === '7d' ? '7D Scope' : 'All History'}
+                {timeframe === tf && isSwitchingFilter && (
+                  <RefreshCw className="w-3 h-3 animate-spin shrink-0" />
+                )}
+                <span>{TIMEFRAME_LABELS[tf]}</span>
               </button>
             ))}
           </div>
 
           <button
             onClick={() => loadData(timeframe, true)}
-            disabled={isRefreshing || isSwitchingFilter}
+            disabled={isRefreshing}
             className="flex items-center gap-2 px-4 py-2 bg-navy-850 hover:bg-navy-800 disabled:opacity-60 text-slate-200 border border-navy-750 rounded-xl text-xs font-semibold transition-all cursor-pointer disabled:cursor-not-allowed"
             title="Refresh current analytics metrics"
           >
@@ -235,8 +341,37 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Inline Filter Loading / Error Feedback */}
+      {isSwitchingFilter && (
+        <div
+          className="flex items-center gap-2.5 px-4 py-2.5 bg-blue-500/10 border border-blue-500/25 rounded-xl text-xs text-blue-300"
+          role="status"
+          aria-live="polite"
+        >
+          <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400 shrink-0" />
+          <span className="font-medium">
+            Loading <strong className="text-white">{TIMEFRAME_LABELS[timeframe]}</strong> analytics...
+          </span>
+        </div>
+      )}
+
+      {fetchError && !isSwitchingFilter && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-rose-500/10 border border-rose-500/25 rounded-xl text-xs text-rose-300">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <button
+            onClick={() => loadData(timeframe, false)}
+            className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 font-semibold cursor-pointer shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Top KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 auto-rows-fr">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 auto-rows-fr transition-opacity duration-150 ${isSwitchingFilter ? 'opacity-75' : 'opacity-100'}`}>
         {/* Card 1: Unique Articles Analyzed */}
         <div className="bg-navy-900/90 border border-navy-750/90 p-5 rounded-2xl relative overflow-hidden group hover:border-navy-700 transition-all duration-200 shadow-sm h-full flex flex-col justify-between min-w-0">
           <div>
@@ -623,23 +758,12 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {recentNews.length === 0 ? (
+          {enrichedRecentNews.length === 0 ? (
             <div className="col-span-full p-8 text-center bg-navy-950/60 rounded-xl border border-navy-800/80 text-xs text-slate-500">
               No recent classified financial articles recorded. Trigger news refresh to ingest market headlines.
             </div>
           ) : (
-            recentNews.map((art) => {
-              const verifiedInst = resolveVerifiedInstrument(art.company, art.ticker);
-              const verifiedTicker = verifiedInst?.ticker || resolveVerifiedTicker(art.company, art.ticker);
-              const isTradable = Boolean(verifiedInst);
-              const isIndian = verifiedInst?.country === 'IN';
-              const brokerTag = isIndian
-                ? hasExplicitBroker
-                  ? selectedBroker === 'upstox' ? 'Upstox' : 'Groww'
-                  : 'Upstox / Groww'
-                : 'US Equity';
-
-              return (
+            enrichedRecentNews.map(({ art, verifiedInst, verifiedTicker, isTradable, isIndian, brokerTag }) => (
                 <div
                   key={art.id}
                   className="bg-navy-950/90 border border-navy-800/90 rounded-xl p-4 flex flex-col justify-between space-y-3 hover:border-navy-700 hover:shadow-md transition-all"
@@ -709,8 +833,7 @@ export const DashboardPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              );
-            }))}
+            )))}
         </div>
       </div>
       {/* Broker Trade Routing Modal */}

@@ -80,6 +80,9 @@ export interface DashboardStats {
   news_sources: Array<{ source: string; count: number }>;
   active_conflicts_count: number;
   active_conflicts: ConflictSignal[];
+  timeframe?: string;
+  recent_articles?: Article[];
+  sentiment_history?: any[];
   is_demo_dataset: boolean;
   feed_status?: FeedStatus;
   filter_date?: string;

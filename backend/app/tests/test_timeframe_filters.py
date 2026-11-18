@@ -116,3 +116,44 @@ def test_news_refresh_endpoint_with_timeframe():
         assert data["timeframe"] == "24h"
         assert "last_updated" in data
         assert "total_articles" in data
+
+
+def test_dashboard_bundle_single_request_consistency():
+    """Verifies unified bundle mode returns stats, recent_articles, and sentiment_history in one call."""
+    token = get_auth_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    totals = {}
+    for tf in ["live", "24h", "7d", "all"]:
+        res = client.get(f"/api/dashboard/stats?timeframe={tf}&include_bundle=true", headers=headers)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["timeframe"] == tf
+        assert "recent_articles" in data
+        assert isinstance(data["recent_articles"], list)
+        assert len(data["recent_articles"]) <= 6
+        assert "sentiment_history" in data
+        assert isinstance(data["sentiment_history"], list)
+        counts = data["sentiment_counts"]
+        assert counts["positive"] + counts["negative"] + counts["neutral"] == data["total_articles"]
+        totals[tf] = data["total_articles"]
+
+    assert totals["24h"] <= totals["7d"] <= totals["all"]
+
+
+def test_dashboard_cache_hit_and_invalidation():
+    """Verifies short-TTL caching returns consistent data and invalidates cleanly."""
+    token = get_auth_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    news_service.invalidate_read_caches()
+    r1 = client.get("/api/dashboard/stats?timeframe=24h&include_bundle=true", headers=headers)
+    assert r1.status_code == 200
+    assert ("24h", True) in news_service._dashboard_cache
+
+    r2 = client.get("/api/dashboard/stats?timeframe=24h&include_bundle=true", headers=headers)
+    assert r2.status_code == 200
+    assert r1.json()["total_articles"] == r2.json()["total_articles"]
+
+    news_service.invalidate_read_caches()
+    assert len(news_service._dashboard_cache) == 0

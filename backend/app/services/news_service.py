@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import uuid
 import html
 import logging
@@ -657,10 +658,22 @@ class NewsService:
         self._is_ingesting: bool = False
         import threading
         self._fetch_lock = threading.Lock()
+        self._cache_lock = threading.Lock()
+        self._dashboard_cache: Dict[tuple, Tuple[float, Dict[str, Any]]] = {}
+        self._news_query_cache: Dict[tuple, Tuple[float, Any]] = {}
+        self._history_cache: Dict[tuple, Tuple[float, List[Dict[str, Any]]]] = {}
+        self.READ_CACHE_TTL_SECONDS: float = 45.0
         self.news_api_status = (
             "Connected (Live Financial News Feed - Reuters, Bloomberg, WSJ, MarketWatch)"
             if not settings.USE_DEMO_DATA else "Demo Mode (USE_DEMO_DATA active)"
         )
+
+    def invalidate_read_caches(self):
+        """Clears short-TTL analytics, news pagination, and history read caches after fresh ingestion."""
+        with self._cache_lock:
+            self._dashboard_cache.clear()
+            self._news_query_cache.clear()
+            self._history_cache.clear()
 
     def get_kolkata_now(self) -> datetime:
         """Returns the current datetime in Asia/Kolkata timezone (+05:30)."""
@@ -1047,6 +1060,7 @@ class NewsService:
         self._last_successful_fetch = now_utc
         self._last_fetch_count = len(processed_articles)
         self.news_api_status = "Connected (Live Financial Feed - Reuters, Bloomberg, WSJ, MarketWatch)"
+        self.invalidate_read_caches()
         logger.info(f"Ingestion cycle completed successfully. Ingested {len(processed_articles)} genuine live articles.")
         return processed_articles
 
@@ -1066,11 +1080,144 @@ class NewsService:
         t = threading.Thread(target=worker, daemon=True)
         t.start()
 
+    @staticmethod
+    def _attach_ticker(article: Dict[str, Any]) -> Dict[str, Any]:
+        """Attaches verified ticker symbol when missing without mutating unrelated fields."""
+        if not article.get("ticker") and article.get("company"):
+            comp = article.get("company")
+            if comp in COMPANY_TICKER_MAP:
+                article["ticker"] = COMPANY_TICKER_MAP[comp]
+            elif comp != "General Market":
+                canon = canonicalize_company(comp)
+                if canon and canon in COMPANY_TICKER_MAP:
+                    article["ticker"] = COMPANY_TICKER_MAP[canon]
+        return article
+
+    def _ensure_live_feed_fresh(self, force_refresh: bool = False, query: Optional[str] = None) -> None:
+        """
+        Lightweight freshness gate using O(1) timestamp checks and index-only DB counts.
+        Prevents full collection scans on every dashboard filter switch while keeping live news fresh.
+        """
+        if settings.USE_DEMO_DATA:
+            return
+
+        now_utc = self.get_utc_now()
+        if (
+            not force_refresh
+            and self._last_fetch_time is not None
+            and (now_utc - self._last_fetch_time).total_seconds() <= self.CACHE_TTL_SECONDS
+        ):
+            return
+
+        with self._fetch_lock:
+            now_check = self.get_utc_now()
+            now_kol_check = self.get_kolkata_now()
+            if (
+                not force_refresh
+                and self._last_fetch_time is not None
+                and (now_check - self._last_fetch_time).total_seconds() <= self.CACHE_TTL_SECONDS
+            ):
+                return
+
+            if force_refresh:
+                self._last_fetch_time = now_check
+                self.invalidate_read_caches()
+                self.ingest_live_news(force=True, query=query)
+                return
+
+            today_start_utc_iso = (
+                now_kol_check.replace(hour=0, minute=0, second=0, microsecond=0)
+                .astimezone(timezone.utc)
+                .strftime("%Y-%m-%dT%H:%M:%SZ")
+            )
+            max_utc_iso = (now_check + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            today_count = db.count(
+                "news_articles",
+                {"is_demo": False, "published_at": {"$gte": today_start_utc_iso, "$lte": max_utc_iso}},
+            )
+
+            # Fast boot path: DB already has today's live articles -> prime cache without blocking
+            if self._last_fetch_time is None and today_count >= 5:
+                self._last_fetch_time = now_check
+                latest = db.find(
+                    "news_articles",
+                    {"is_demo": False},
+                    limit=1,
+                    sort=[("published_at", -1)],
+                    projection={"published_at": 1},
+                )
+                if latest:
+                    dt_first = parse_publication_datetime(latest[0].get("published_at"))
+                    self._last_successful_fetch = dt_first or now_check
+                else:
+                    self._last_successful_fetch = now_check
+                return
+
+            total_non_demo = today_count if today_count > 0 else db.count("news_articles", {"is_demo": False})
+            self._last_fetch_time = now_check
+            if total_non_demo > 0:
+                if self._last_successful_fetch is None:
+                    latest = db.find(
+                        "news_articles",
+                        {"is_demo": False},
+                        limit=1,
+                        sort=[("published_at", -1)],
+                        projection={"published_at": 1},
+                    )
+                    if latest:
+                        self._last_successful_fetch = parse_publication_datetime(latest[0].get("published_at")) or now_check
+                # Trigger non-blocking background refresh so user never waits on RSS/FinBERT
+                self._trigger_background_ingest(query=query)
+            else:
+                self.ingest_live_news(force=False, query=query)
+
+    def build_timeframe_db_filter(self, timeframe: Optional[str]) -> Dict[str, Any]:
+        """
+        Builds an exact, index-backed MongoDB filter for 'live', '24h', '7d', and 'all'.
+        Uses standardized UTC ISO-8601 bounds matching Asia/Kolkata calendar day rules for 'live'.
+        """
+        tf = (timeframe or "").strip().lower()
+        base_filter: Dict[str, Any] = {"is_demo": False}
+        if not tf or tf == "all":
+            return base_filter
+
+        now_utc = self.get_utc_now()
+        now_kol = self.get_kolkata_now()
+        max_utc_iso = (now_utc + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        if tf == "7d":
+            cutoff_iso = (now_utc - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            base_filter["published_at"] = {"$gte": cutoff_iso, "$lte": max_utc_iso}
+            return base_filter
+
+        if tf == "24h":
+            cutoff_iso = (now_utc - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            base_filter["published_at"] = {"$gte": cutoff_iso, "$lte": max_utc_iso}
+            return base_filter
+
+        if tf == "live":
+            today_start_utc_iso = (
+                now_kol.replace(hour=0, minute=0, second=0, microsecond=0)
+                .astimezone(timezone.utc)
+                .strftime("%Y-%m-%dT%H:%M:%SZ")
+            )
+            today_filter = {
+                "is_demo": False,
+                "published_at": {"$gte": today_start_utc_iso, "$lte": max_utc_iso},
+            }
+            if db.count("news_articles", today_filter) >= 10:
+                return today_filter
+            cutoff_session_iso = (now_utc - timedelta(hours=14)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            return {
+                "is_demo": False,
+                "published_at": {"$gte": cutoff_session_iso, "$lte": max_utc_iso},
+            }
+
+        return base_filter
+
     def fetch_articles(self, force_refresh: bool = False, query: Optional[str] = None, timeframe: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Retrieves articles from database or fetches fresh articles from providers.
-        Respects provider rate limits via CACHE_TTL_SECONDS while ensuring today's
-        live news is immediately available when date changes or DB is fresh.
+        Retrieves articles from database with database-level timeframe filtering and compound index sorting.
         Supports explicit timeframe filtering: 'live', '24h', '7d', and 'all'.
         """
         # If demo mode is forced via settings, use the curated demo dataset
@@ -1078,103 +1225,404 @@ class NewsService:
             existing = db.find("news_articles", limit=500)
             return self._ensure_core_company_coverage(existing)
 
-        now_utc = self.get_utc_now()
-        now_kol = self.get_kolkata_now()
+        self._ensure_live_feed_fresh(force_refresh=force_refresh, query=query)
 
-        # For 'all' history, query entire genuine corpus without 1000-article truncation limit
-        query_limit = 15000 if timeframe == "all" else 1000
-        existing_articles = db.find("news_articles", {"is_demo": False}, limit=query_limit, sort=[("published_at", -1)])
+        tf = (timeframe or "").strip().lower()
+        db_filter = self.build_timeframe_db_filter(tf if tf else None)
+        query_limit = 15000 if tf in ("all", "7d", "") else 2000
 
-        # Count articles published today in Asia/Kolkata
-        today_articles_count = sum(
-            1 for a in existing_articles
-            if self.is_published_today_kolkata(a.get("published_at"), now_kol)
+        existing_articles = db.find(
+            "news_articles",
+            db_filter,
+            limit=query_limit,
+            sort=[("published_at", -1)],
         )
-
-        # Fast path: If DB already has today's live articles on server boot, prime cache without blocking
-        if self._last_fetch_time is None and today_articles_count >= 5 and not force_refresh:
-            self._last_fetch_time = now_utc
-            if existing_articles:
-                dt_first = parse_publication_datetime(existing_articles[0].get("published_at"))
-                self._last_successful_fetch = dt_first or now_utc
-        else:
-            should_fetch = (
-                force_refresh or
-                self._last_fetch_time is None or
-                (now_utc - self._last_fetch_time).total_seconds() > self.CACHE_TTL_SECONDS or
-                today_articles_count == 0
-            )
-
-            if should_fetch:
-                with self._fetch_lock:
-                    # Re-check under lock in case another concurrent request just completed ingestion
-                    now_check = self.get_utc_now()
-                    now_kol_check = self.get_kolkata_now()
-                    fresh_db = db.find("news_articles", {"is_demo": False}, limit=query_limit, sort=[("published_at", -1)])
-                    fresh_today_count = sum(
-                        1 for a in fresh_db
-                        if self.is_published_today_kolkata(a.get("published_at"), now_kol_check)
-                    )
-                    still_needed = (
-                        force_refresh or
-                        self._last_fetch_time is None or
-                        (now_check - self._last_fetch_time).total_seconds() > self.CACHE_TTL_SECONDS or
-                        (fresh_today_count == 0 and len(fresh_db) == 0)
-                    )
-
-                    if still_needed:
-                        self._last_fetch_time = now_check
-                        if fresh_db and not force_refresh:
-                            self._trigger_background_ingest(query=query)
-                            existing_articles = fresh_db
-                        else:
-                            self.ingest_live_news(force=force_refresh, query=query)
-                            existing_articles = db.find("news_articles", {"is_demo": False}, limit=query_limit, sort=[("published_at", -1)])
-                    else:
-                        existing_articles = fresh_db
 
         # Ensure all articles returned have verified ticker attached
         for a in existing_articles:
-            if not a.get("ticker") and a.get("company"):
-                comp = a.get("company")
-                if comp in COMPANY_TICKER_MAP:
-                    a["ticker"] = COMPANY_TICKER_MAP[comp]
-                elif comp != "General Market":
-                    canon = canonicalize_company(comp)
-                    if canon and canon in COMPANY_TICKER_MAP:
-                        a["ticker"] = COMPANY_TICKER_MAP[canon]
-
-        # Apply timeframe filtering if explicitly specified
-        if timeframe:
-            tf = timeframe.strip().lower()
-            if tf == "all":
-                return existing_articles
-            elif tf == "7d":
-                cutoff_7d = now_utc - timedelta(days=7)
-                return [
-                    a for a in existing_articles
-                    if (parse_publication_datetime(a.get("published_at")) or datetime.min.replace(tzinfo=timezone.utc)) >= cutoff_7d
-                ]
-            elif tf == "24h":
-                cutoff_24h = now_utc - timedelta(hours=24)
-                return [
-                    a for a in existing_articles
-                    if (parse_publication_datetime(a.get("published_at")) or datetime.min.replace(tzinfo=timezone.utc)) >= cutoff_24h
-                ]
-            elif tf == "live":
-                live_articles = [
-                    a for a in existing_articles
-                    if self.is_published_today_kolkata(a.get("published_at"), now_kol)
-                ]
-                if len(live_articles) < 10:
-                    cutoff_session = now_utc - timedelta(hours=14)
-                    live_articles = [
-                        a for a in existing_articles
-                        if (parse_publication_datetime(a.get("published_at")) or datetime.min.replace(tzinfo=timezone.utc)) >= cutoff_session
-                    ]
-                return live_articles
+            self._attach_ticker(a)
 
         return existing_articles
+
+    def get_sentiment_history(self, company: Optional[str] = None, timeframe: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Returns stored historical sentiment progression filtered and sorted at the database level
+        with short-TTL caching for rapid dashboard filter switching.
+        """
+        tf = (timeframe or "live").strip().lower()
+        comp_key = (company or "").strip()
+        cache_key = (comp_key.lower() if comp_key.lower() != "all" else "", tf)
+        now_mono = time.monotonic()
+
+        with self._cache_lock:
+            cached = self._history_cache.get(cache_key)
+            if cached and (now_mono - cached[0]) < self.READ_CACHE_TTL_SECONDS:
+                return cached[1]
+
+        base_query: Dict[str, Any] = {}
+        if comp_key and comp_key.lower() != "all":
+            base_query["company"] = comp_key
+
+        limit = 100 if tf == "all" else 50
+        query_with_tf = dict(base_query)
+        now_utc = self.get_utc_now()
+        if tf in ("live", "24h"):
+            query_with_tf["timestamp"] = {"$gte": (now_utc - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        elif tf == "7d":
+            query_with_tf["timestamp"] = {"$gte": (now_utc - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+        history = db.find("sentiment_history", query_with_tf or None, limit=limit, sort=[("timestamp", -1)])
+        # If a narrow window has fewer than 2 snapshots, gracefully include latest historical points so trend line renders
+        if len(history) < 2 and tf in ("live", "24h", "7d"):
+            history = db.find("sentiment_history", base_query or None, limit=min(limit, 24), sort=[("timestamp", -1)])
+
+        history.sort(key=lambda x: x.get("timestamp", ""))
+
+        with self._cache_lock:
+            if len(self._history_cache) >= 64:
+                self._history_cache.clear()
+            self._history_cache[cache_key] = (now_mono, history)
+
+        return history
+
+    def get_dashboard_stats(
+        self,
+        timeframe: str = "live",
+        force_refresh: bool = False,
+        include_bundle: bool = False
+    ) -> Dict[str, Any]:
+        """
+        High-performance dashboard aggregation using server-side MongoDB $facet pipelines
+        and short-TTL in-memory caching. Avoids transferring thousands of full documents over the wire.
+        """
+        from app.services.conflict_service import conflict_service
+
+        tf = (timeframe or "live").strip().lower()
+        if tf not in ("live", "24h", "7d", "all"):
+            tf = "live"
+
+        cache_key = (tf, bool(include_bundle))
+        now_mono = time.monotonic()
+
+        if not force_refresh:
+            with self._cache_lock:
+                cached = self._dashboard_cache.get(cache_key)
+                if cached and (now_mono - cached[0]) < self.READ_CACHE_TTL_SECONDS:
+                    return cached[1]
+        else:
+            self.invalidate_read_caches()
+
+        self._ensure_live_feed_fresh(force_refresh=force_refresh)
+
+        result: Optional[Dict[str, Any]] = None
+
+        # Fast path: Server-side MongoDB $facet aggregation (transfers ~8 KB instead of ~10+ MB)
+        if db.is_cloud and db.db is not None and not settings.USE_DEMO_DATA:
+            db_filter = self.build_timeframe_db_filter(tf)
+            facet_stage: Dict[str, Any] = {
+                "summary": [
+                    {
+                        "$group": {
+                            "_id": None,
+                            "total_including_duplicates": {"$sum": 1},
+                            "total_articles": {
+                                "$sum": {"$cond": [{"$eq": ["$is_duplicate", True]}, 0, 1]}
+                            },
+                            "positive": {
+                                "$sum": {
+                                    "$cond": [
+                                        {
+                                            "$and": [
+                                                {"$ne": ["$is_duplicate", True]},
+                                                {"$eq": [{"$toLower": {"$ifNull": ["$sentiment", "neutral"]}}, "positive"]}
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+                            "negative": {
+                                "$sum": {
+                                    "$cond": [
+                                        {
+                                            "$and": [
+                                                {"$ne": ["$is_duplicate", True]},
+                                                {"$eq": [{"$toLower": {"$ifNull": ["$sentiment", "neutral"]}}, "negative"]}
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+                            "neutral": {
+                                "$sum": {
+                                    "$cond": [
+                                        {
+                                            "$and": [
+                                                {"$ne": ["$is_duplicate", True]},
+                                                {
+                                                    "$not": [
+                                                        {"$in": [{"$toLower": {"$ifNull": ["$sentiment", "neutral"]}}, ["positive", "negative"]]}
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+                        }
+                    }
+                ],
+                "top_companies": [
+                    {"$match": {"is_duplicate": {"$ne": True}}},
+                    {"$group": {"_id": {"$ifNull": ["$company", "General Market"]}, "count": {"$sum": 1}}},
+                    {"$sort": {"count": -1, "_id": 1}},
+                    {"$limit": 6},
+                    {"$project": {"_id": 0, "company": "$_id", "count": 1}},
+                ],
+                "top_sources": [
+                    {"$match": {"is_duplicate": {"$ne": True}}},
+                    {"$group": {"_id": {"$ifNull": ["$source", "Unknown"]}, "count": {"$sum": 1}}},
+                    {"$sort": {"count": -1, "_id": 1}},
+                    {"$limit": 6},
+                    {"$project": {"_id": 0, "source": "$_id", "count": 1}},
+                ],
+                "conflict_groups": [
+                    {
+                        "$match": {
+                            "is_duplicate": {"$ne": True},
+                            "company": {"$nin": [None, "", "General Market", "Unknown", "None", "*"]},
+                        }
+                    },
+                    {
+                        "$group": {
+                            "_id": "$company",
+                            "ticker": {"$first": "$ticker"},
+                            "positive_count": {
+                                "$sum": {"$cond": [{"$eq": [{"$toLower": {"$ifNull": ["$sentiment", "neutral"]}}, "positive"]}, 1, 0]}
+                            },
+                            "negative_count": {
+                                "$sum": {"$cond": [{"$eq": [{"$toLower": {"$ifNull": ["$sentiment", "neutral"]}}, "negative"]}, 1, 0]}
+                            },
+                            "neutral_count": {
+                                "$sum": {
+                                    "$cond": [
+                                        {
+                                            "$not": [
+                                                {"$in": [{"$toLower": {"$ifNull": ["$sentiment", "neutral"]}}, ["positive", "negative"]]}
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+                            "positive_headlines": {
+                                "$push": {
+                                    "$cond": [
+                                        {"$eq": [{"$toLower": {"$ifNull": ["$sentiment", "neutral"]}}, "positive"]},
+                                        {"$ifNull": ["$title", ""]},
+                                        "$$REMOVE"
+                                    ]
+                                }
+                            },
+                            "negative_headlines": {
+                                "$push": {
+                                    "$cond": [
+                                        {"$eq": [{"$toLower": {"$ifNull": ["$sentiment", "neutral"]}}, "negative"]},
+                                        {"$ifNull": ["$title", ""]},
+                                        "$$REMOVE"
+                                    ]
+                                }
+                            },
+                        }
+                    },
+                    {"$match": {"positive_count": {"$gte": 1}, "negative_count": {"$gte": 1}}},
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "company": "$_id",
+                            "ticker": 1,
+                            "positive_count": 1,
+                            "negative_count": 1,
+                            "neutral_count": 1,
+                            "positive_headlines": {"$slice": ["$positive_headlines", 4]},
+                            "negative_headlines": {"$slice": ["$negative_headlines", 4]},
+                        }
+                    },
+                ],
+            }
+            if include_bundle:
+                facet_stage["recent_articles"] = [
+                    {"$sort": {"published_at": -1}},
+                    {"$limit": 6},
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "id": 1,
+                            "canonical_id": 1,
+                            "title": 1,
+                            "description": 1,
+                            "url": 1,
+                            "source": 1,
+                            "published_at": 1,
+                            "company": 1,
+                            "ticker": 1,
+                            "sentiment": 1,
+                            "confidence": 1,
+                            "scores": 1,
+                            "is_duplicate": 1,
+                            "duplicate_of": 1,
+                            "is_demo": 1,
+                            "is_fallback": 1,
+                            "engine_mode": 1,
+                            "model_name": 1,
+                        }
+                    },
+                ]
+
+            try:
+                agg_rows = db.aggregate("news_articles", [{"$match": db_filter}, {"$facet": facet_stage}])
+                if agg_rows:
+                    facet_res = agg_rows[0]
+                    summary_list = facet_res.get("summary") or []
+                    summary = summary_list[0] if summary_list else {}
+                    total_inc_dup = int(summary.get("total_including_duplicates", 0))
+                    total = int(summary.get("total_articles", 0))
+                    pos_count = int(summary.get("positive", 0))
+                    neg_count = int(summary.get("negative", 0))
+                    neu_count = int(summary.get("neutral", 0))
+
+                    pos_pct = round((pos_count / total * 100), 1) if total > 0 else 0.0
+                    neg_pct = round((neg_count / total * 100), 1) if total > 0 else 0.0
+                    neu_pct = round((neu_count / total * 100), 1) if total > 0 else 0.0
+
+                    # Build conflicts identical to conflict_service.detect_conflicts
+                    flagged_at = datetime.utcnow().isoformat() + "Z"
+                    conflicts = []
+                    for grp in facet_res.get("conflict_groups") or []:
+                        comp_name = (grp.get("company") or "").strip()
+                        if not comp_name or comp_name.lower() in ("general market", "unknown", "none", "*"):
+                            continue
+                        p_cnt = int(grp.get("positive_count", 0))
+                        n_cnt = int(grp.get("negative_count", 0))
+                        u_cnt = int(grp.get("neutral_count", 0))
+                        denom = p_cnt + n_cnt
+                        if denom <= 0:
+                            continue
+                        c_score = round((2.0 * min(p_cnt, n_cnt)) / denom, 2)
+                        if c_score >= conflict_service.min_conflict_score:
+                            ticker_val = grp.get("ticker") or COMPANY_TICKER_MAP.get(comp_name) or comp_name[:4].upper()
+                            conflicts.append({
+                                "company": comp_name,
+                                "ticker": ticker_val,
+                                "conflict_score": c_score,
+                                "positive_count": p_cnt,
+                                "negative_count": n_cnt,
+                                "neutral_count": u_cnt,
+                                "positive_headlines": grp.get("positive_headlines") or [],
+                                "negative_headlines": grp.get("negative_headlines") or [],
+                                "explanation": (
+                                    f"Mixed-News Sentiment Signal: {comp_name} exhibits notable opposing coverage with "
+                                    f"{p_cnt} positive and {n_cnt} negative headlines currently recorded. "
+                                    f"Media narratives reflect both growth catalysts and regulatory/operational headwinds."
+                                ),
+                                "flagged_at": flagged_at,
+                            })
+                    conflicts.sort(key=lambda x: x["conflict_score"], reverse=True)
+
+                    result = {
+                        "total_articles": total,
+                        "total_including_duplicates": total_inc_dup,
+                        "sentiment_counts": {
+                            "positive": pos_count,
+                            "negative": neg_count,
+                            "neutral": neu_count,
+                        },
+                        "sentiment_percentages": {
+                            "positive": pos_pct,
+                            "negative": neg_pct,
+                            "neutral": neu_pct,
+                        },
+                        "top_discussed_companies": facet_res.get("top_companies") or [],
+                        "news_sources": facet_res.get("top_sources") or [],
+                        "active_conflicts_count": len(conflicts),
+                        "active_conflicts": conflicts,
+                        "timeframe": tf,
+                        "is_demo_dataset": False,
+                        "feed_status": self.get_feed_status(),
+                        "last_updated": self.get_last_synced_iso(),
+                        "model_status": "ready" if finbert_service.is_ready() else finbert_service.status,
+                    }
+                    if include_bundle:
+                        recent_arts = [self._attach_ticker(a) for a in (facet_res.get("recent_articles") or [])]
+                        result["recent_articles"] = recent_arts
+                        result["sentiment_history"] = self.get_sentiment_history(timeframe=tf)
+            except Exception as e:
+                logger.warning(f"MongoDB $facet dashboard aggregation fallback: {e}")
+                result = None
+
+        # Fallback path (local JSON DB or demo mode)
+        if result is None:
+            articles = self.fetch_articles(force_refresh=False, timeframe=tf)
+            clean_articles = [a for a in articles if not a.get("is_duplicate")]
+            total = len(clean_articles)
+            pos_count = sum(1 for a in clean_articles if (a.get("sentiment") or "").lower() == "positive")
+            neg_count = sum(1 for a in clean_articles if (a.get("sentiment") or "").lower() == "negative")
+            neu_count = total - pos_count - neg_count
+
+            pos_pct = round((pos_count / total * 100), 1) if total > 0 else 0.0
+            neg_pct = round((neg_count / total * 100), 1) if total > 0 else 0.0
+            neu_pct = round((neu_count / total * 100), 1) if total > 0 else 0.0
+
+            by_comp: Dict[str, int] = {}
+            by_source: Dict[str, int] = {}
+            for a in clean_articles:
+                comp = a.get("company", "General Market")
+                by_comp[comp] = by_comp.get(comp, 0) + 1
+                src = a.get("source", "Unknown")
+                by_source[src] = by_source.get(src, 0) + 1
+
+            top_discussed = sorted([{"company": k, "count": v} for k, v in by_comp.items()], key=lambda x: x["count"], reverse=True)[:6]
+            sources = sorted([{"source": k, "count": v} for k, v in by_source.items()], key=lambda x: x["count"], reverse=True)[:6]
+            conflicts = conflict_service.detect_conflicts(clean_articles)
+            is_demo_dataset = any(a.get("is_demo", False) for a in clean_articles)
+
+            result = {
+                "total_articles": total,
+                "total_including_duplicates": len(articles),
+                "sentiment_counts": {
+                    "positive": pos_count,
+                    "negative": neg_count,
+                    "neutral": neu_count,
+                },
+                "sentiment_percentages": {
+                    "positive": pos_pct,
+                    "negative": neg_pct,
+                    "neutral": neu_pct,
+                },
+                "top_discussed_companies": top_discussed,
+                "news_sources": sources,
+                "active_conflicts_count": len(conflicts),
+                "active_conflicts": conflicts,
+                "timeframe": tf,
+                "is_demo_dataset": is_demo_dataset,
+                "feed_status": self.get_feed_status(),
+                "last_updated": self.get_last_synced_iso(),
+                "model_status": "ready" if finbert_service.is_ready() else finbert_service.status,
+            }
+            if include_bundle:
+                result["recent_articles"] = articles[:6]
+                result["sentiment_history"] = self.get_sentiment_history(timeframe=tf)
+
+        with self._cache_lock:
+            self._dashboard_cache[cache_key] = (now_mono, result)
+
+        return result
 
     def query_articles(
         self,
@@ -1189,9 +1637,82 @@ class NewsService:
     ) -> NewsQueryResult:
         """
         Filters live articles with date, company, sentiment, and keyword criteria.
-        Default feed strictly represents the current calendar date in Asia/Kolkata (+05:30).
+        Uses index-backed database pagination and short-TTL caching for timeframe queries.
         """
-        all_articles = self.fetch_articles(query=query, timeframe=timeframe if timeframe in ("all", "7d", "24h", "live") else None)
+        tf_norm = timeframe.strip().lower() if timeframe else None
+        target_sentiment = (
+            sentiment.strip().lower()
+            if sentiment and sentiment.strip().lower() not in ("all", "all sentiments", "all-sentiments", "none", "*", "")
+            else None
+        )
+        cache_key = (
+            (query or "").strip().lower(),
+            (company or "").strip().lower(),
+            target_sentiment or "",
+            page,
+            page_size,
+            today_only,
+            (date or "").strip().lower(),
+            tf_norm or "",
+        )
+        now_mono = time.monotonic()
+
+        with self._cache_lock:
+            cached_res = self._news_query_cache.get(cache_key)
+            if cached_res and (now_mono - cached_res[0]) < self.READ_CACHE_TTL_SECONDS:
+                return cached_res[1]
+
+        # Fast DB-level pagination path when querying by timeframe (with optional sentiment) without free-text/alias search
+        if (
+            not settings.USE_DEMO_DATA
+            and not (query and query.strip())
+            and not (company and company.strip() and company.strip().lower() != "all companies")
+            and tf_norm in ("live", "24h", "7d", "all")
+        ):
+            self._ensure_live_feed_fresh(force_refresh=False)
+            db_filter = self.build_timeframe_db_filter(tf_norm)
+            if target_sentiment:
+                db_filter["sentiment"] = {"$in": [target_sentiment, target_sentiment.capitalize()]}
+
+            skip_count = (page - 1) * page_size
+            paged_articles = db.find(
+                "news_articles",
+                db_filter,
+                limit=page_size,
+                skip=skip_count,
+                sort=[("published_at", -1)],
+            )
+            total_count = db.count("news_articles", db_filter)
+
+            for item in paged_articles:
+                self._attach_ticker(item)
+
+            try:
+                from app.services.broker_routing_service import broker_routing_service
+                for item in paged_articles:
+                    if not item.get("ticker") and item.get("company"):
+                        route = broker_routing_service.get_trading_route(item.get("company"))
+                        if route.is_tradable and route.ticker:
+                            item["ticker"] = route.ticker
+            except Exception as e:
+                logger.debug("Could not enrich article ticker: %s", e)
+
+            fast_result = NewsQueryResult(
+                paged_articles,
+                total_count,
+                False,
+                feed_status=self.get_feed_status(),
+                last_synced=self.get_last_synced_iso(),
+                filter_date=tf_norm.upper(),
+                news_provider="Live Financial News Feed (Reuters, Bloomberg, WSJ, MarketWatch)",
+            )
+            with self._cache_lock:
+                if len(self._news_query_cache) >= 64:
+                    self._news_query_cache.clear()
+                self._news_query_cache[cache_key] = (now_mono, fast_result)
+            return fast_result
+
+        all_articles = self.fetch_articles(query=query, timeframe=tf_norm if tf_norm in ("all", "7d", "24h", "live") else None)
 
         now_utc = self.get_utc_now()
         now_kol = self.get_kolkata_now()
